@@ -860,15 +860,22 @@ async function renderUsersView(main) {
       <h2>Users <span class="count-badge">${rows.length}</span></h2>
       <p class="hint">User = read/search only. Operator = can create and edit, and mark documents for deletion. Admin = can also delete permanently and manage roles.</p>
       <div class="grid-wrap"><table class="grid" id="users-grid">
-        <thead><tr><th>Email</th><th>Role</th><th>Since</th></tr></thead>
+        <thead><tr><th>Email</th><th>Role</th><th>Since</th><th></th></tr></thead>
         <tbody>${rows.map(r => `<tr data-uid="${esc(r.user_id)}">
           <td>${esc(r.email)}</td>
           <td><select class="role-select" data-uid="${esc(r.user_id)}">${optionsHtml([['user', 'User'], ['operator', 'Operator'], ['admin', 'Admin']], r.role, false)}</select></td>
-          <td>${esc((r.created_at || '').slice(0, 10))}</td></tr>`).join('')}</tbody>
+          <td>${esc((r.created_at || '').slice(0, 10))}</td>
+          <td><button class="btn danger remove-user-btn" data-uid="${esc(r.user_id)}" data-email="${esc(r.email)}" style="padding:4px 10px;">Remove access</button></td></tr>`).join('')}</tbody>
       </table></div>
+      <p class="hint" style="margin-top:8px;">"Remove access" drops the person back to no role at all (they lose the app entirely until re-registered or re-added) - it does not delete their login/auth account. To fully delete an account, use the Supabase Dashboard (Authentication → Users).</p>
     </div>`;
   main.querySelectorAll('.role-select').forEach(sel => sel.addEventListener('change', async () => {
     await withStatus(sb.from('user_roles').update({ role: sel.value }).eq('user_id', sel.dataset.uid), 'Updating role...');
+  }));
+  main.querySelectorAll('.remove-user-btn').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm(`Remove access for ${btn.dataset.email}? They will lose all access to the app until re-added (their login account itself is not deleted).`)) return;
+    await withStatus(sb.from('user_roles').delete().eq('user_id', btn.dataset.uid), 'Removing...');
+    await renderUsersView(main);
   }));
 }
 
