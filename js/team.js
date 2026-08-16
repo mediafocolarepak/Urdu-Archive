@@ -255,10 +255,10 @@ async function renderDashboardView(main) {
       <h2>Dashboard <span class="count-badge" id="dash-count"></span></h2>
       <div class="searchbar">
         <input id="dash-search" placeholder="Search by title or tags..." value="${esc(DashFilters.search)}">
-        <input id="dash-search-id" placeholder="ID #" style="max-width:110px;" value="${esc(DashFilters.idSearch)}">
         ${canWrite() ? '<button class="btn" id="dash-new">+ New document</button>' : ''}
       </div>
       <div class="field-grid" style="margin-bottom:10px;">
+        <div class="field"><label>ID #</label><input id="dash-search-id" placeholder="ID #" value="${esc(DashFilters.idSearch)}"></div>
         <div class="field"><label>Category</label><select id="f-category">${optionsHtml(CATEGORIES, DashFilters.category, true)}</select></div>
         <div class="field"><label>Author</label><select id="f-author">${optionsHtml(AUTHORS, DashFilters.author, true)}</select></div>
         <div class="field"><label>Main topic</label><select id="f-main_topic">${optionsHtml(MAIN_TOPICS, DashFilters.main_topic, true)}</select></div>
