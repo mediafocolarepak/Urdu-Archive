@@ -373,7 +373,7 @@ function renderDocDetailConsultation(box, doc) {
       ${row('Reference date', doc.ref_date)}
       ${row('File name', doc.file_name)}
       ${row('Video', doc.has_video ? 'Yes' : 'No')}
-      ${row('Italian title (Collegamento)', doc.italian_title)}
+      ${row('Title (ITA)', doc.italian_title)}
       ${row('Video ref', doc.video_ref)}
       ${row('Parola di Vita ref', doc.pdv_ref)}
     </div>
@@ -423,16 +423,16 @@ async function renderDocDetail(id) {
     <h3>Document #${esc(doc.document_id)}${doc.legacy_migrated ? ' <span class="count-badge">legacy-migrated</span>' : ''}${doc.pending_deletion ? ' <span class="count-badge" style="background:var(--danger);color:#fff;">pending deletion</span>' : ''}</h3>
     <div class="field-grid wide">
       ${textField('Title (EN)', 'title', doc.title)}
+      ${textField('Reference date', 'ref_date', doc.ref_date, 'date')}
+      ${textField('Title (ITA)', 'italian_title', doc.italian_title)}
       ${selectField('Category', 'category', doc.category, CATEGORIES)}
       ${selectField('Author', 'author', doc.author, AUTHORS)}
       ${selectField('Main topic', 'main_topic', doc.main_topic, MAIN_TOPICS)}
       ${textField('Secondary tags', 'secondary_tags', doc.secondary_tags)}
       ${selectField('Original language', 'original_lang', doc.original_lang, LANGS)}
-      ${textField('Reference date', 'ref_date', doc.ref_date, 'date')}
       ${textField('Reference period', 'ref_period', doc.ref_period)}
       ${selectField('Workflow status', 'workflow_status', doc.workflow_status, STATUSES)}
       ${textField('Physical box', 'physical_box', doc.physical_box)}
-      ${textField('Italian title (Collegamento)', 'italian_title', doc.italian_title)}
       ${textField('Video ref', 'video_ref', doc.video_ref)}
       ${textField('Parola di Vita ref', 'pdv_ref', doc.pdv_ref)}
       <div class="field"><label>File name</label><input value="${esc(doc.file_name)}" disabled></div>
