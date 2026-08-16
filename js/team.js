@@ -528,7 +528,7 @@ async function renderDocDetail(id) {
     vals.storage_path = storagePath;
 
     await withStatus(sb.from('documents').update(vals).eq('document_id', id), 'Saving...');
-    await refreshDashGrid();
+    if (document.getElementById('dash-grid')) await refreshDashGrid();
     await renderDocDetail(id);
   });
 
@@ -538,7 +538,7 @@ async function renderDocDetail(id) {
     if (doc.storage_path) await sb.storage.from(BUCKET).remove([doc.storage_path]);
     await withStatus(sb.from('documents').delete().eq('document_id', id));
     SelectedDocId = null;
-    await refreshDashGrid();
+    if (document.getElementById('dash-grid')) await refreshDashGrid();
     await renderDocDetail(null);
   });
 }
@@ -1065,19 +1065,19 @@ function renderMatchBody() {
     <div class="hint" style="margin:10px 0;">${MatchIndex + 1} of ${MatchQueue.length} remaining in this list</div>
     <div class="split">
       <div class="panel" style="margin:0;">
-        <h3>Document #${esc(doc.document_id)}</h3>
-        <p><b>${esc(doc.title)}</b></p>
-        <p class="hint">${esc(labelOf(CATEGORIES, doc.category))} — ${esc(labelOf(AUTHORS, doc.author))} — ${esc(doc.ref_date) || 'no date'}</p>
-        <input id="match-search" placeholder="Search candidates...">
-        <div class="btn-row"><button class="btn secondary" id="match-skip">Skip →</button></div>
+        <div class="btn-row" style="margin-top:0;"><button class="btn secondary" id="match-skip">Skip →</button></div>
+        <p class="hint">Full document record - fix or fill in anything you notice while matching.</p>
+        <div id="doc-detail" style="max-height:70vh;overflow-y:auto;"></div>
       </div>
       <div>
         <h3>Candidates <span class="hint" id="match-candidates-count"></span></h3>
-        <div id="match-candidates" style="max-height:60vh;overflow-y:auto;"></div>
+        <input id="match-search" placeholder="Search candidates...">
+        <div id="match-candidates" style="max-height:60vh;overflow-y:auto;margin-top:8px;"></div>
       </div>
     </div>
   `;
   renderCandidates(ranked, cfg, doc);
+  renderDocDetail(doc.document_id);
   document.getElementById('match-skip').addEventListener('click', () => { MatchIndex++; renderMatchBody(); });
   document.getElementById('match-search').addEventListener('input', e => {
     const term = e.target.value.toLowerCase();
