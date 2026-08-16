@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Focolare Urdu Archive Manager</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="css/style.css">
+<style>
+#login-screen { display: flex; align-items: center; justify-content: center; height: 100vh; }
+#login-card { width: 100%; max-width: 360px; }
+#login-error { color: var(--danger); font-size: 12.5px; margin-top: 8px; min-height: 16px; }
+.auth-switch { font-size: 12.5px; text-align: center; margin-top: 10px; color: var(--ink-soft); }
+.auth-switch a { color: var(--accent); cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="panel" id="login-card">
+    <h2 style="text-align:center;">Focolare Urdu Archive Manager</h2>
+    <p class="hint" style="text-align:center; margin-bottom:16px;">Team sign-in (shared database)</p>
+    <div class="field"><label>Email</label><input id="login-email" type="email" autocomplete="username"></div>
+    <div class="field"><label>Password</label><input id="login-password" type="password" autocomplete="current-password"></div>
+    <div class="btn-row" style="justify-content:center;">
+      <button class="btn" id="login-btn" style="flex:1;">Sign in</button>
+      <button class="btn secondary" id="signup-btn" style="flex:1;">Sign up</button>
+    </div>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<div id="app" style="display:none;">
+  <div id="topbar">
+    <h1>Focolare Urdu Archive Manager</h1>
+    <div id="tabs"></div>
+    <div id="status-bar">
+      <span id="user-email" class="hint"></span>
+      <button class="btn secondary" id="logout-btn">Sign out</button>
+      <span class="dot" id="dirty-dot"></span>
+      <span id="dirty-label">Connected</span>
+    </div>
+  </div>
+  <div id="main"><div class="empty-msg">Loading...</div></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/team.js"></script>
+</body>
+</html>
