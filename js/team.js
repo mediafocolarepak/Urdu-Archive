@@ -220,7 +220,7 @@ function getTabs() {
     { id: 'processi', label: 'Processi' },
     { id: 'hayat', label: 'Hayat Index' },
   ];
-  if (canWrite()) tabs.push({ id: 'matchreview', label: 'Match Review' });
+  if (canWrite()) { tabs.push({ id: 'matchreview', label: 'Match Review' }); tabs.push({ id: 'bulkimport', label: 'Bulk Import' }); }
   if (isAdmin()) { tabs.push({ id: 'users', label: 'Users' }); tabs.push({ id: 'options', label: 'Options' }); }
   return tabs;
 }
@@ -244,6 +244,7 @@ function renderTab(id) {
   else if (id === 'users') renderUsersView(main);
   else if (id === 'options') renderOptionsView(main);
   else if (id === 'matchreview') renderMatchReviewView(main);
+  else if (id === 'bulkimport') renderBulkImportView(main);
 }
 
 // ================= DASHBOARD =================
@@ -1103,6 +1104,177 @@ function renderCandidates(list, cfg, doc) {
     MatchIndex++;
     renderMatchBody();
   }));
+}
+
+// ================= BULK IMPORT =================
+
+function slugifyTitle(s) {
+  return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'untitled';
+}
+
+function titleFromFilename(name) {
+  const noExt = name.replace(/\.[a-z0-9]+$/i, '');
+  const cleaned = noExt.replace(/[_\-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
+// Best-effort: a full day.month.year pattern becomes an exact ref_date; a bare 4-digit
+// year becomes ref_period instead, since that's honestly all we know from the filename.
+function extractDateFromFilename(name) {
+  let m = name.match(/(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})(?!\d)/);
+  if (m) {
+    const [, d, mo, y] = m.map(Number);
+    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
+      const dt = new Date(y, mo - 1, d);
+      if (!isNaN(dt)) return { ref_date: `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`, ref_period: null };
+    }
+  }
+  m = name.match(/(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{2})(?!\d)/);
+  if (m) {
+    const [, d, mo, y2] = m.map(Number);
+    const y = y2 < 50 ? 2000 + y2 : 1900 + y2;
+    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
+      const dt = new Date(y, mo - 1, d);
+      if (!isNaN(dt)) return { ref_date: `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`, ref_period: null };
+    }
+  }
+  m = name.match(/(19|20)\d{2}/);
+  if (m) return { ref_date: null, ref_period: m[0] };
+  return { ref_date: null, ref_period: null };
+}
+
+function normalizeForCompare(s) {
+  return (s || '').toLowerCase().replace(/\.[a-z0-9]+$/, '').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+function titleOverlapScore(a, b) {
+  const wa = new Set(normalizeForCompare(a).split(' ').filter(w => w.length > 2));
+  const wb = new Set(normalizeForCompare(b).split(' ').filter(w => w.length > 2));
+  if (wa.size === 0 || wb.size === 0) return 0;
+  let inter = 0;
+  for (const w of wa) if (wb.has(w)) inter++;
+  return inter / Math.min(wa.size, wb.size);
+}
+
+let BulkImportRows = [];
+let BulkImportDirHandle = null;
+
+async function renderBulkImportView(main) {
+  const supported = 'showDirectoryPicker' in window;
+  main.innerHTML = `
+    <div class="panel">
+      <h2>Bulk Import</h2>
+      <p class="hint">Pick a local folder of PDF files to catalogue in one go. Each file gets a new catalogue number and a record with status "Entry" - category/author/topic are left for you to fill in afterwards from the Dashboard, which will also complete the file name automatically at that point.</p>
+      ${supported ? '' : '<div class="empty-msg">This feature needs Chrome or Edge (it uses a browser API to read and rename local files that Firefox/Safari do not support).</div>'}
+      ${supported ? '<div class="btn-row"><button class="btn" id="bi-pick-folder">Select folder…</button></div>' : ''}
+      <div id="bi-body"></div>
+    </div>`;
+  if (!supported) return;
+  document.getElementById('bi-pick-folder').addEventListener('click', scanBulkImportFolder);
+}
+
+async function scanBulkImportFolder() {
+  const body = document.getElementById('bi-body');
+  let dirHandle;
+  try {
+    dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+  } catch (e) {
+    return; // user cancelled the picker
+  }
+  BulkImportDirHandle = dirHandle;
+  body.innerHTML = '<div class="empty-msg">Scanning folder…</div>';
+
+  const files = [];
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.pdf')) files.push(entry);
+  }
+  if (files.length === 0) {
+    body.innerHTML = '<div class="empty-msg">No PDF files found in that folder.</div>';
+    return;
+  }
+
+  const existing = await withStatus(sb.from('documents').select('document_id,title,file_name,legacy_file_name').order('document_id'), 'Checking for duplicates...');
+  const maxRows = await withStatus(sb.from('documents').select('document_id').order('document_id', { ascending: false }).limit(1));
+  let nextId = (maxRows[0]?.document_id || 0) + 1;
+
+  BulkImportRows = files.map(entry => {
+    const title = titleFromFilename(entry.name);
+    const { ref_date, ref_period } = extractDateFromFilename(entry.name);
+    let bestMatch = null, bestScore = 0;
+    for (const doc of existing) {
+      const score = Math.max(titleOverlapScore(title, doc.title), titleOverlapScore(entry.name, doc.file_name), titleOverlapScore(entry.name, doc.legacy_file_name));
+      if (score > bestScore) { bestScore = score; bestMatch = doc; }
+    }
+    const isDuplicateSuspect = bestScore >= 0.5;
+    const document_id = nextId++;
+    const newFileName = `${String(document_id).padStart(5, '0')}-${slugifyTitle(title)}.pdf`;
+    return {
+      entry, originalName: entry.name, document_id, title, ref_date, ref_period, newFileName,
+      isDuplicateSuspect, duplicateOf: bestMatch, included: !isDuplicateSuspect,
+    };
+  });
+
+  renderBulkImportTable();
+}
+
+function renderBulkImportTable() {
+  const body = document.getElementById('bi-body');
+  body.innerHTML = `
+    <div class="hint" style="margin:10px 0;">${BulkImportRows.length} PDF files found. Uncheck any you don't want to import (possible duplicates are pre-unchecked - review them).</div>
+    <div class="grid-wrap"><table class="grid">
+      <thead><tr><th></th><th>Catalogue #</th><th>Original name</th><th>Title (from filename)</th><th>Date/period detected</th><th>New file name</th><th>Duplicate?</th></tr></thead>
+      <tbody>${BulkImportRows.map((r, i) => `<tr>
+        <td><input type="checkbox" class="bi-include" data-i="${i}" ${r.included ? 'checked' : ''}></td>
+        <td>${String(r.document_id).padStart(5, '0')}</td>
+        <td>${esc(r.originalName)}</td>
+        <td>${esc(r.title)}</td>
+        <td>${esc(r.ref_date || r.ref_period || '—')}</td>
+        <td>${esc(r.newFileName)}</td>
+        <td>${r.isDuplicateSuspect ? `<span class="count-badge" style="background:var(--danger);color:#fff;">possible dup of #${esc(r.duplicateOf.document_id)} "${esc(r.duplicateOf.title)}"</span>` : ''}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    <div class="btn-row">
+      <button class="btn" id="bi-apply">OK — catalogue the checked files</button>
+    </div>
+    <div id="bi-progress"></div>
+  `;
+  body.querySelectorAll('.bi-include').forEach(cb => cb.addEventListener('change', () => {
+    BulkImportRows[cb.dataset.i].included = cb.checked;
+  }));
+  document.getElementById('bi-apply').addEventListener('click', applyBulkImport);
+}
+
+async function applyBulkImport() {
+  const toImport = BulkImportRows.filter(r => r.included);
+  if (toImport.length === 0) { alert('Nothing checked to import.'); return; }
+  if (!confirm(`Catalogue ${toImport.length} document(s) and rename the files on disk? This cannot be easily undone.`)) return;
+
+  const progress = document.getElementById('bi-progress');
+  const today = new Date().toISOString().slice(0, 10);
+  let done = 0, failed = 0;
+  for (const r of toImport) {
+    progress.innerHTML = `<div class="hint">Processing ${done + failed + 1} of ${toImport.length}: ${esc(r.originalName)}…</div>`;
+    try {
+      await withStatus(sb.from('documents').insert({
+        document_id: r.document_id, title: r.title, workflow_status: 'ENTR',
+        catalog_date: today, ref_date: r.ref_date, ref_period: r.ref_period,
+        file_name: r.newFileName, legacy_migrated: false,
+      }));
+      const file = await r.entry.getFile();
+      const newHandle = await BulkImportDirHandle.getFileHandle(r.newFileName, { create: true });
+      const writable = await newHandle.createWritable();
+      await writable.write(await file.arrayBuffer());
+      await writable.close();
+      await BulkImportDirHandle.removeEntry(r.originalName);
+      done++;
+    } catch (e) {
+      failed++;
+      r.error = e.message;
+    }
+  }
+  progress.innerHTML = `<div class="panel"><b>Done.</b> Catalogued ${done} document(s).${failed ? ` ${failed} failed - see below.` : ''}</div>
+    ${failed ? `<ul>${toImport.filter(r => r.error).map(r => `<li>${esc(r.originalName)}: ${esc(r.error)}</li>`).join('')}</ul>` : ''}`;
+  BulkImportRows = BulkImportRows.filter(r => !r.included || r.error);
+  if (BulkImportRows.length) renderBulkImportTable();
 }
 
 boot();
