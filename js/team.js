@@ -969,16 +969,23 @@ function pdvApproxDate(r) {
   return new Date(y, m - 1, 15).getTime();
 }
 function rankByDateProximity(refDate, refs, dateField) {
+  // Ranks by closeness to refDate, but never drops a candidate just because it (or the
+  // document) has no date - those are appended at the end instead, so the full list stays
+  // browsable and a genuine match with a missing/blank date can still be found and assigned.
   if (!refDate) return refs;
   const target = new Date(refDate).getTime();
-  return [...refs].filter(r => r[dateField])
-    .sort((a, b) => Math.abs(new Date(a[dateField]).getTime() - target) - Math.abs(new Date(b[dateField]).getTime() - target));
+  const withDate = refs.filter(r => r[dateField]);
+  const withoutDate = refs.filter(r => !r[dateField]);
+  withDate.sort((a, b) => Math.abs(new Date(a[dateField]).getTime() - target) - Math.abs(new Date(b[dateField]).getTime() - target));
+  return [...withDate, ...withoutDate];
 }
 function rankByYearMonthProximity(refDate, refs) {
   if (!refDate) return refs;
   const target = new Date(refDate).getTime();
-  return refs.map(r => ({ r, d: pdvApproxDate(r) })).filter(x => x.d !== null)
-    .sort((a, b) => Math.abs(a.d - target) - Math.abs(b.d - target)).map(x => x.r);
+  const withDate = refs.map(r => ({ r, d: pdvApproxDate(r) })).filter(x => x.d !== null);
+  const withoutDate = refs.filter(r => pdvApproxDate(r) === null);
+  withDate.sort((a, b) => Math.abs(a.d - target) - Math.abs(b.d - target));
+  return [...withDate.map(x => x.r), ...withoutDate];
 }
 
 const MATCH_LISTS = {
@@ -1053,7 +1060,7 @@ function renderMatchBody() {
     return;
   }
   const doc = MatchQueue[MatchIndex];
-  const ranked = cfg.rank(doc, MatchRefRows).slice(0, 8);
+  const ranked = cfg.rank(doc, MatchRefRows);
   box.innerHTML = `
     <div class="hint" style="margin:10px 0;">${MatchIndex + 1} of ${MatchQueue.length} remaining in this list</div>
     <div class="split">
@@ -1065,8 +1072,8 @@ function renderMatchBody() {
         <div class="btn-row"><button class="btn secondary" id="match-skip">Skip →</button></div>
       </div>
       <div>
-        <h3>Candidates</h3>
-        <div id="match-candidates"></div>
+        <h3>Candidates <span class="hint" id="match-candidates-count"></span></h3>
+        <div id="match-candidates" style="max-height:60vh;overflow-y:auto;"></div>
       </div>
     </div>
   `;
@@ -1075,7 +1082,7 @@ function renderMatchBody() {
   document.getElementById('match-search').addEventListener('input', e => {
     const term = e.target.value.toLowerCase();
     const filtered = term
-      ? MatchRefRows.filter(r => cfg.refLabel(r).toLowerCase().includes(term)).slice(0, 8)
+      ? MatchRefRows.filter(r => cfg.refLabel(r).toLowerCase().includes(term))
       : ranked;
     renderCandidates(filtered, cfg, doc);
   });
@@ -1083,6 +1090,7 @@ function renderMatchBody() {
 
 function renderCandidates(list, cfg, doc) {
   const box = document.getElementById('match-candidates');
+  document.getElementById('match-candidates-count').textContent = `(${list.length} total, most likely first)`;
   if (list.length === 0) { box.innerHTML = '<div class="empty-msg">No candidates found.</div>'; return; }
   box.innerHTML = list.map((r, i) => `<div class="panel" style="margin-bottom:8px;padding:10px;">
     <div style="font-size:13px;">${esc(cfg.refLabel(r))}</div>
