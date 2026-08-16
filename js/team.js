@@ -68,7 +68,7 @@ function optionsHtml(list, value, allowEmpty) {
 let SelectedDocId = null;
 let SelectedBookName = null;
 let SelectedCategoryId = null;
-let DashFilters = { search: '', category: '', author: '', main_topic: '', workflow_status: '', recipient: [], legacyOnly: false, pendingOnly: false };
+let DashFilters = { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', recipient: [], legacyOnly: false, pendingOnly: false };
 let DashPage = 0;
 const DASH_PAGE_SIZE = 25;
 let DashSort = { col: 'document_id', asc: false };
@@ -255,6 +255,7 @@ async function renderDashboardView(main) {
       <h2>Dashboard <span class="count-badge" id="dash-count"></span></h2>
       <div class="searchbar">
         <input id="dash-search" placeholder="Search by title or tags..." value="${esc(DashFilters.search)}">
+        <input id="dash-search-id" placeholder="ID #" style="max-width:110px;" value="${esc(DashFilters.idSearch)}">
         ${canWrite() ? '<button class="btn" id="dash-new">+ New document</button>' : ''}
       </div>
       <div class="field-grid" style="margin-bottom:10px;">
@@ -288,6 +289,7 @@ async function renderDashboardView(main) {
     </div>`;
 
   document.getElementById('dash-search').addEventListener('input', e => { DashFilters.search = e.target.value; DashPage = 0; refreshDashGrid(); });
+  document.getElementById('dash-search-id').addEventListener('input', e => { DashFilters.idSearch = e.target.value; DashPage = 0; refreshDashGrid(); });
   if (canWrite()) document.getElementById('dash-new').addEventListener('click', createNewDocument);
   document.getElementById('f-category').addEventListener('change', e => { DashFilters.category = e.target.value; DashPage = 0; refreshDashGrid(); });
   document.getElementById('f-author').addEventListener('change', e => { DashFilters.author = e.target.value; DashPage = 0; refreshDashGrid(); });
@@ -312,6 +314,10 @@ function buildDashQuery(forCount) {
   if (DashFilters.search && DashFilters.search.trim()) {
     const like = likeSafe(DashFilters.search.trim());
     q = q.or(`title.ilike.${like},secondary_tags.ilike.${like}`);
+  }
+  if (DashFilters.idSearch && DashFilters.idSearch.trim()) {
+    const idNum = parseInt(DashFilters.idSearch.trim(), 10);
+    q = Number.isFinite(idNum) ? q.eq('document_id', idNum) : q.eq('document_id', -1);
   }
   if (DashFilters.category) q = q.eq('category', DashFilters.category);
   if (DashFilters.author) q = q.eq('author', DashFilters.author);
