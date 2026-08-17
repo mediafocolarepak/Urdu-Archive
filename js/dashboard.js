@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260817133204';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260817133204';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260817134636';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260817134636';
 
 export async function renderDashboardView(main) {
   main.innerHTML = `

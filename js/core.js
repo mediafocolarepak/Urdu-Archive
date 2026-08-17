@@ -46,6 +46,7 @@ export const State = {
   selectedCategoryId: null,
   dashFilters: { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', collection: '', recipient: [], legacyOnly: false, pendingOnly: false },
   dashSort: { col: 'document_id', asc: false },
+  adminEditFilters: { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', collection: '', recipient: [], legacyOnly: false, pendingOnly: false },
   reportFilters: { category: '', main_topic: '', author: '', recipient: '', workflow_status: '', from: '', to: '' },
   matchListKey: 'collegamenti',
   matchQueue: [],

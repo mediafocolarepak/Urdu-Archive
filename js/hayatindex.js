@@ -1,4 +1,4 @@
-import { sb, State, esc, today, likeSafe, canWrite, withStatus, computeFileName, uniqueFileName, createWorkFor } from './core.js?v=20260817133204';
+import { sb, State, esc, today, likeSafe, canWrite, withStatus, computeFileName, uniqueFileName, createWorkFor } from './core.js?v=20260817134636';
 
 export async function renderHayatView(main) {
   main.innerHTML = `

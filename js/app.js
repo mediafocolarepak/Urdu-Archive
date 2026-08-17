@@ -1,10 +1,11 @@
-import { State, canWrite, isAdmin, boot, wireAuthButtons } from './core.js?v=20260817133204';
-import { renderDashboardView } from './dashboard.js?v=20260817133204';
-import { renderReportsView } from './reports.js?v=20260817133204';
-import { renderHayatView } from './hayatindex.js?v=20260817133204';
-import { renderMatchReviewView } from './matchreview.js?v=20260817133204';
-import { renderBulkImportView } from './bulkimport.js?v=20260817133204';
-import { renderUsersView, renderOptionsView } from './admin.js?v=20260817133204';
+import { State, canWrite, isAdmin, boot, wireAuthButtons } from './core.js?v=20260817134636';
+import { renderDashboardView } from './dashboard.js?v=20260817134636';
+import { renderReportsView } from './reports.js?v=20260817134636';
+import { renderHayatView } from './hayatindex.js?v=20260817134636';
+import { renderMatchReviewView } from './matchreview.js?v=20260817134636';
+import { renderBulkImportView } from './bulkimport.js?v=20260817134636';
+import { renderUsersView, renderOptionsView } from './admin.js?v=20260817134636';
+import { renderAdminEditView } from './adminedit.js?v=20260817134636';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -15,7 +16,7 @@ function getTabs() {
     { id: 'hayat', label: 'Hayat Index' },
   ];
   if (canWrite()) { tabs.push({ id: 'matchreview', label: 'Match Review' }); tabs.push({ id: 'bulkimport', label: 'Bulk Import' }); }
-  if (isAdmin()) { tabs.push({ id: 'users', label: 'Users' }); tabs.push({ id: 'options', label: 'Options' }); }
+  if (isAdmin()) { tabs.push({ id: 'users', label: 'Users' }); tabs.push({ id: 'options', label: 'Options' }); tabs.push({ id: 'adminedit', label: 'Edit Records' }); }
   return tabs;
 }
 
@@ -35,6 +36,7 @@ function renderTab(id) {
   else if (id === 'hayat') renderHayatView(main);
   else if (id === 'users') renderUsersView(main);
   else if (id === 'options') renderOptionsView(main);
+  else if (id === 'adminedit') renderAdminEditView(main);
   else if (id === 'matchreview') renderMatchReviewView(main);
   else if (id === 'bulkimport') renderBulkImportView(main);
 }
