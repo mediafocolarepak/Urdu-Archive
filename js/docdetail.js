@@ -6,7 +6,7 @@ import {
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS,
-} from './core.js?v=20260817121450';
+} from './core.js?v=20260817133204';
 
 export function renderDocDetailConsultation(box, doc, workSiblings) {
   const row = (label, value) => `<div class="field"><label>${esc(label)}</label><input value="${esc(value)}" disabled></div>`;
@@ -101,9 +101,9 @@ export async function renderDocDetail(id) {
     if (readOnly) return `<div class="field"><label>${esc(label)}</label><input value="${esc(value)}" disabled></div>`;
     return `<div class="field"><label>${esc(label)}</label><input data-f="${name}" type="${type || 'text'}" value="${esc(value)}"></div>`;
   }
-  function selectField(label, name, value, list) {
+  function selectField(label, name, value, list, allowEmpty) {
     if (readOnly) return `<div class="field"><label>${esc(label)}</label><input value="${esc(labelOf(list, value))}" disabled></div>`;
-    return `<div class="field"><label>${esc(label)}</label><select data-f="${name}">${optionsHtml(list, value, false)}</select></div>`;
+    return `<div class="field"><label>${esc(label)}</label><select data-f="${name}">${optionsHtml(list, value, !!allowEmpty)}</select></div>`;
   }
 
   const previewName = computeFileName({ ...doc });
@@ -123,7 +123,7 @@ export async function renderDocDetail(id) {
       ${selectField('Media type', 'media_type', doc.media_type, State.mediaTypes)}
       ${selectField('Source', 'provenance', doc.provenance, State.provenances)}
       ${selectField('Operator', 'operator', doc.operator, State.operators)}
-      ${selectField('Collection', 'collection', doc.collection, State.collections)}
+      ${selectField('Collection', 'collection', doc.collection, State.collections, true)}
       ${textField('Physical box', 'physical_box', doc.physical_box)}
       ${textField('Parola di Vita ref', 'pdv_ref', doc.pdv_ref)}
       <div class="field"><label>File name</label><input value="${esc(doc.file_name)}" disabled></div>

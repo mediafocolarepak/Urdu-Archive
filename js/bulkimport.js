@@ -1,4 +1,4 @@
-import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor } from './core.js?v=20260817121450';
+import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor } from './core.js?v=20260817133204';
 
 export function slugifyTitle(s) {
   return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'untitled';
