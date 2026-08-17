@@ -1,10 +1,10 @@
-import { sb, State, esc, today, likeSafe, canWrite, withStatus, computeFileName, uniqueFileName, createWorkFor } from './core.js?v=20260817101544';
+import { sb, State, esc, today, likeSafe, canWrite, withStatus, computeFileName, uniqueFileName, createWorkFor } from './core.js?v=20260817121450';
 
 export async function renderHayatView(main) {
   main.innerHTML = `
     <div class="panel">
       <h2>Hayat Index</h2>
-      <p class="hint">Rows not yet "extracted" can be turned into a new document with one click, already tagged with provenance "Hayat" and its own Work.</p>
+      <p class="hint">Rows not yet "extracted" can be turned into a new document with one click, already tagged with source "Hayat", language Urdu, and its own Document.</p>
       <div class="searchbar"><input id="hayat-search" placeholder="Search by title, author, topic..."></div>
       <div class="grid-wrap"><table class="grid" id="hayat-grid"></table></div>
     </div>`;
@@ -48,13 +48,14 @@ async function extractHayatRow(hayatId) {
   const newId = (maxRows[0]?.document_id || 0) + 1;
   const category = HAYAT_CATEGORY_MAP[row.category] || 'MISC';
   const author = mapHayatAuthor(row.autore);
-  const workId = await createWorkFor(row.title);
+  const workId = await createWorkFor(row.titolo || row.title);
   const draft = {
-    document_id: newId, title: row.title, legacy_category: row.category, legacy_author: row.autore,
-    hayat_index_ref: row.id, to_whom: row.branca, original_title: row.titolo,
+    document_id: newId, title: row.title || row.titolo, legacy_category: row.category, legacy_author: row.autore,
+    hayat_index_ref: row.id, to_whom: row.branca, original_title: row.titolo || row.title,
     hayat_issue: `${row.mese_anno}p.${row.pagina}`, legacy_topic: row.argomento,
     category, author, main_topic: 'GENR', secondary_tags: row.argomento,
-    original_lang: 'ITA', workflow_status: 'ENTR', legacy_migrated: false,
+    ref_period: row.mese_anno || null,
+    original_lang: 'URD', workflow_status: 'ENTR', legacy_migrated: false,
     provenance: 'HAYAT', media_type: 'DOC', work_id: workId,
   };
   draft.file_name = await uniqueFileName(computeFileName(draft), null);

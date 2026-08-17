@@ -39,13 +39,12 @@ export async function downloadFromGDrive(fileName) {
 export const State = {
   // fixed vocabularies, loaded from option_lists at sign-in
   categories: [], authors: [], mainTopics: [], recipients: [], langs: [], statuses: [],
-  mediaTypes: [], provenances: [], collections: [], qualities: [],
+  mediaTypes: [], provenances: [], collections: [], qualities: [], operators: [],
   currentRole: 'user',
   appShown: false,
   selectedDocId: null,
   selectedCategoryId: null,
   dashFilters: { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', collection: '', recipient: [], legacyOnly: false, pendingOnly: false },
-  dashPage: 0,
   dashSort: { col: 'document_id', asc: false },
   reportFilters: { category: '', main_topic: '', author: '', recipient: '', workflow_status: '', from: '', to: '' },
   matchListKey: 'collegamenti',
@@ -57,14 +56,14 @@ export const State = {
   optionsSelectedList: 'category',
 };
 
-export const DASH_PAGE_SIZE = 25;
+export const DASH_ROW_LIMIT = 5000;
 export const DASH_SORTABLE = { document_id: 'ID', title: 'Title', category: 'Category', author: 'Author', ref_date: 'Ref. date', workflow_status: 'Status' };
 
-export const OPTION_LIST_NAMES = ['category', 'author', 'main_topic', 'recipient', 'original_lang', 'workflow_status', 'media_type', 'provenance', 'collection', 'quality'];
+export const OPTION_LIST_NAMES = ['category', 'author', 'main_topic', 'recipient', 'original_lang', 'workflow_status', 'media_type', 'provenance', 'collection', 'quality', 'operator'];
 export const OPTION_LIST_LABELS = {
   category: 'Category', author: 'Author', main_topic: 'Main topic', recipient: 'Recipient',
   original_lang: 'Language', workflow_status: 'Workflow status', media_type: 'Media type',
-  provenance: 'Provenance', collection: 'Collection', quality: 'Quality',
+  provenance: 'Source', collection: 'Collection', quality: 'Quality', operator: 'Operator',
 };
 
 export async function loadOptions() {
@@ -74,7 +73,7 @@ export async function loadOptions() {
   State.categories = byList.category; State.authors = byList.author; State.mainTopics = byList.main_topic;
   State.recipients = byList.recipient; State.langs = byList.original_lang; State.statuses = byList.workflow_status;
   State.mediaTypes = byList.media_type; State.provenances = byList.provenance;
-  State.collections = byList.collection; State.qualities = byList.quality;
+  State.collections = byList.collection; State.qualities = byList.quality; State.operators = byList.operator;
 }
 
 export function labelOf(list, code) { const f = list.find(x => x[0] === code); return f ? f[1] : (code || ''); }
@@ -119,13 +118,10 @@ export function yearOf(refDate, refPeriod) {
 }
 export function computeFileName(doc) {
   const id = String(doc.document_id).padStart(5, '0');
-  const cat = doc.category || 'MISC';
-  const auth = doc.author || 'OTHR';
-  const topic = doc.main_topic || 'GENR';
-  const prov = doc.provenance ? `-${doc.provenance}` : '';
+  const source = doc.provenance || 'MISC';
   const slug = slugify(doc.title);
-  const year = yearOf(doc.ref_date, doc.ref_period);
-  return `${id}-${cat}-${auth}-${topic}${prov}-${slug}-${year}.pdf`;
+  const lang = doc.original_lang || 'XXX';
+  return `${id}-${source}-${slug}-${lang}.pdf`;
 }
 export async function uniqueFileName(base, excludeDocId) {
   let name = base;

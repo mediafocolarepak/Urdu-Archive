@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, withStatus, withStatusCount, DASH_PAGE_SIZE, DASH_SORTABLE, likeSafe } from './core.js?v=20260817101544';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260817101544';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260817121450';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260817121450';
 
 export async function renderDashboardView(main) {
   main.innerHTML = `
@@ -24,36 +24,35 @@ export async function renderDashboardView(main) {
             <input type="checkbox" class="f-recipient" value="${c}" ${State.dashFilters.recipient.includes(c) ? 'checked' : ''}> ${l}</label>`).join('')}
         </div>
       </div>
-      <div class="field" style="max-width:260px;">
+      <div class="field" style="display:flex;flex-wrap:wrap;gap:6px 24px;">
         <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:12.5px;">
           <input type="checkbox" id="f-legacy" ${State.dashFilters.legacyOnly ? 'checked' : ''}> Show legacy-migrated documents only
         </label>
-        <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:12.5px;margin-top:6px;">
+        <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:12.5px;">
           <input type="checkbox" id="f-pending" ${State.dashFilters.pendingOnly ? 'checked' : ''}> Show only documents marked for deletion
         </label>
       </div>
       <div class="split">
         <div>
-          <div class="grid-wrap"><table class="grid" id="dash-grid"></table></div>
-          <div class="btn-row" id="dash-pager"></div>
+          <div class="grid-wrap" style="max-height:70vh;"><table class="grid" id="dash-grid"></table></div>
         </div>
         <div class="panel" id="doc-detail" style="margin:0;"></div>
       </div>
     </div>`;
 
-  document.getElementById('dash-search').addEventListener('input', e => { State.dashFilters.search = e.target.value; State.dashPage = 0; refreshDashGrid(); });
-  document.getElementById('dash-search-id').addEventListener('input', e => { State.dashFilters.idSearch = e.target.value; State.dashPage = 0; refreshDashGrid(); });
+  document.getElementById('dash-search').addEventListener('input', e => { State.dashFilters.search = e.target.value; refreshDashGrid(); });
+  document.getElementById('dash-search-id').addEventListener('input', e => { State.dashFilters.idSearch = e.target.value; refreshDashGrid(); });
   if (canWrite()) document.getElementById('dash-new').addEventListener('click', () => createNewDocument(refreshDashGrid));
-  document.getElementById('f-category').addEventListener('change', e => { State.dashFilters.category = e.target.value; State.dashPage = 0; refreshDashGrid(); });
-  document.getElementById('f-author').addEventListener('change', e => { State.dashFilters.author = e.target.value; State.dashPage = 0; refreshDashGrid(); });
-  document.getElementById('f-main_topic').addEventListener('change', e => { State.dashFilters.main_topic = e.target.value; State.dashPage = 0; refreshDashGrid(); });
-  document.getElementById('f-status').addEventListener('change', e => { State.dashFilters.workflow_status = e.target.value; State.dashPage = 0; refreshDashGrid(); });
-  document.getElementById('f-collection').addEventListener('change', e => { State.dashFilters.collection = e.target.value; State.dashPage = 0; refreshDashGrid(); });
-  document.getElementById('f-legacy').addEventListener('change', e => { State.dashFilters.legacyOnly = e.target.checked; State.dashPage = 0; refreshDashGrid(); });
-  document.getElementById('f-pending').addEventListener('change', e => { State.dashFilters.pendingOnly = e.target.checked; State.dashPage = 0; refreshDashGrid(); });
+  document.getElementById('f-category').addEventListener('change', e => { State.dashFilters.category = e.target.value; refreshDashGrid(); });
+  document.getElementById('f-author').addEventListener('change', e => { State.dashFilters.author = e.target.value; refreshDashGrid(); });
+  document.getElementById('f-main_topic').addEventListener('change', e => { State.dashFilters.main_topic = e.target.value; refreshDashGrid(); });
+  document.getElementById('f-status').addEventListener('change', e => { State.dashFilters.workflow_status = e.target.value; refreshDashGrid(); });
+  document.getElementById('f-collection').addEventListener('change', e => { State.dashFilters.collection = e.target.value; refreshDashGrid(); });
+  document.getElementById('f-legacy').addEventListener('change', e => { State.dashFilters.legacyOnly = e.target.checked; refreshDashGrid(); });
+  document.getElementById('f-pending').addEventListener('change', e => { State.dashFilters.pendingOnly = e.target.checked; refreshDashGrid(); });
   main.querySelectorAll('.f-recipient').forEach(cb => cb.addEventListener('change', () => {
     State.dashFilters.recipient = Array.from(main.querySelectorAll('.f-recipient:checked')).map(c => c.value);
-    State.dashPage = 0; refreshDashGrid();
+    refreshDashGrid();
   }));
 
   // Escape hatch so docdetail.js can trigger a grid refresh after save/delete without
@@ -64,11 +63,8 @@ export async function renderDashboardView(main) {
   await renderDocDetail(State.selectedDocId);
 }
 
-function buildDashQuery(forCount) {
-  let q = sb.from('documents').select(
-    forCount ? 'document_id' : 'document_id,category,author,main_topic,recipient,title,ref_date,workflow_status,legacy_migrated,pending_deletion',
-    forCount ? { count: 'exact', head: true } : undefined
-  );
+function buildDashQuery() {
+  let q = sb.from('documents').select('document_id,category,author,main_topic,recipient,title,ref_date,workflow_status,legacy_migrated,pending_deletion');
   const f = State.dashFilters;
   if (f.search && f.search.trim()) {
     const like = likeSafe(f.search.trim());
@@ -92,14 +88,8 @@ function buildDashQuery(forCount) {
 export async function refreshDashGrid() {
   const grid = document.getElementById('dash-grid');
   if (!grid) return;
-  const { count } = await withStatusCount(buildDashQuery(true), 'Searching...');
-  const total = count || 0;
-  const maxPage = Math.max(0, Math.ceil(total / DASH_PAGE_SIZE) - 1);
-  if (State.dashPage > maxPage) State.dashPage = maxPage;
-  const from = State.dashPage * DASH_PAGE_SIZE;
-  const to = from + DASH_PAGE_SIZE - 1;
-  const rows = await withStatus(buildDashQuery(false).order(State.dashSort.col, { ascending: State.dashSort.asc }).range(from, to));
-  document.getElementById('dash-count').textContent = total;
+  const rows = await withStatus(buildDashQuery().order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Searching...');
+  document.getElementById('dash-count').textContent = rows.length;
   const arrow = (col) => col !== State.dashSort.col ? '' : (State.dashSort.asc ? ' &uarr;' : ' &darr;');
   grid.innerHTML = `<thead><tr>${Object.entries(DASH_SORTABLE).map(([col, label]) =>
       `<th data-sort="${col}">${label}${arrow(col)}</th>`).join('')}<th>Recipient(s)</th></tr></thead>
@@ -118,10 +108,4 @@ export async function refreshDashGrid() {
     await refreshDashGrid();
     await renderDocDetail(State.selectedDocId);
   }));
-  document.getElementById('dash-pager').innerHTML = `
-    <button class="btn secondary" id="pg-prev" ${State.dashPage === 0 ? 'disabled' : ''}>&larr; Previous</button>
-    <span class="hint" style="align-self:center;">Page ${total ? State.dashPage + 1 : 0} of ${maxPage + 1} &middot; Total documents: ${total}</span>
-    <button class="btn secondary" id="pg-next" ${State.dashPage >= maxPage ? 'disabled' : ''}>Next &rarr;</button>`;
-  document.getElementById('pg-prev').addEventListener('click', () => { State.dashPage--; refreshDashGrid(); });
-  document.getElementById('pg-next').addEventListener('click', () => { State.dashPage++; refreshDashGrid(); });
 }

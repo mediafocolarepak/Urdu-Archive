@@ -1,4 +1,4 @@
-import { sb, State, esc, labelOf, optionsHtml, withStatusCount } from './core.js?v=20260817101544';
+import { sb, State, esc, labelOf, optionsHtml, withStatusCount } from './core.js?v=20260817121450';
 
 export function renderReportsView(main) {
   main.innerHTML = `
@@ -11,7 +11,7 @@ export function renderReportsView(main) {
         <div class="field"><label>Recipient</label><select id="r-recipient">${optionsHtml(State.recipients, '', true)}</select></div>
         <div class="field"><label>Workflow status</label><select id="r-status">${optionsHtml(State.statuses, '', true)}</select></div>
         <div class="field"><label>Collection</label><select id="r-collection">${optionsHtml(State.collections, '', true)}</select></div>
-        <div class="field"><label>Provenance</label><select id="r-provenance">${optionsHtml(State.provenances, '', true)}</select></div>
+        <div class="field"><label>Source</label><select id="r-provenance">${optionsHtml(State.provenances, '', true)}</select></div>
         <div class="field"><label>Date from</label><input id="r-from" type="date"></div>
         <div class="field"><label>Date to</label><input id="r-to" type="date"></div>
       </div>

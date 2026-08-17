@@ -1,4 +1,4 @@
-import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor } from './core.js?v=20260817101544';
+import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor } from './core.js?v=20260817121450';
 
 export function slugifyTitle(s) {
   return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'untitled';
@@ -48,19 +48,23 @@ export function titleOverlapScore(a, b) {
 }
 
 let batchProvenance = '';
+let batchOperator = '';
 let batchMediaType = 'DOC';
 let batchCollection = '';
+let batchLang = '';
 
 export async function renderBulkImportView(main) {
   const supported = 'showDirectoryPicker' in window;
   main.innerHTML = `
     <div class="panel">
       <h2>Bulk Import</h2>
-      <p class="hint">Pick a local folder of files to catalogue in one go. Each file gets a new catalogue number, its own Work, and a record with status "Entry" - category/author/topic are left for you to fill in afterwards from the Dashboard, which will also complete the file name automatically at that point. Duplicates are expected (different provenances/versions of the same content) - possible duplicates are only flagged for your awareness, not blocked.</p>
+      <p class="hint">Pick a local folder of files to catalogue in one go. Each file gets a new catalogue number, its own Document, and a record with status "Entry" - category/author/topic are left for you to fill in afterwards from the Dashboard, which will also complete the file name automatically at that point. Duplicates are expected (different sources/versions of the same content) - possible duplicates are only flagged for your awareness, not blocked.</p>
       ${supported ? '' : '<div class="empty-msg">This feature needs Chrome or Edge (it uses a browser API to read and rename local files that Firefox/Safari do not support).</div>'}
       ${supported ? `
       <div class="field-grid" style="max-width:600px;">
-        <div class="field"><label>Provenance (applies to this whole batch)</label><select id="bi-provenance">${optionsHtml(State.provenances, batchProvenance, true)}</select></div>
+        <div class="field"><label>Source (applies to this whole batch)</label><select id="bi-provenance">${optionsHtml(State.provenances, batchProvenance, true)}</select></div>
+        <div class="field"><label>Operator (applies to this whole batch)</label><select id="bi-operator">${optionsHtml(State.operators, batchOperator, true)}</select></div>
+        <div class="field"><label>Language (applies to this whole batch)</label><select id="bi-lang">${optionsHtml(State.langs, batchLang, true)}</select></div>
         <div class="field"><label>Media type (applies to this whole batch)</label><select id="bi-media-type">${optionsHtml(State.mediaTypes, batchMediaType, false)}</select></div>
         <div class="field"><label>Collection (optional)</label><select id="bi-collection">${optionsHtml(State.collections, batchCollection, true)}</select></div>
       </div>
@@ -70,6 +74,8 @@ export async function renderBulkImportView(main) {
   if (!supported) return;
   document.getElementById('bi-pick-folder').addEventListener('click', () => {
     batchProvenance = document.getElementById('bi-provenance').value;
+    batchOperator = document.getElementById('bi-operator').value;
+    batchLang = document.getElementById('bi-lang').value;
     batchMediaType = document.getElementById('bi-media-type').value;
     batchCollection = document.getElementById('bi-collection').value;
     scanBulkImportFolder();
@@ -112,7 +118,7 @@ async function scanBulkImportFolder() {
     const isDuplicateSuspect = bestScore >= 0.5;
     const document_id = nextId++;
     const ext = entry.name.slice(entry.name.lastIndexOf('.'));
-    const newFileName = computeFileName({ document_id, title, provenance: batchProvenance, ref_date, ref_period }).replace(/\.pdf$/, ext);
+    const newFileName = computeFileName({ document_id, title, provenance: batchProvenance, original_lang: batchLang, ref_date, ref_period }).replace(/\.pdf$/, ext);
     return {
       entry, originalName: entry.name, document_id, title, ref_date, ref_period, newFileName,
       isDuplicateSuspect, duplicateOf: bestMatch, included: true,
@@ -125,7 +131,7 @@ async function scanBulkImportFolder() {
 function renderBulkImportTable() {
   const body = document.getElementById('bi-body');
   body.innerHTML = `
-    <div class="hint" style="margin:10px 0;">${State.bulkImportRows.length} file(s) found, provenance "${esc(batchProvenance || 'â€”')}". Possible duplicates are flagged below for awareness only â€” keep them checked unless you're sure it's a true duplicate, since different versions/translations are expected and welcome.</div>
+    <div class="hint" style="margin:10px 0;">${State.bulkImportRows.length} file(s) found, source "${esc(batchProvenance || 'â€”')}". Possible duplicates are flagged below for awareness only â€” keep them checked unless you're sure it's a true duplicate, since different versions/translations are expected and welcome.</div>
     <div class="grid-wrap"><table class="grid">
       <thead><tr><th></th><th>Catalogue #</th><th>Original name</th><th>Title (from filename)</th><th>Date/period detected</th><th>New file name</th><th>Similar to</th></tr></thead>
       <tbody>${State.bulkImportRows.map((r, i) => `<tr>
@@ -164,7 +170,8 @@ async function applyBulkImport() {
         document_id: r.document_id, title: r.title, workflow_status: 'ENTR',
         catalog_date: today(), ref_date: r.ref_date, ref_period: r.ref_period,
         file_name: r.newFileName, legacy_migrated: false, work_id: workId,
-        provenance: batchProvenance || null, media_type: batchMediaType, collection: batchCollection || null,
+        provenance: batchProvenance || null, operator: batchOperator || null, original_lang: batchLang || null,
+        media_type: batchMediaType, collection: batchCollection || null,
       }));
       const file = await r.entry.getFile();
       const newHandle = await State.bulkImportDirHandle.getFileHandle(r.newFileName, { create: true });

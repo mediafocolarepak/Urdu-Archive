@@ -6,7 +6,7 @@ import {
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS,
-} from './core.js?v=20260817101544';
+} from './core.js?v=20260817121450';
 
 export function renderDocDetailConsultation(box, doc, workSiblings) {
   const row = (label, value) => `<div class="field"><label>${esc(label)}</label><input value="${esc(value)}" disabled></div>`;
@@ -22,7 +22,8 @@ export function renderDocDetailConsultation(box, doc, workSiblings) {
       ${row('Reference date', doc.ref_date)}
       ${row('File name', doc.file_name)}
       ${row('Media type', labelOf(State.mediaTypes, doc.media_type))}
-      ${row('Provenance', labelOf(State.provenances, doc.provenance))}
+      ${row('Source', labelOf(State.provenances, doc.provenance))}
+      ${row('Operator', labelOf(State.operators, doc.operator))}
       ${row('Collection', labelOf(State.collections, doc.collection))}
       ${doc.media_type === 'VID' ? row('Duration', doc.duration) : ''}
       ${doc.media_type === 'VID' ? row('Quality', labelOf(State.qualities, doc.quality)) : ''}
@@ -47,25 +48,40 @@ export function renderDocDetailConsultation(box, doc, workSiblings) {
       if (data?.signedUrl) window.open(data.signedUrl, '_blank');
     });
   }
+  wireWorkSiblingsClicks(box);
 }
 
+// A "Document" groups together several "Versions" (translations, other-language
+// re-tellings, or a video/audio counterpart) that share a work_id. Text versions get their
+// own full detail page (consult + download); for video/audio, the file name shown here is
+// enough to locate the file, so no extra download plumbing is built for them.
 function renderWorkSiblingsHtml(siblings, currentId) {
   if (!siblings || siblings.length === 0) return '';
   return `
     <div class="field">
-      <label>Other versions of this work</label>
+      <label>Other versions of this document</label>
       <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>ID</th><th>Title</th><th>Language</th><th>Provenance</th><th>Type</th></tr></thead>
-        <tbody>${siblings.filter(s => String(s.document_id) !== String(currentId)).map(s => `<tr>
+        <thead><tr><th>ID</th><th>Title</th><th>Language</th><th>Source</th><th>Type</th><th>File</th></tr></thead>
+        <tbody>${siblings.filter(s => String(s.document_id) !== String(currentId)).map(s => `<tr data-sibling-id="${esc(s.document_id)}">
           <td>${esc(s.document_id)}</td><td>${esc(s.title)}</td><td>${esc(labelOf(State.langs, s.original_lang))}</td>
-          <td>${esc(labelOf(State.provenances, s.provenance))}</td><td>${esc(labelOf(State.mediaTypes, s.media_type))}</td></tr>`).join('')}</tbody>
+          <td>${esc(labelOf(State.provenances, s.provenance))}</td><td>${esc(labelOf(State.mediaTypes, s.media_type))}</td>
+          <td>${esc(s.file_name)}</td></tr>`).join('')}</tbody>
       </table></div>
     </div>`;
 }
 
+function wireWorkSiblingsClicks(box) {
+  box.querySelectorAll('tr[data-sibling-id]').forEach(tr => tr.addEventListener('click', async () => {
+    const targetId = tr.dataset.siblingId;
+    State.selectedDocId = targetId;
+    await onAfterDocChange();
+    await renderDocDetail(targetId);
+  }));
+}
+
 async function fetchWorkSiblings(workId) {
   if (!workId) return [];
-  return await withStatus(sb.from('documents').select('document_id,title,original_lang,provenance,media_type').eq('work_id', workId));
+  return await withStatus(sb.from('documents').select('document_id,title,original_lang,provenance,media_type,file_name').eq('work_id', workId));
 }
 
 export async function renderDocDetail(id) {
@@ -105,7 +121,8 @@ export async function renderDocDetail(id) {
       ${selectField('Language', 'original_lang', doc.original_lang, State.langs)}
       ${textField('Reference period', 'ref_period', doc.ref_period)}
       ${selectField('Media type', 'media_type', doc.media_type, State.mediaTypes)}
-      ${selectField('Provenance', 'provenance', doc.provenance, State.provenances)}
+      ${selectField('Source', 'provenance', doc.provenance, State.provenances)}
+      ${selectField('Operator', 'operator', doc.operator, State.operators)}
       ${selectField('Collection', 'collection', doc.collection, State.collections)}
       ${textField('Physical box', 'physical_box', doc.physical_box)}
       ${textField('Parola di Vita ref', 'pdv_ref', doc.pdv_ref)}
@@ -150,14 +167,15 @@ export async function renderDocDetail(id) {
         <div class="field"><label>Legacy topic</label><input value="${esc(doc.legacy_topic)}" disabled></div>
         <div class="field"><label>Legacy status</label><input value="${esc(doc.legacy_status)}" disabled></div>
         <div class="field"><label>Legacy file name</label><input value="${esc(doc.legacy_file_name)}" disabled></div>
-        <div class="field"><label>Title (ITA) - superseded by Work versions above</label><input value="${esc(doc.italian_title)}" disabled></div>
-        <div class="field"><label>Video ref - superseded by Work versions above</label><input value="${esc(doc.video_ref)}" disabled></div>
+        <div class="field"><label>Title (ITA) - superseded by the document's versions above</label><input value="${esc(doc.italian_title)}" disabled></div>
+        <div class="field"><label>Video ref - superseded by the document's versions above</label><input value="${esc(doc.video_ref)}" disabled></div>
       </div>
     </details>
   `;
 
   document.getElementById('doc-tracking-sheet').addEventListener('click', () => renderTrackingSheet(id));
   document.getElementById('doc-download-gdrive').addEventListener('click', () => downloadFromGDrive(doc.file_name));
+  wireWorkSiblingsClicks(box);
   if (doc.storage_path) {
     document.getElementById('doc-download').addEventListener('click', async e => {
       e.preventDefault();
@@ -180,7 +198,7 @@ export async function renderDocDetail(id) {
     const vals = collectFields();
     document.getElementById('filename-preview').textContent = computeFileName({ document_id: doc.document_id, ...vals });
   }
-  box.querySelectorAll('[data-f="title"],[data-f="category"],[data-f="author"],[data-f="main_topic"],[data-f="ref_date"],[data-f="ref_period"],[data-f="provenance"]')
+  box.querySelectorAll('[data-f="title"],[data-f="provenance"],[data-f="original_lang"]')
     .forEach(el => el.addEventListener('input', updatePreview));
 
   document.getElementById('doc-save').addEventListener('click', async () => {
@@ -304,7 +322,8 @@ export async function renderTrackingSheet(id) {
         <tr><th>Main topic</th><td>${esc(labelOf(State.mainTopics, doc.main_topic))}</td></tr>
         <tr><th>Recipient(s)</th><td>${(doc.recipient || []).map(c => esc(labelOf(State.recipients, c))).join(', ')}</td></tr>
         <tr><th>Language</th><td>${esc(labelOf(State.langs, doc.original_lang))}</td></tr>
-        <tr><th>Provenance</th><td>${esc(labelOf(State.provenances, doc.provenance))}</td></tr>
+        <tr><th>Source</th><td>${esc(labelOf(State.provenances, doc.provenance))}</td></tr>
+        <tr><th>Operator</th><td>${esc(labelOf(State.operators, doc.operator))}</td></tr>
         <tr><th>Reference date / period</th><td>${esc(doc.ref_date)} ${esc(doc.ref_period)}</td></tr>
         <tr><th>File name</th><td>${esc(doc.file_name)}</td></tr>
         <tr><th>Physical box</th><td>${esc(doc.physical_box)}</td></tr>

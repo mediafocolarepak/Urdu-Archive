@@ -2,9 +2,9 @@
 // Run before every publish (see publish.ps1). Only tests functions with no Supabase calls;
 // mocking supabase-js well enough to unit-test the CRUD glue isn't worth it for this app.
 
-import { slugify, computeFileName, yearOf } from './core.js?v=20260817101544';
-import { extractDateFromFilename, titleOverlapScore, normalizeForCompare, slugifyTitle } from './bulkimport.js?v=20260817101544';
-import { rankByDateProximity, rankByYearMonthProximity, pdvApproxDate } from './matchreview.js?v=20260817101544';
+import { slugify, computeFileName, yearOf } from './core.js?v=20260817121450';
+import { extractDateFromFilename, titleOverlapScore, normalizeForCompare, slugifyTitle } from './bulkimport.js?v=20260817121450';
+import { rankByDateProximity, rankByYearMonthProximity, pdvApproxDate } from './matchreview.js?v=20260817121450';
 
 let passed = 0, failed = 0;
 const results = [];
@@ -30,14 +30,14 @@ assertEqual(yearOf(null, null), 'XXXX', 'yearOf falls back to XXXX with no date 
 
 // ---- computeFileName ----
 assertEqual(
-  computeFileName({ document_id: 1, category: 'DISC', author: 'CHIA', main_topic: '12PO', title: 'Unity', ref_date: '1982-06-09' }),
-  '00001-DISC-CHIA-12PO-unity-1982.pdf',
-  'computeFileName without provenance'
+  computeFileName({ document_id: 1, title: 'Unity', original_lang: 'URD' }),
+  '00001-MISC-unity-URD.pdf',
+  'computeFileName falls back to MISC source when none set'
 );
 assertEqual(
-  computeFileName({ document_id: 500, category: 'EXPE', author: 'OTHR', main_topic: 'GENR', title: 'A Test Title', provenance: 'STELLA', ref_date: '2020-01-01' }),
-  '00500-EXPE-OTHR-GENR-STELLA-a-test-title-2020.pdf',
-  'computeFileName includes provenance segment when set'
+  computeFileName({ document_id: 500, title: 'A Test Title', provenance: 'STELLA', original_lang: 'ITA' }),
+  '00500-STELLA-a-test-title-ITA.pdf',
+  'computeFileName uses ID, Source, Title and language code'
 );
 
 // ---- extractDateFromFilename ----

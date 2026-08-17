@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, withStatus } from './core.js?v=20260817101544';
-import { renderDocDetail } from './docdetail.js?v=20260817101544';
+import { sb, State, esc, labelOf, withStatus } from './core.js?v=20260817121450';
+import { renderDocDetail } from './docdetail.js?v=20260817121450';
 
 const ITALIAN_MONTHS = { gennaio: 1, febbraio: 2, marzo: 3, aprile: 4, maggio: 5, giugno: 6, luglio: 7, agosto: 8, settembre: 9, ottobre: 10, novembre: 11, dicembre: 12 };
 export function pdvApproxDate(r) {
@@ -58,7 +58,7 @@ const MATCH_LISTS = {
     rank: (doc, refs) => rankByYearMonthProximity(doc.ref_date, refs),
   },
   worklink: {
-    label: 'Other catalogued items (possible same work)',
+    label: 'Other catalogued items (possible same document)',
     isWorkLink: true,
   },
 };
@@ -119,7 +119,7 @@ function renderMatchBody() {
     <div class="hint" style="margin:10px 0;">${State.matchIndex + 1} of ${State.matchQueue.length} remaining in this list</div>
     <div class="split">
       <div class="panel" style="margin:0;">
-        <div class="btn-row" style="margin-top:0;"><button class="btn secondary" id="match-skip">Skip â†’</button></div>
+        <div class="btn-row" style="margin-top:0;"><button class="btn secondary" id="match-skip">Skip &rarr;</button></div>
         <p class="hint">Full document record - fix or fill in anything you notice while matching.</p>
         <div id="doc-detail" style="max-height:70vh;overflow-y:auto;"></div>
       </div>
@@ -154,8 +154,8 @@ function renderCandidates(list, cfg, doc) {
   box.innerHTML = list.map((r, i) => {
     const sameVariant = cfg.isWorkLink && r.provenance === doc.provenance && r.original_lang === doc.original_lang;
     return `<div class="panel" style="margin-bottom:8px;padding:10px;">
-      <div style="font-size:13px;">${esc(candidateLabel(r, cfg))}${sameVariant ? ' <span class="hint">(same provenance/language - more likely a duplicate than a translation)</span>' : ''}</div>
-      <button class="btn" data-i="${i}" style="margin-top:6px;padding:4px 10px;">${cfg.isWorkLink ? 'Same work â€” merge' : 'Assign'}</button>
+      <div style="font-size:13px;">${esc(candidateLabel(r, cfg))}${sameVariant ? ' <span class="hint">(same source/language - more likely a duplicate than a translation)</span>' : ''}</div>
+      <button class="btn" data-i="${i}" style="margin-top:6px;padding:4px 10px;">${cfg.isWorkLink ? 'Same document â€” merge' : 'Assign'}</button>
     </div>`;
   }).join('');
   box.querySelectorAll('[data-i]').forEach(btn => btn.addEventListener('click', async () => {
