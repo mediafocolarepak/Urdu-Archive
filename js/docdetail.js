@@ -1,0 +1,327 @@
+// The document detail panel - shared between Dashboard and Match Review (both give it a
+// <div id="doc-detail"> to render into). Only this module and core.js know about the
+// `documents` table's full field set.
+
+import {
+  sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete,
+  computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
+  createWorkFor, TRACKING_STEPS,
+} from './core.js?v=20260817101544';
+
+export function renderDocDetailConsultation(box, doc, workSiblings) {
+  const row = (label, value) => `<div class="field"><label>${esc(label)}</label><input value="${esc(value)}" disabled></div>`;
+  box.innerHTML = `
+    <h3>Document #${esc(doc.document_id)}</h3>
+    <div class="field-grid wide">
+      ${row('Title (EN)', doc.title)}
+      ${row('Category', labelOf(State.categories, doc.category))}
+      ${row('Author', labelOf(State.authors, doc.author))}
+      ${row('Main topic', labelOf(State.mainTopics, doc.main_topic))}
+      ${row('Secondary tags', doc.secondary_tags)}
+      ${row('Language', labelOf(State.langs, doc.original_lang))}
+      ${row('Reference date', doc.ref_date)}
+      ${row('File name', doc.file_name)}
+      ${row('Media type', labelOf(State.mediaTypes, doc.media_type))}
+      ${row('Provenance', labelOf(State.provenances, doc.provenance))}
+      ${row('Collection', labelOf(State.collections, doc.collection))}
+      ${doc.media_type === 'VID' ? row('Duration', doc.duration) : ''}
+      ${doc.media_type === 'VID' ? row('Quality', labelOf(State.qualities, doc.quality)) : ''}
+      ${row('Parola di Vita ref', doc.pdv_ref)}
+      ${row('Current step', labelOf(State.statuses, doc.workflow_status))}
+    </div>
+    <div class="field">
+      <label>Recipient(s)</label>
+      <div style="font-size:13px;padding:4px 0;">${(doc.recipient || []).map(c => esc(labelOf(State.recipients, c))).join(', ') || 'â€”'}</div>
+    </div>
+    ${renderWorkSiblingsHtml(workSiblings, doc.document_id)}
+    <div class="btn-row">
+      <button class="btn" id="doc-download-gdrive">Download Document</button>
+    </div>
+    ${doc.storage_path ? `<div class="field"><label>File</label><a href="#" id="doc-download">Download</a></div>` : ''}
+  `;
+  document.getElementById('doc-download-gdrive').addEventListener('click', () => downloadFromGDrive(doc.file_name));
+  if (doc.storage_path) {
+    document.getElementById('doc-download').addEventListener('click', async e => {
+      e.preventDefault();
+      const { data } = await sb.storage.from(BUCKET).createSignedUrl(doc.storage_path, 60);
+      if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+    });
+  }
+}
+
+function renderWorkSiblingsHtml(siblings, currentId) {
+  if (!siblings || siblings.length === 0) return '';
+  return `
+    <div class="field">
+      <label>Other versions of this work</label>
+      <div class="grid-wrap"><table class="grid">
+        <thead><tr><th>ID</th><th>Title</th><th>Language</th><th>Provenance</th><th>Type</th></tr></thead>
+        <tbody>${siblings.filter(s => String(s.document_id) !== String(currentId)).map(s => `<tr>
+          <td>${esc(s.document_id)}</td><td>${esc(s.title)}</td><td>${esc(labelOf(State.langs, s.original_lang))}</td>
+          <td>${esc(labelOf(State.provenances, s.provenance))}</td><td>${esc(labelOf(State.mediaTypes, s.media_type))}</td></tr>`).join('')}</tbody>
+      </table></div>
+    </div>`;
+}
+
+async function fetchWorkSiblings(workId) {
+  if (!workId) return [];
+  return await withStatus(sb.from('documents').select('document_id,title,original_lang,provenance,media_type').eq('work_id', workId));
+}
+
+export async function renderDocDetail(id) {
+  const box = document.getElementById('doc-detail');
+  if (!box) return;
+  if (!id) { box.innerHTML = '<div class="empty-msg">Select a document from the list, or create a new one.</div>'; return; }
+  const rows = await withStatus(sb.from('documents').select('*').eq('document_id', id));
+  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Document not found.</div>'; return; }
+  const doc = rows[0];
+  const siblings = await fetchWorkSiblings(doc.work_id);
+
+  if (State.currentRole === 'user') { renderDocDetailConsultation(box, doc, siblings); return; }
+
+  const readOnly = !canWrite();
+
+  function textField(label, name, value, type) {
+    if (readOnly) return `<div class="field"><label>${esc(label)}</label><input value="${esc(value)}" disabled></div>`;
+    return `<div class="field"><label>${esc(label)}</label><input data-f="${name}" type="${type || 'text'}" value="${esc(value)}"></div>`;
+  }
+  function selectField(label, name, value, list) {
+    if (readOnly) return `<div class="field"><label>${esc(label)}</label><input value="${esc(labelOf(list, value))}" disabled></div>`;
+    return `<div class="field"><label>${esc(label)}</label><select data-f="${name}">${optionsHtml(list, value, false)}</select></div>`;
+  }
+
+  const previewName = computeFileName({ ...doc });
+  const isVideo = doc.media_type === 'VID';
+
+  box.innerHTML = `
+    <h3>Document #${esc(doc.document_id)}${doc.legacy_migrated ? ' <span class="count-badge">legacy-migrated</span>' : ''}${doc.pending_deletion ? ' <span class="count-badge" style="background:var(--danger);color:#fff;">pending deletion</span>' : ''}</h3>
+    <div class="field-grid wide">
+      ${textField('Title (EN)', 'title', doc.title)}
+      ${textField('Reference date', 'ref_date', doc.ref_date, 'date')}
+      ${selectField('Category', 'category', doc.category, State.categories)}
+      ${selectField('Author', 'author', doc.author, State.authors)}
+      ${selectField('Main topic', 'main_topic', doc.main_topic, State.mainTopics)}
+      ${textField('Secondary tags', 'secondary_tags', doc.secondary_tags)}
+      ${selectField('Language', 'original_lang', doc.original_lang, State.langs)}
+      ${textField('Reference period', 'ref_period', doc.ref_period)}
+      ${selectField('Media type', 'media_type', doc.media_type, State.mediaTypes)}
+      ${selectField('Provenance', 'provenance', doc.provenance, State.provenances)}
+      ${selectField('Collection', 'collection', doc.collection, State.collections)}
+      ${textField('Physical box', 'physical_box', doc.physical_box)}
+      ${textField('Parola di Vita ref', 'pdv_ref', doc.pdv_ref)}
+      <div class="field"><label>File name</label><input value="${esc(doc.file_name)}" disabled></div>
+      ${textField('Duration (video only)', 'duration', doc.duration)}
+      ${selectField('Quality (video only)', 'quality', doc.quality, State.qualities)}
+    </div>
+    <div class="field">
+      <label>Recipient(s)</label>
+      <div class="btn-row" style="margin:0;">
+        ${State.recipients.map(([c, l]) => `<label style="display:flex;align-items:center;gap:4px;font-size:12.5px;font-weight:normal;text-transform:none;">
+          <input type="checkbox" class="f-doc-recipient" value="${c}" ${(doc.recipient || []).includes(c) ? 'checked' : ''} ${readOnly ? 'disabled' : ''}> ${l}</label>`).join('')}
+      </div>
+    </div>
+    ${renderWorkSiblingsHtml(siblings, doc.document_id)}
+    ${readOnly ? `<div class="field"><label>Notes</label><textarea disabled>${esc(doc.notes)}</textarea></div>`
+      : `<div class="field"><label>Notes</label><textarea data-f="notes">${esc(doc.notes)}</textarea></div>`}
+    <div class="field">
+      <label>File</label>
+      ${readOnly ? '' : `<div class="hint">File will be saved as: <b id="filename-preview">${esc(previewName)}</b></div>`}
+      ${doc.storage_path ? `<div class="hint">Currently on file: ${esc(doc.file_name)} â€” <a href="#" id="doc-download">Download</a></div>` : '<div class="hint">No file uploaded yet.</div>'}
+      ${readOnly ? '' : '<input type="file" id="doc-file-input" accept=".pdf,.doc,.docx" style="margin-top:6px;">'}
+      <button class="btn secondary" id="doc-download-gdrive" style="margin-top:8px;">Download Document (legacy archive)</button>
+    </div>
+    ${canWrite() ? `<div class="field">
+      <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:12.5px;">
+        <input type="checkbox" id="f-pending-deletion" ${doc.pending_deletion ? 'checked' : ''}> Mark this document for deletion
+      </label>
+      <input data-f="pending_deletion_note" placeholder="Reason (optional)" value="${esc(doc.pending_deletion_note)}" style="margin-top:6px;">
+    </div>` : ''}
+    <div class="btn-row">
+      ${canWrite() ? '<button class="btn" id="doc-save">Save changes</button>' : ''}
+      <button class="btn secondary" id="doc-tracking-sheet">Print Tracking Sheet</button>
+      ${canDelete() ? '<button class="btn danger" id="doc-delete">Delete permanently</button>' : ''}
+    </div>
+    ${renderProcessHistorySection(doc)}
+    <details style="margin-top:14px;">
+      <summary class="hint" style="cursor:pointer;">Legacy data (read-only, kept for reference)</summary>
+      <div class="field-grid wide" style="margin-top:8px;">
+        <div class="field"><label>Legacy category</label><input value="${esc(doc.legacy_category)}" disabled></div>
+        <div class="field"><label>Legacy author</label><input value="${esc(doc.legacy_author)}" disabled></div>
+        <div class="field"><label>Legacy topic</label><input value="${esc(doc.legacy_topic)}" disabled></div>
+        <div class="field"><label>Legacy status</label><input value="${esc(doc.legacy_status)}" disabled></div>
+        <div class="field"><label>Legacy file name</label><input value="${esc(doc.legacy_file_name)}" disabled></div>
+        <div class="field"><label>Title (ITA) - superseded by Work versions above</label><input value="${esc(doc.italian_title)}" disabled></div>
+        <div class="field"><label>Video ref - superseded by Work versions above</label><input value="${esc(doc.video_ref)}" disabled></div>
+      </div>
+    </details>
+  `;
+
+  document.getElementById('doc-tracking-sheet').addEventListener('click', () => renderTrackingSheet(id));
+  document.getElementById('doc-download-gdrive').addEventListener('click', () => downloadFromGDrive(doc.file_name));
+  if (doc.storage_path) {
+    document.getElementById('doc-download').addEventListener('click', async e => {
+      e.preventDefault();
+      const { data } = await sb.storage.from(BUCKET).createSignedUrl(doc.storage_path, 60);
+      if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+    });
+  }
+  await wireProcessHistorySection(id, doc);
+  if (!canWrite()) return;
+
+  function collectFields() {
+    const out = {};
+    box.querySelectorAll('[data-f]').forEach(el => out[el.dataset.f] = el.value === '' ? null : el.value);
+    out.recipient = Array.from(box.querySelectorAll('.f-doc-recipient:checked')).map(c => c.value);
+    if (out.recipient.length === 0) out.recipient = null;
+    out.pending_deletion = document.getElementById('f-pending-deletion').checked;
+    return out;
+  }
+  function updatePreview() {
+    const vals = collectFields();
+    document.getElementById('filename-preview').textContent = computeFileName({ document_id: doc.document_id, ...vals });
+  }
+  box.querySelectorAll('[data-f="title"],[data-f="category"],[data-f="author"],[data-f="main_topic"],[data-f="ref_date"],[data-f="ref_period"],[data-f="provenance"]')
+    .forEach(el => el.addEventListener('input', updatePreview));
+
+  document.getElementById('doc-save').addEventListener('click', async () => {
+    const vals = collectFields();
+    const baseName = computeFileName({ document_id: doc.document_id, ...vals });
+    const finalName = await uniqueFileName(baseName, doc.document_id);
+    vals.file_name = finalName;
+
+    const fileInput = document.getElementById('doc-file-input');
+    let storagePath = doc.storage_path;
+    if (fileInput.files && fileInput.files[0]) {
+      if (storagePath && storagePath !== finalName) {
+        await sb.storage.from(BUCKET).remove([storagePath]);
+      }
+      await withStatus(sb.storage.from(BUCKET).upload(finalName, fileInput.files[0], { upsert: true }), 'Uploading file...');
+      storagePath = finalName;
+    } else if (storagePath && storagePath !== finalName) {
+      await sb.storage.from(BUCKET).move(storagePath, finalName);
+      storagePath = finalName;
+    }
+    vals.storage_path = storagePath;
+
+    await withStatus(sb.from('documents').update(vals).eq('document_id', id), 'Saving...');
+    await onAfterDocChange();
+    await renderDocDetail(id);
+  });
+
+  if (!canDelete()) return;
+  document.getElementById('doc-delete').addEventListener('click', async () => {
+    if (!confirm(`Permanently delete document #${id}? This cannot be undone.`)) return;
+    if (doc.storage_path) await sb.storage.from(BUCKET).remove([doc.storage_path]);
+    await withStatus(sb.from('documents').delete().eq('document_id', id));
+    State.selectedDocId = null;
+    await onAfterDocChange();
+    await renderDocDetail(null);
+  });
+}
+
+// Dashboard is the only view with a live grid that needs refreshing after a save/delete;
+// Match Review doesn't have a #dash-grid on screen, so this is a no-op there.
+async function onAfterDocChange() {
+  if (window.__refreshDashGrid && document.getElementById('dash-grid')) await window.__refreshDashGrid();
+}
+
+// ---------- Process History ----------
+
+function renderProcessHistorySection(doc) {
+  return `
+    <div class="panel" style="margin-top:14px;">
+      <h3>Process history <span class="hint">â€” current step: ${esc(labelOf(State.statuses, doc.workflow_status)) || 'â€”'}</span></h3>
+      <div id="process-history-log"><div class="empty-msg">Loading...</div></div>
+      ${canWrite() ? `
+      <div class="field-grid" style="margin-top:10px;">
+        <div class="field"><label>Step</label><select id="ph-step">${optionsHtml(State.statuses, doc.workflow_status, false)}</select></div>
+        <div class="field"><label>Date</label><input id="ph-date" type="date" value="${esc(today())}"></div>
+      </div>
+      <div class="field"><label>Note</label><input id="ph-note" placeholder="Optional note"></div>
+      <div class="btn-row"><button class="btn secondary" id="ph-add">Add step</button></div>` : ''}
+    </div>`;
+}
+
+async function wireProcessHistorySection(documentId, doc) {
+  await refreshProcessHistoryLog(documentId);
+  const addBtn = document.getElementById('ph-add');
+  if (!addBtn) return;
+  addBtn.addEventListener('click', async () => {
+    const step = document.getElementById('ph-step').value;
+    const step_date = document.getElementById('ph-date').value || today();
+    const note = document.getElementById('ph-note').value || null;
+    await withStatus(sb.from('process_history').insert({ document_id: documentId, step, step_date, note }), 'Adding step...');
+    await withStatus(sb.from('documents').update({ workflow_status: step }).eq('document_id', documentId), 'Updating status...');
+    await onAfterDocChange();
+    await renderDocDetail(documentId);
+  });
+}
+
+async function refreshProcessHistoryLog(documentId) {
+  const box = document.getElementById('process-history-log');
+  if (!box) return;
+  const rows = await withStatus(sb.from('process_history').select('*').eq('document_id', documentId).order('step_date', { ascending: false }).order('created_at', { ascending: false }));
+  box.innerHTML = rows.length === 0 ? '<div class="empty-msg">No steps logged yet.</div>' : `
+    <div class="grid-wrap"><table class="grid">
+      <thead><tr><th>Step</th><th>Date</th><th>Note</th></tr></thead>
+      <tbody>${rows.map(r => `<tr><td>${esc(labelOf(State.statuses, r.step))}</td><td>${esc(r.step_date)}</td><td>${esc(r.note)}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+// ---------- New document ----------
+
+export async function createNewDocument(afterCreate) {
+  const maxRows = await withStatus(sb.from('documents').select('document_id').order('document_id', { ascending: false }).limit(1));
+  const newId = (maxRows[0]?.document_id || 0) + 1;
+  const workId = await createWorkFor(null);
+  await withStatus(sb.from('documents').insert({ document_id: newId, workflow_status: 'ENTR', legacy_migrated: false, work_id: workId }));
+  State.selectedDocId = String(newId);
+  if (afterCreate) await afterCreate();
+  await renderDocDetail(State.selectedDocId);
+}
+
+// ---------- Print Tracking Sheet (now driven by the process_history log) ----------
+
+export async function renderTrackingSheet(id) {
+  const main = document.getElementById('main');
+  const rows = await withStatus(sb.from('documents').select('*').eq('document_id', id));
+  const doc = rows[0];
+  if (!doc) return;
+  const historyRows = await withStatus(sb.from('process_history').select('*').eq('document_id', id).order('step_date'));
+  const doneSteps = new Set(historyRows.map(r => r.step));
+  main.innerHTML = `
+    <div class="btn-row no-print">
+      <button class="btn secondary" id="back-to-dash">&larr; Back</button>
+      <button class="btn" id="print-tracking">Print / Export PDF</button>
+    </div>
+    <div class="report-view" style="max-width:800px;margin:0 auto;">
+      <h2>Focolare Urdu Archive - Document Tracking Sheet</h2>
+      <table style="margin-bottom:16px;">
+        <tr><th style="width:30%;">Document ID</th><td>${esc(doc.document_id)}</td></tr>
+        <tr><th>Title</th><td>${esc(doc.title)}</td></tr>
+        <tr><th>Category</th><td>${esc(labelOf(State.categories, doc.category))}</td></tr>
+        <tr><th>Author</th><td>${esc(labelOf(State.authors, doc.author))}</td></tr>
+        <tr><th>Main topic</th><td>${esc(labelOf(State.mainTopics, doc.main_topic))}</td></tr>
+        <tr><th>Recipient(s)</th><td>${(doc.recipient || []).map(c => esc(labelOf(State.recipients, c))).join(', ')}</td></tr>
+        <tr><th>Language</th><td>${esc(labelOf(State.langs, doc.original_lang))}</td></tr>
+        <tr><th>Provenance</th><td>${esc(labelOf(State.provenances, doc.provenance))}</td></tr>
+        <tr><th>Reference date / period</th><td>${esc(doc.ref_date)} ${esc(doc.ref_period)}</td></tr>
+        <tr><th>File name</th><td>${esc(doc.file_name)}</td></tr>
+        <tr><th>Physical box</th><td>${esc(doc.physical_box)}</td></tr>
+      </table>
+      <h3 style="margin-bottom:6px;">Process Registry</h3>
+      <table>
+        <thead><tr><th>#</th><th>Step</th><th>Description</th><th>Date</th><th>Note</th></tr></thead>
+        <tbody>${TRACKING_STEPS.map((s, i) => {
+          const done = historyRows.find(r => r.step === s[0]);
+          return `<tr><td>${i + 1}</td><td>${esc(s[1])}</td><td>${esc(s[2])}</td><td style="min-width:90px;">${esc(done?.step_date) || '&nbsp;'}</td><td style="min-width:120px;">${esc(done?.note) || '&nbsp;'}</td></tr>`;
+        }).join('')}</tbody>
+      </table>
+      <h3 style="margin:16px 0 6px;">Additional Notes</h3>
+      <div style="border-top:1px solid #999;height:20px;">${esc(doc.notes) || ''}</div>
+    </div>
+    <style>@media print { @page { size: A4; } }</style>
+  `;
+  document.getElementById('back-to-dash').addEventListener('click', () => window.__renderTab('dashboard'));
+  document.getElementById('print-tracking').addEventListener('click', () => window.print());
+}
