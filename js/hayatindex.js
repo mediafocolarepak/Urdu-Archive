@@ -1,10 +1,14 @@
-import { sb, State, esc, today, likeSafe, canWrite, withStatus, computeFileName, uniqueFileName, createWorkFor } from './core.js?v=20260817134636';
+// Read-mostly viewer over the full Hayat index (all editions at once), for browsing/searching.
+// For actual editing use the Hayat Editor tab; this view's only action is one-click Extract,
+// sharing core.js's extractHayatRowToDocument so both tabs create documents identically.
+
+import { sb, esc, likeSafe, canWrite, withStatus, extractHayatRowToDocument } from './core.js?v=20260818230219';
 
 export async function renderHayatView(main) {
   main.innerHTML = `
     <div class="panel">
       <h2>Hayat Index</h2>
-      <p class="hint">Rows not yet "extracted" can be turned into a new document with one click, already tagged with source "Hayat", language Urdu, and its own Document.</p>
+      <p class="hint">Rows not yet "extracted" can be turned into a new document with one click, already tagged with source "Hayat", language Urdu, and its own Document. To edit the index itself (fix a title, add rows), use the Hayat Editor tab.</p>
       <div class="searchbar"><input id="hayat-search" placeholder="Search by title, author, topic..."></div>
       <div class="grid-wrap"><table class="grid" id="hayat-grid"></table></div>
     </div>`;
@@ -33,33 +37,10 @@ async function refreshHayatGrid(filterText) {
   }));
 }
 
-const HAYAT_CATEGORY_MAP = { Tlk: 'DISC', Mdt: 'MEDI', Lkp: 'LINK', Wol: 'WORD', Exp: 'EXPE' };
-function mapHayatAuthor(name) {
-  if (!name) return 'OFFI';
-  if (name === 'Chiara') return 'CHIA';
-  return 'OTHR';
-}
-
 async function extractHayatRow(hayatId) {
   const rows = await withStatus(sb.from('hayat_indice').select('*').eq('id', hayatId));
   const row = rows[0];
   if (!row || row.estratto) return;
-  const maxRows = await withStatus(sb.from('documents').select('document_id').order('document_id', { ascending: false }).limit(1));
-  const newId = (maxRows[0]?.document_id || 0) + 1;
-  const category = HAYAT_CATEGORY_MAP[row.category] || 'MISC';
-  const author = mapHayatAuthor(row.autore);
-  const workId = await createWorkFor(row.titolo || row.title);
-  const draft = {
-    document_id: newId, title: row.title || row.titolo, legacy_category: row.category, legacy_author: row.autore,
-    hayat_index_ref: row.id, to_whom: row.branca, original_title: row.titolo || row.title,
-    hayat_issue: `${row.mese_anno}p.${row.pagina}`, legacy_topic: row.argomento,
-    category, author, main_topic: 'GENR', secondary_tags: row.argomento,
-    ref_period: row.mese_anno || null,
-    original_lang: 'URD', workflow_status: 'ENTR', legacy_migrated: false,
-    provenance: 'HAYAT', media_type: 'DOC', work_id: workId,
-  };
-  draft.file_name = await uniqueFileName(computeFileName(draft), null);
-  await withStatus(sb.from('documents').insert(draft));
-  await withStatus(sb.from('hayat_indice').update({ estratto: today() }).eq('id', hayatId));
+  const newId = await extractHayatRowToDocument(row);
   alert(`Created document #${newId} from Hayat entry #${hayatId}. You can complete it from the Dashboard.`);
 }

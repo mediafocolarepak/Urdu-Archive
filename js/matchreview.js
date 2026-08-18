@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, withStatus } from './core.js?v=20260817134636';
-import { renderDocDetail } from './docdetail.js?v=20260817134636';
+import { sb, State, esc, labelOf, withStatus, mergeWorks } from './core.js?v=20260818230219';
+import { renderDocDetail } from './docdetail.js?v=20260818230219';
 
 const ITALIAN_MONTHS = { gennaio: 1, febbraio: 2, marzo: 3, aprile: 4, maggio: 5, giugno: 6, luglio: 7, agosto: 8, settembre: 9, ottobre: 10, novembre: 11, dicembre: 12 };
 export function pdvApproxDate(r) {
@@ -32,11 +32,11 @@ export function rankByYearMonthProximity(refDate, refs) {
 const MATCH_LISTS = {
   collegamenti: {
     label: 'Collegamenti (Italian titles)',
-    docFilter: d => d.category === 'LINK' && !d.italian_title,
+    docFilter: d => d.category === 'Lkp' && !d.match_ref,
     refTable: 'ref_collegamenti',
     refLabel: r => `${r.data || '?'} â€” ${r.titolo}${r.luogo ? ' (' + r.luogo + ')' : ''}`,
     refValue: r => r.titolo,
-    field: 'italian_title',
+    field: 'match_ref',
     rank: (doc, refs) => rankByDateProximity(doc.ref_date, refs, 'data'),
   },
   video: {
@@ -50,7 +50,7 @@ const MATCH_LISTS = {
   },
   pdv: {
     label: 'Parola di Vita',
-    docFilter: d => d.category === 'WORD' && !d.pdv_ref,
+    docFilter: d => d.category === 'Wol' && !d.pdv_ref,
     refTable: 'ref_parola_di_vita',
     refLabel: r => `${r.mese} â€” ${r.versetto}`,
     refValue: r => r.link,
@@ -87,7 +87,7 @@ export async function renderMatchReviewView(main) {
 async function loadMatchQueue() {
   const cfg = MATCH_LISTS[State.matchListKey];
   if (cfg.isWorkLink) {
-    const docs = await withStatus(sb.from('documents').select('document_id,title,ref_date,work_id,provenance,original_lang,pending_deletion').order('document_id'));
+    const docs = await withStatus(sb.from('documents').select('document_id,title,ref_date,work_id,provenance,language,pending_deletion').order('document_id'));
     const countByWork = {};
     for (const d of docs) if (d.work_id) countByWork[d.work_id] = (countByWork[d.work_id] || 0) + 1;
     const singleItem = docs.filter(d => !d.pending_deletion && d.work_id && countByWork[d.work_id] === 1);
@@ -95,7 +95,7 @@ async function loadMatchQueue() {
     State.matchRefRows = singleItem;
     return;
   }
-  const docs = await withStatus(sb.from('documents').select('document_id,title,category,author,ref_date,italian_title,video_ref,pdv_ref,pending_deletion').order('document_id'));
+  const docs = await withStatus(sb.from('documents').select('document_id,title,category,author,ref_date,match_ref,video_ref,pdv_ref,pending_deletion').order('document_id'));
   State.matchQueue = docs.filter(d => !d.pending_deletion && cfg.docFilter(d));
   State.matchRefRows = await withStatus(sb.from(cfg.refTable).select('*'));
 }
@@ -143,7 +143,7 @@ function renderMatchBody() {
 }
 
 function candidateLabel(r, cfg) {
-  if (cfg.isWorkLink) return `#${r.document_id} â€” ${r.title || '(untitled)'} â€” ${r.ref_date || 'no date'} â€” ${r.provenance || '?'}/${r.original_lang || '?'}`;
+  if (cfg.isWorkLink) return `#${r.document_id} â€” ${r.title || '(untitled)'} â€” ${r.ref_date || 'no date'} â€” ${r.provenance || '?'}/${r.language || '?'}`;
   return cfg.refLabel(r);
 }
 
@@ -152,7 +152,7 @@ function renderCandidates(list, cfg, doc) {
   document.getElementById('match-candidates-count').textContent = `(${list.length} total, most likely first)`;
   if (list.length === 0) { box.innerHTML = '<div class="empty-msg">No candidates found.</div>'; return; }
   box.innerHTML = list.map((r, i) => {
-    const sameVariant = cfg.isWorkLink && r.provenance === doc.provenance && r.original_lang === doc.original_lang;
+    const sameVariant = cfg.isWorkLink && r.provenance === doc.provenance && r.language === doc.language;
     return `<div class="panel" style="margin-bottom:8px;padding:10px;">
       <div style="font-size:13px;">${esc(candidateLabel(r, cfg))}${sameVariant ? ' <span class="hint">(same source/language - more likely a duplicate than a translation)</span>' : ''}</div>
       <button class="btn" data-i="${i}" style="margin-top:6px;padding:4px 10px;">${cfg.isWorkLink ? 'Same document â€” merge' : 'Assign'}</button>
@@ -161,17 +161,11 @@ function renderCandidates(list, cfg, doc) {
   box.querySelectorAll('[data-i]').forEach(btn => btn.addEventListener('click', async () => {
     const r = list[btn.dataset.i];
     if (cfg.isWorkLink) {
-      await mergeIntoWork(doc, r);
+      await mergeWorks(r.document_id, [doc.document_id]);
     } else {
       await withStatus(sb.from('documents').update({ [cfg.field]: cfg.refValue(r) }).eq('document_id', doc.document_id), 'Saving...');
     }
     State.matchIndex++;
     renderMatchBody();
   }));
-}
-
-async function mergeIntoWork(doc, candidate) {
-  const oldWorkId = doc.work_id;
-  await withStatus(sb.from('documents').update({ work_id: candidate.work_id }).eq('document_id', doc.document_id), 'Merging...');
-  await withStatus(sb.from('works').delete().eq('work_id', oldWorkId));
 }

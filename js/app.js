@@ -1,11 +1,13 @@
-import { State, canWrite, isAdmin, boot, wireAuthButtons } from './core.js?v=20260817134636';
-import { renderDashboardView } from './dashboard.js?v=20260817134636';
-import { renderReportsView } from './reports.js?v=20260817134636';
-import { renderHayatView } from './hayatindex.js?v=20260817134636';
-import { renderMatchReviewView } from './matchreview.js?v=20260817134636';
-import { renderBulkImportView } from './bulkimport.js?v=20260817134636';
-import { renderUsersView, renderOptionsView } from './admin.js?v=20260817134636';
-import { renderAdminEditView } from './adminedit.js?v=20260817134636';
+import { State, canWrite, isAdmin, boot, wireAuthButtons } from './core.js?v=20260818230219';
+import { renderDashboardView } from './dashboard.js?v=20260818230219';
+import { renderReportsView } from './reports.js?v=20260818230219';
+import { renderHayatView } from './hayatindex.js?v=20260818230219';
+import { renderMatchReviewView } from './matchreview.js?v=20260818230219';
+import { renderBulkImportView } from './bulkimport.js?v=20260818230219';
+import { renderUsersView, renderOptionsView } from './admin.js?v=20260818230219';
+import { renderAdminEditView } from './adminedit.js?v=20260818230219';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260818230219';
+import { renderHayatEditorView } from './hayateditor.js?v=20260818230219';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -15,7 +17,12 @@ function getTabs() {
     { id: 'reports', label: 'Print Reports' },
     { id: 'hayat', label: 'Hayat Index' },
   ];
-  if (canWrite()) { tabs.push({ id: 'matchreview', label: 'Match Review' }); tabs.push({ id: 'bulkimport', label: 'Bulk Import' }); }
+  if (canWrite()) {
+    tabs.push({ id: 'matchreview', label: 'Match Review' });
+    tabs.push({ id: 'workconsolidation', label: 'Work Consolidation' });
+    tabs.push({ id: 'hayateditor', label: 'Hayat Editor' });
+    tabs.push({ id: 'bulkimport', label: 'Bulk Import' });
+  }
   if (isAdmin()) { tabs.push({ id: 'users', label: 'Users' }); tabs.push({ id: 'options', label: 'Options' }); tabs.push({ id: 'adminedit', label: 'Edit Records' }); }
   return tabs;
 }
@@ -38,6 +45,8 @@ function renderTab(id) {
   else if (id === 'options') renderOptionsView(main);
   else if (id === 'adminedit') renderAdminEditView(main);
   else if (id === 'matchreview') renderMatchReviewView(main);
+  else if (id === 'workconsolidation') renderWorkConsolidationView(main);
+  else if (id === 'hayateditor') renderHayatEditorView(main);
   else if (id === 'bulkimport') renderBulkImportView(main);
 }
 

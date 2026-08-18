@@ -2,31 +2,38 @@
 // document field inline (as opposed to the Dashboard, which shows a handful of columns and
 // opens one record at a time in the side panel). Meant for fast bulk corrections. It does
 // not recompute/rename the stored file on save - use the normal document detail Save for that.
+// Collections are shown as a plain multiselect here (no per-collection page number, unlike the
+// document detail page) - editing page numbers still needs the full document detail page.
 
-import { sb, State, esc, isAdmin, withStatus, optionsHtml, BUCKET, DASH_ROW_LIMIT, likeSafe } from './core.js?v=20260817134636';
+import { sb, State, esc, isAdmin, withStatus, optionsHtml, BUCKET, DASH_ROW_LIMIT, likeSafe, saveDocumentCollections } from './core.js?v=20260818230219';
 
 const EDIT_COLUMNS = [
   ['title', 'Title (EN)', 'text'],
-  ['ref_date', 'Ref. date', 'date'],
-  ['category', 'Category', 'select', () => State.categories],
+  ['original_title', 'Original title', 'text'],
   ['author', 'Author', 'select', () => State.authors],
+  ['ref_date', 'Ref. date', 'date'],
+  ['place', 'Place', 'text'],
+  ['recipient', 'Recipients', 'multiselect', () => State.recipients],
+  ['category', 'Category', 'select', () => State.categories],
   ['main_topic', 'Main topic', 'select', () => State.mainTopics],
   ['secondary_tags', 'Secondary tags', 'text'],
-  ['original_lang', 'Language', 'select', () => State.langs],
+  ['language', 'Language', 'select', () => State.langs],
   ['ref_period', 'Ref. period', 'text'],
   ['media_type', 'Media type', 'select', () => State.mediaTypes],
   ['provenance', 'Source', 'select', () => State.provenances],
   ['operator', 'Operator', 'select', () => State.operators],
-  ['collection', 'Collection', 'select', () => State.collections],
   ['physical_box', 'Physical box', 'text'],
   ['pdv_ref', 'PdV ref', 'text'],
   ['duration', 'Duration', 'text'],
   ['quality', 'Quality', 'select', () => State.qualities],
-  ['recipient', 'Recipients', 'multiselect', () => State.recipients],
   ['workflow_status', 'Status', 'select', () => State.statuses],
   ['notes', 'Notes', 'text'],
   ['pending_deletion', 'Pending deletion', 'checkbox'],
   ['pending_deletion_note', 'Deletion note', 'text'],
+  ['original_inp_file_name', 'Original .INP file', 'text'],
+  ['original_doc_file_name', 'Original .DOCX file', 'text'],
+  ['match_ref', 'Match ref', 'text'],
+  ['is_preferred', 'Preferred', 'checkbox'],
 ];
 
 export async function renderAdminEditView(main) {
@@ -35,7 +42,7 @@ export async function renderAdminEditView(main) {
   main.innerHTML = `
     <div class="panel">
       <h2>Edit Records <span class="count-badge" id="ae-count"></span></h2>
-      <p class="hint">Every field is editable directly in the grid (except ID). Changes are only saved when you press "Save" on that row.</p>
+      <p class="hint">Every field is editable directly in the grid (except ID). Changes are only saved when you press "Save" on that row. Collections here are membership only - edit page numbers from the document's own page.</p>
       <div class="searchbar">
         <input id="ae-search" placeholder="Search by title or tags..." value="${esc(f.search)}">
       </div>
@@ -86,7 +93,6 @@ function buildAdminEditQuery() {
   if (f.author) q = q.eq('author', f.author);
   if (f.main_topic) q = q.eq('main_topic', f.main_topic);
   if (f.workflow_status) q = q.eq('workflow_status', f.workflow_status);
-  if (f.collection) q = q.eq('collection', f.collection);
   if (f.legacyOnly) q = q.eq('legacy_migrated', true);
   if (f.pendingOnly) q = q.eq('pending_deletion', true);
   return q;
@@ -108,7 +114,14 @@ function cellHtml(doc, col) {
   if (type === 'checkbox') {
     return `<input type="checkbox" data-f="${name}" ${value ? 'checked' : ''}>`;
   }
-  return `<input data-f="${name}" type="${type}" value="${esc(value)}" style="min-width:110px;">`;
+  return `<input data-f="${name}" type="${type}" value="${esc(value)}" style="min-width:120px;">`;
+}
+
+function collectionsCellHtml(docId, collectionsByDoc) {
+  const selected = new Set((collectionsByDoc[docId] || []).map(c => c.collection_code));
+  return `<select data-collections multiple size="3" style="min-width:120px;">
+    ${State.collections.map(([c, l]) => `<option value="${c}" ${selected.has(c) ? 'selected' : ''}>${l}</option>`).join('')}
+  </select>`;
 }
 
 function collectRowValues(tr) {
@@ -130,14 +143,26 @@ function collectRowValues(tr) {
 export async function refreshAdminEditGrid() {
   const grid = document.getElementById('ae-grid');
   if (!grid) return;
-  const rows = await withStatus(buildAdminEditQuery().order('document_id', { ascending: false }).limit(DASH_ROW_LIMIT), 'Searching...');
+  let rows = await withStatus(buildAdminEditQuery().order('document_id', { ascending: false }).limit(DASH_ROW_LIMIT), 'Searching...');
+  if (State.adminEditFilters.collection) {
+    const withCollection = await withStatus(sb.from('document_collections').select('document_id').eq('collection_code', State.adminEditFilters.collection));
+    const idSet = new Set(withCollection.map(r => r.document_id));
+    rows = rows.filter(r => idSet.has(r.document_id));
+  }
   document.getElementById('ae-count').textContent = rows.length;
+
+  const ids = rows.map(r => r.document_id);
+  const collectionRows = ids.length ? await withStatus(sb.from('document_collections').select('*').in('document_id', ids)) : [];
+  const collectionsByDoc = {};
+  for (const c of collectionRows) (collectionsByDoc[c.document_id] ||= []).push(c);
+
   grid.innerHTML = `<thead><tr>
-      <th>ID</th>${EDIT_COLUMNS.map(([, label]) => `<th>${esc(label)}</th>`).join('')}<th>File name</th><th></th><th></th>
+      <th>ID</th>${EDIT_COLUMNS.map(([, label]) => `<th>${esc(label)}</th>`).join('')}<th>Collections</th><th>File name</th><th></th><th></th>
     </tr></thead>
     <tbody>${rows.map(r => `<tr data-id="${esc(r.document_id)}">
       <td>${esc(r.document_id)}</td>
       ${EDIT_COLUMNS.map(col => `<td>${cellHtml(r, col)}</td>`).join('')}
+      <td>${collectionsCellHtml(r.document_id, collectionsByDoc)}</td>
       <td>${esc(r.file_name)}</td>
       <td><button class="btn secondary ae-save" style="padding:4px 10px;">Save</button></td>
       <td><button class="btn danger ae-delete" style="padding:4px 10px;">Delete</button></td>
@@ -148,6 +173,13 @@ export async function refreshAdminEditGrid() {
     tr.querySelector('.ae-save').addEventListener('click', async () => {
       const vals = collectRowValues(tr);
       await withStatus(sb.from('documents').update(vals).eq('document_id', id), 'Saving...');
+      const selectedCodes = Array.from(tr.querySelector('[data-collections]').selectedOptions).map(o => o.value);
+      const existing = collectionsByDoc[id] || [];
+      const payload = selectedCodes.map(code => {
+        const prior = existing.find(c => c.collection_code === code);
+        return { collection_code: code, page_number: prior ? prior.page_number : null };
+      });
+      await saveDocumentCollections(id, payload);
     });
     tr.querySelector('.ae-delete').addEventListener('click', async () => {
       if (!confirm(`Permanently delete document #${id}? This cannot be undone.`)) return;

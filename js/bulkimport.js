@@ -1,8 +1,10 @@
-import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor } from './core.js?v=20260817134636';
+// Bulk Import: catalogue every supported file in a folder in one pass. No per-file review
+// step any more - the only checkpoint is a single "Import N files?" confirmation before
+// anything is written, since renaming files on disk is not easily undone. Possible duplicates
+// (by title similarity against what's already catalogued) are still detected, but only
+// reported afterwards in the summary, not used to block or pre-exclude anything.
 
-export function slugifyTitle(s) {
-  return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'untitled';
-}
+import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore } from './core.js?v=20260818230219';
 
 export function titleFromFilename(name) {
   const noExt = name.replace(/\.[a-z0-9]+$/i, '');
@@ -10,8 +12,9 @@ export function titleFromFilename(name) {
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }
 
-// Best-effort: a full day.month.year pattern becomes an exact ref_date; a bare 4-digit
-// year becomes ref_period instead, since that's honestly all we know from the filename.
+// Best-effort, checked most-specific pattern first: a full day.month.year becomes an exact
+// ref_date; a year-month (no day) or a bare year becomes ref_period instead, since that's
+// honestly all we know from the filename.
 export function extractDateFromFilename(name) {
   let m = name.match(/(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})(?!\d)/);
   if (m) {
@@ -30,21 +33,11 @@ export function extractDateFromFilename(name) {
       if (!isNaN(dt)) return { ref_date: `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`, ref_period: null };
     }
   }
+  m = name.match(/(19|20)\d{2}-(0[1-9]|1[0-2])(?!\d)/);
+  if (m) return { ref_date: null, ref_period: m[0] };
   m = name.match(/(19|20)\d{2}/);
   if (m) return { ref_date: null, ref_period: m[0] };
   return { ref_date: null, ref_period: null };
-}
-
-export function normalizeForCompare(s) {
-  return (s || '').toLowerCase().replace(/\.[a-z0-9]+$/, '').replace(/[^a-z0-9]+/g, ' ').trim();
-}
-export function titleOverlapScore(a, b) {
-  const wa = new Set(normalizeForCompare(a).split(' ').filter(w => w.length > 2));
-  const wb = new Set(normalizeForCompare(b).split(' ').filter(w => w.length > 2));
-  if (wa.size === 0 || wb.size === 0) return 0;
-  let inter = 0;
-  for (const w of wa) if (wb.has(w)) inter++;
-  return inter / Math.min(wa.size, wb.size);
 }
 
 let batchProvenance = '';
@@ -58,7 +51,7 @@ export async function renderBulkImportView(main) {
   main.innerHTML = `
     <div class="panel">
       <h2>Bulk Import</h2>
-      <p class="hint">Pick a local folder of files to catalogue in one go. Each file gets a new catalogue number, its own Document, and a record with status "Entry" - category/author/topic are left for you to fill in afterwards from the Dashboard, which will also complete the file name automatically at that point. Duplicates are expected (different sources/versions of the same content) - possible duplicates are only flagged for your awareness, not blocked.</p>
+      <p class="hint">Pick a local folder of files to catalogue in one go. Each file gets a new catalogue number and its own Document. Category/author/topic are left for you to fill in afterwards from the Dashboard. There is one confirmation before anything is written or renamed - after that, every file in the folder is imported.</p>
       ${supported ? '' : '<div class="empty-msg">This feature needs Chrome or Edge (it uses a browser API to read and rename local files that Firefox/Safari do not support).</div>'}
       ${supported ? `
       <div class="field-grid" style="max-width:600px;">
@@ -78,11 +71,16 @@ export async function renderBulkImportView(main) {
     batchLang = document.getElementById('bi-lang').value;
     batchMediaType = document.getElementById('bi-media-type').value;
     batchCollection = document.getElementById('bi-collection').value;
-    scanBulkImportFolder();
+    scanAndImport();
   });
 }
 
-async function scanBulkImportFolder() {
+function baseNameOf(name) {
+  const dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(0, dot) : name;
+}
+
+async function scanAndImport() {
   const body = document.getElementById('bi-body');
   let dirHandle;
   try {
@@ -90,7 +88,6 @@ async function scanBulkImportFolder() {
   } catch (e) {
     return; // user cancelled the picker
   }
-  State.bulkImportDirHandle = dirHandle;
   body.innerHTML = '<div class="empty-msg">Scanning folderâ€¦</div>';
 
   const extensions = batchMediaType === 'VID' ? ['.mp4', '.mov', '.avi', '.mkv'] : ['.pdf'];
@@ -107,7 +104,7 @@ async function scanBulkImportFolder() {
   const maxRows = await withStatus(sb.from('documents').select('document_id').order('document_id', { ascending: false }).limit(1));
   let nextId = (maxRows[0]?.document_id || 0) + 1;
 
-  State.bulkImportRows = files.map(entry => {
+  const plan = files.map(entry => {
     const title = titleFromFilename(entry.name);
     const { ref_date, ref_period } = extractDateFromFilename(entry.name);
     let bestMatch = null, bestScore = 0;
@@ -115,78 +112,55 @@ async function scanBulkImportFolder() {
       const score = Math.max(titleOverlapScore(title, doc.title), titleOverlapScore(entry.name, doc.file_name), titleOverlapScore(entry.name, doc.legacy_file_name));
       if (score > bestScore) { bestScore = score; bestMatch = doc; }
     }
-    const isDuplicateSuspect = bestScore >= 0.5;
     const document_id = nextId++;
     const ext = entry.name.slice(entry.name.lastIndexOf('.'));
-    const newFileName = computeFileName({ document_id, title, provenance: batchProvenance, original_lang: batchLang, ref_date, ref_period }).replace(/\.pdf$/, ext);
+    const base = baseNameOf(entry.name);
+    const newFileName = computeFileName({ document_id, title }).replace(/\.pdf$/, ext);
     return {
       entry, originalName: entry.name, document_id, title, ref_date, ref_period, newFileName,
-      isDuplicateSuspect, duplicateOf: bestMatch, included: true,
+      original_inp_file_name: `${base}.inp`, original_doc_file_name: `${base}.docx`,
+      isDuplicateSuspect: bestScore >= 0.5, duplicateOf: bestMatch,
     };
   });
 
-  renderBulkImportTable();
-}
+  if (!confirm(`Import ${plan.length} file(s) and rename them on disk? This cannot be easily undone.`)) {
+    body.innerHTML = '';
+    return;
+  }
 
-function renderBulkImportTable() {
-  const body = document.getElementById('bi-body');
-  body.innerHTML = `
-    <div class="hint" style="margin:10px 0;">${State.bulkImportRows.length} file(s) found, source "${esc(batchProvenance || 'â€”')}". Possible duplicates are flagged below for awareness only â€” keep them checked unless you're sure it's a true duplicate, since different versions/translations are expected and welcome.</div>
-    <div class="grid-wrap"><table class="grid">
-      <thead><tr><th></th><th>Catalogue #</th><th>Original name</th><th>Title (from filename)</th><th>Date/period detected</th><th>New file name</th><th>Similar to</th></tr></thead>
-      <tbody>${State.bulkImportRows.map((r, i) => `<tr>
-        <td><input type="checkbox" class="bi-include" data-i="${i}" ${r.included ? 'checked' : ''}></td>
-        <td>${String(r.document_id).padStart(5, '0')}</td>
-        <td>${esc(r.originalName)}</td>
-        <td>${esc(r.title)}</td>
-        <td>${esc(r.ref_date || r.ref_period || 'â€”')}</td>
-        <td>${esc(r.newFileName)}</td>
-        <td>${r.isDuplicateSuspect ? `<span class="count-badge">#${esc(r.duplicateOf.document_id)} "${esc(r.duplicateOf.title)}"</span>` : ''}</td>
-      </tr>`).join('')}</tbody>
-    </table></div>
-    <div class="btn-row">
-      <button class="btn" id="bi-apply">OK â€” catalogue the checked files</button>
-    </div>
-    <div id="bi-progress"></div>
-  `;
-  body.querySelectorAll('.bi-include').forEach(cb => cb.addEventListener('change', () => {
-    State.bulkImportRows[cb.dataset.i].included = cb.checked;
-  }));
-  document.getElementById('bi-apply').addEventListener('click', applyBulkImport);
-}
-
-async function applyBulkImport() {
-  const toImport = State.bulkImportRows.filter(r => r.included);
-  if (toImport.length === 0) { alert('Nothing checked to import.'); return; }
-  if (!confirm(`Catalogue ${toImport.length} file(s) and rename them on disk? This cannot be easily undone.`)) return;
-
-  const progress = document.getElementById('bi-progress');
-  let done = 0, failed = 0;
-  for (const r of toImport) {
-    progress.innerHTML = `<div class="hint">Processing ${done + failed + 1} of ${toImport.length}: ${esc(r.originalName)}â€¦</div>`;
+  body.innerHTML = '<div class="empty-msg">Importingâ€¦</div>';
+  let imported = 0, failed = 0;
+  const errors = [];
+  for (const r of plan) {
     try {
       const workId = await createWorkFor(r.title);
       await withStatus(sb.from('documents').insert({
         document_id: r.document_id, title: r.title, workflow_status: 'ENTR',
         catalog_date: today(), ref_date: r.ref_date, ref_period: r.ref_period,
         file_name: r.newFileName, legacy_migrated: false, work_id: workId,
-        provenance: batchProvenance || null, operator: batchOperator || null, original_lang: batchLang || null,
+        provenance: batchProvenance || null, operator: batchOperator || null, language: batchLang || null,
         media_type: batchMediaType, collection: batchCollection || null,
+        original_inp_file_name: r.original_inp_file_name, original_doc_file_name: r.original_doc_file_name,
       }));
       const file = await r.entry.getFile();
-      const newHandle = await State.bulkImportDirHandle.getFileHandle(r.newFileName, { create: true });
+      const newHandle = await dirHandle.getFileHandle(r.newFileName, { create: true });
       const writable = await newHandle.createWritable();
       await writable.write(await file.arrayBuffer());
       await writable.close();
-      await State.bulkImportDirHandle.removeEntry(r.originalName);
-      done++;
+      await dirHandle.removeEntry(r.originalName);
+      imported++;
     } catch (e) {
       failed++;
-      r.error = e.message;
+      errors.push({ name: r.originalName, message: e.message });
     }
   }
-  progress.innerHTML = `<div class="panel"><b>Done.</b> Catalogued ${done} document(s).${failed ? ` ${failed} failed - see below.` : ''}</div>
-    ${failed ? `<ul>${toImport.filter(r => r.error).map(r => `<li>${esc(r.originalName)}: ${esc(r.error)}</li>`).join('')}</ul>` : ''}`;
-  State.bulkImportRows = State.bulkImportRows.filter(r => !r.included || r.error);
-  if (State.bulkImportRows.length) renderBulkImportTable();
+
+  const duplicates = plan.filter(r => r.isDuplicateSuspect);
+  body.innerHTML = `
+    <div class="panel">
+      <b>Done.</b> Catalogued ${imported} document(s), each with its own new Document.${failed ? ` ${failed} failed.` : ''}
+      ${duplicates.length ? `<div class="hint" style="margin-top:8px;">${duplicates.length} file(s) looked similar to something already catalogued - worth a check:</div>
+        <ul>${duplicates.map(d => `<li>${esc(d.originalName)} - similar to #${esc(d.duplicateOf.document_id)} "${esc(d.duplicateOf.title)}"</li>`).join('')}</ul>` : ''}
+      ${errors.length ? `<div class="hint" style="margin-top:8px;">Failed:</div><ul>${errors.map(e => `<li>${esc(e.name)}: ${esc(e.message)}</li>`).join('')}</ul>` : ''}
+    </div>`;
 }

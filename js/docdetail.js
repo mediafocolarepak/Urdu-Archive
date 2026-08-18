@@ -5,26 +5,27 @@
 import {
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
-  createWorkFor, TRACKING_STEPS,
-} from './core.js?v=20260817134636';
+  createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
+} from './core.js?v=20260818230219';
 
-export function renderDocDetailConsultation(box, doc, workSiblings) {
+export function renderDocDetailConsultation(box, doc, workSiblings, docCollections) {
   const row = (label, value) => `<div class="field"><label>${esc(label)}</label><input value="${esc(value)}" disabled></div>`;
   box.innerHTML = `
     <h3>Document #${esc(doc.document_id)}</h3>
     <div class="field-grid wide">
       ${row('Title (EN)', doc.title)}
+      ${row('Original title', doc.original_title)}
+      ${row('Place', doc.place)}
       ${row('Category', labelOf(State.categories, doc.category))}
       ${row('Author', labelOf(State.authors, doc.author))}
       ${row('Main topic', labelOf(State.mainTopics, doc.main_topic))}
       ${row('Secondary tags', doc.secondary_tags)}
-      ${row('Language', labelOf(State.langs, doc.original_lang))}
+      ${row('Language', labelOf(State.langs, doc.language))}
       ${row('Reference date', doc.ref_date)}
       ${row('File name', doc.file_name)}
       ${row('Media type', labelOf(State.mediaTypes, doc.media_type))}
       ${row('Source', labelOf(State.provenances, doc.provenance))}
       ${row('Operator', labelOf(State.operators, doc.operator))}
-      ${row('Collection', labelOf(State.collections, doc.collection))}
       ${doc.media_type === 'VID' ? row('Duration', doc.duration) : ''}
       ${doc.media_type === 'VID' ? row('Quality', labelOf(State.qualities, doc.quality)) : ''}
       ${row('Parola di Vita ref', doc.pdv_ref)}
@@ -34,7 +35,11 @@ export function renderDocDetailConsultation(box, doc, workSiblings) {
       <label>Recipient(s)</label>
       <div style="font-size:13px;padding:4px 0;">${(doc.recipient || []).map(c => esc(labelOf(State.recipients, c))).join(', ') || 'â€”'}</div>
     </div>
-    ${renderWorkSiblingsHtml(workSiblings, doc.document_id)}
+    <div class="field">
+      <label>Collections</label>
+      <div style="font-size:13px;padding:4px 0;">${renderCollectionsSummary(docCollections)}</div>
+    </div>
+    ${renderWorkSiblingsHtml(workSiblings, doc.document_id, false)}
     <div class="btn-row">
       <button class="btn" id="doc-download-gdrive">Download Document</button>
     </div>
@@ -51,37 +56,65 @@ export function renderDocDetailConsultation(box, doc, workSiblings) {
   wireWorkSiblingsClicks(box);
 }
 
+function renderCollectionsSummary(docCollections) {
+  if (!docCollections || !docCollections.length) return 'â€”';
+  return docCollections.map(dc => esc(labelOf(State.collections, dc.collection_code)) + (dc.page_number ? ` (p.${esc(dc.page_number)})` : '')).join(', ');
+}
+
 // A "Document" groups together several "Versions" (translations, other-language
 // re-tellings, or a video/audio counterpart) that share a work_id. Text versions get their
 // own full detail page (consult + download); for video/audio, the file name shown here is
-// enough to locate the file, so no extra download plumbing is built for them.
-function renderWorkSiblingsHtml(siblings, currentId) {
+// enough to locate the file, so no extra download plumbing is built for them. Only one
+// version per Document may be "preferred" - the star is set from here or from Work
+// Consolidation, never automatically.
+function renderWorkSiblingsHtml(siblings, currentId, canEdit) {
   if (!siblings || siblings.length === 0) return '';
+  const others = siblings.filter(s => String(s.document_id) !== String(currentId));
+  if (!others.length) return '';
   return `
     <div class="field">
       <label>Other versions of this document</label>
       <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>ID</th><th>Title</th><th>Language</th><th>Source</th><th>Type</th><th>File</th></tr></thead>
-        <tbody>${siblings.filter(s => String(s.document_id) !== String(currentId)).map(s => `<tr data-sibling-id="${esc(s.document_id)}">
-          <td>${esc(s.document_id)}</td><td>${esc(s.title)}</td><td>${esc(labelOf(State.langs, s.original_lang))}</td>
+        <thead><tr><th>ID</th><th>Title</th><th>Language</th><th>Source</th><th>Type</th><th>File</th><th>Preferred</th><th></th></tr></thead>
+        <tbody>${others.map(s => `<tr data-sibling-id="${esc(s.document_id)}">
+          <td>${esc(s.document_id)}</td><td>${esc(s.title)}</td><td>${esc(labelOf(State.langs, s.language))}</td>
           <td>${esc(labelOf(State.provenances, s.provenance))}</td><td>${esc(labelOf(State.mediaTypes, s.media_type))}</td>
-          <td>${esc(s.file_name)}</td></tr>`).join('')}</tbody>
+          <td>${esc(s.file_name)}</td>
+          <td>${s.is_preferred ? '<span class="count-badge">&#9733; Preferred</span>'
+              : (canEdit ? `<button class="btn secondary sibling-set-preferred" style="padding:2px 8px;">Set preferred</button>` : '')}</td>
+          <td><button class="btn secondary sibling-open" style="padding:2px 8px;">Open</button></td>
+        </tr>`).join('')}</tbody>
       </table></div>
     </div>`;
 }
 
-function wireWorkSiblingsClicks(box) {
-  box.querySelectorAll('tr[data-sibling-id]').forEach(tr => tr.addEventListener('click', async () => {
-    const targetId = tr.dataset.siblingId;
-    State.selectedDocId = targetId;
-    await onAfterDocChange();
-    await renderDocDetail(targetId);
-  }));
+function wireWorkSiblingsClicks(box, workId) {
+  box.querySelectorAll('tr[data-sibling-id]').forEach(tr => {
+    tr.addEventListener('click', async () => {
+      const targetId = tr.dataset.siblingId;
+      State.selectedDocId = targetId;
+      await onAfterDocChange();
+      await renderDocDetail(targetId);
+    });
+    const openBtn = tr.querySelector('.sibling-open');
+    if (openBtn) openBtn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const rows = await withStatus(sb.from('documents').select('file_name').eq('document_id', tr.dataset.siblingId));
+      downloadFromGDrive(rows[0]?.file_name);
+    });
+    const prefBtn = tr.querySelector('.sibling-set-preferred');
+    if (prefBtn) prefBtn.addEventListener('click', async e => {
+      e.stopPropagation();
+      await setPreferredVersion(tr.dataset.siblingId, workId);
+      await onAfterDocChange();
+      await renderDocDetail(State.selectedDocId);
+    });
+  });
 }
 
 async function fetchWorkSiblings(workId) {
   if (!workId) return [];
-  return await withStatus(sb.from('documents').select('document_id,title,original_lang,provenance,media_type,file_name').eq('work_id', workId));
+  return await withStatus(sb.from('documents').select('document_id,title,language,provenance,media_type,file_name,is_preferred').eq('work_id', workId));
 }
 
 export async function renderDocDetail(id) {
@@ -92,8 +125,9 @@ export async function renderDocDetail(id) {
   if (!rows.length) { box.innerHTML = '<div class="empty-msg">Document not found.</div>'; return; }
   const doc = rows[0];
   const siblings = await fetchWorkSiblings(doc.work_id);
+  const docCollections = await getCollectionsForDocument(doc.document_id);
 
-  if (State.currentRole === 'user') { renderDocDetailConsultation(box, doc, siblings); return; }
+  if (State.currentRole === 'user') { renderDocDetailConsultation(box, doc, siblings, docCollections); return; }
 
   const readOnly = !canWrite();
 
@@ -113,19 +147,21 @@ export async function renderDocDetail(id) {
     <h3>Document #${esc(doc.document_id)}${doc.legacy_migrated ? ' <span class="count-badge">legacy-migrated</span>' : ''}${doc.pending_deletion ? ' <span class="count-badge" style="background:var(--danger);color:#fff;">pending deletion</span>' : ''}</h3>
     <div class="field-grid wide">
       ${textField('Title (EN)', 'title', doc.title)}
+      ${textField('Original title', 'original_title', doc.original_title)}
+      ${textField('Place', 'place', doc.place)}
       ${textField('Reference date', 'ref_date', doc.ref_date, 'date')}
       ${selectField('Category', 'category', doc.category, State.categories)}
       ${selectField('Author', 'author', doc.author, State.authors)}
       ${selectField('Main topic', 'main_topic', doc.main_topic, State.mainTopics)}
       ${textField('Secondary tags', 'secondary_tags', doc.secondary_tags)}
-      ${selectField('Language', 'original_lang', doc.original_lang, State.langs)}
+      ${selectField('Language', 'language', doc.language, State.langs)}
       ${textField('Reference period', 'ref_period', doc.ref_period)}
       ${selectField('Media type', 'media_type', doc.media_type, State.mediaTypes)}
       ${selectField('Source', 'provenance', doc.provenance, State.provenances)}
       ${selectField('Operator', 'operator', doc.operator, State.operators)}
-      ${selectField('Collection', 'collection', doc.collection, State.collections, true)}
       ${textField('Physical box', 'physical_box', doc.physical_box)}
       ${textField('Parola di Vita ref', 'pdv_ref', doc.pdv_ref)}
+      ${textField('Match ref (internal cross-reference)', 'match_ref', doc.match_ref)}
       <div class="field"><label>File name</label><input value="${esc(doc.file_name)}" disabled></div>
       ${textField('Duration (video only)', 'duration', doc.duration)}
       ${selectField('Quality (video only)', 'quality', doc.quality, State.qualities)}
@@ -137,7 +173,20 @@ export async function renderDocDetail(id) {
           <input type="checkbox" class="f-doc-recipient" value="${c}" ${(doc.recipient || []).includes(c) ? 'checked' : ''} ${readOnly ? 'disabled' : ''}> ${l}</label>`).join('')}
       </div>
     </div>
-    ${renderWorkSiblingsHtml(siblings, doc.document_id)}
+    <div class="field">
+      <label>Collections</label>
+      <div class="btn-row" style="margin:0;flex-direction:column;align-items:flex-start;gap:4px;">
+        ${State.collections.map(([c, l]) => {
+          const existing = docCollections.find(dc => dc.collection_code === c);
+          return `<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:normal;text-transform:none;">
+            <input type="checkbox" class="f-doc-collection" value="${c}" ${existing ? 'checked' : ''} ${readOnly ? 'disabled' : ''}>
+            <span style="min-width:180px;">${esc(l)}</span>
+            <input class="f-doc-collection-page" data-code="${c}" type="number" placeholder="page" value="${esc(existing?.page_number)}" style="width:80px;" ${readOnly ? 'disabled' : ''}>
+          </label>`;
+        }).join('')}
+      </div>
+    </div>
+    ${renderWorkSiblingsHtml(siblings, doc.document_id, canWrite())}
     ${readOnly ? `<div class="field"><label>Notes</label><textarea disabled>${esc(doc.notes)}</textarea></div>`
       : `<div class="field"><label>Notes</label><textarea data-f="notes">${esc(doc.notes)}</textarea></div>`}
     <div class="field">
@@ -167,7 +216,6 @@ export async function renderDocDetail(id) {
         <div class="field"><label>Legacy topic</label><input value="${esc(doc.legacy_topic)}" disabled></div>
         <div class="field"><label>Legacy status</label><input value="${esc(doc.legacy_status)}" disabled></div>
         <div class="field"><label>Legacy file name</label><input value="${esc(doc.legacy_file_name)}" disabled></div>
-        <div class="field"><label>Title (ITA) - superseded by the document's versions above</label><input value="${esc(doc.italian_title)}" disabled></div>
         <div class="field"><label>Video ref - superseded by the document's versions above</label><input value="${esc(doc.video_ref)}" disabled></div>
       </div>
     </details>
@@ -175,7 +223,7 @@ export async function renderDocDetail(id) {
 
   document.getElementById('doc-tracking-sheet').addEventListener('click', () => renderTrackingSheet(id));
   document.getElementById('doc-download-gdrive').addEventListener('click', () => downloadFromGDrive(doc.file_name));
-  wireWorkSiblingsClicks(box);
+  wireWorkSiblingsClicks(box, doc.work_id);
   if (doc.storage_path) {
     document.getElementById('doc-download').addEventListener('click', async e => {
       e.preventDefault();
@@ -194,12 +242,18 @@ export async function renderDocDetail(id) {
     out.pending_deletion = document.getElementById('f-pending-deletion').checked;
     return out;
   }
+  function collectCollections() {
+    return Array.from(box.querySelectorAll('.f-doc-collection:checked')).map(cb => {
+      const pageInput = box.querySelector(`.f-doc-collection-page[data-code="${cb.value}"]`);
+      const page = pageInput.value.trim();
+      return { collection_code: cb.value, page_number: page === '' ? null : parseInt(page, 10) };
+    });
+  }
   function updatePreview() {
     const vals = collectFields();
     document.getElementById('filename-preview').textContent = computeFileName({ document_id: doc.document_id, ...vals });
   }
-  box.querySelectorAll('[data-f="title"],[data-f="provenance"],[data-f="original_lang"]')
-    .forEach(el => el.addEventListener('input', updatePreview));
+  box.querySelectorAll('[data-f="title"]').forEach(el => el.addEventListener('input', updatePreview));
 
   document.getElementById('doc-save').addEventListener('click', async () => {
     const vals = collectFields();
@@ -222,6 +276,7 @@ export async function renderDocDetail(id) {
     vals.storage_path = storagePath;
 
     await withStatus(sb.from('documents').update(vals).eq('document_id', id), 'Saving...');
+    await saveDocumentCollections(id, collectCollections());
     await onAfterDocChange();
     await renderDocDetail(id);
   });
@@ -281,9 +336,20 @@ async function refreshProcessHistoryLog(documentId) {
   const rows = await withStatus(sb.from('process_history').select('*').eq('document_id', documentId).order('step_date', { ascending: false }).order('created_at', { ascending: false }));
   box.innerHTML = rows.length === 0 ? '<div class="empty-msg">No steps logged yet.</div>' : `
     <div class="grid-wrap"><table class="grid">
-      <thead><tr><th>Step</th><th>Date</th><th>Note</th></tr></thead>
-      <tbody>${rows.map(r => `<tr><td>${esc(labelOf(State.statuses, r.step))}</td><td>${esc(r.step_date)}</td><td>${esc(r.note)}</td></tr>`).join('')}</tbody>
+      <thead><tr><th>Step</th><th>Date</th><th>Note</th><th></th></tr></thead>
+      <tbody>${rows.map(r => `<tr data-ph-id="${esc(r.id)}"><td>${esc(labelOf(State.statuses, r.step))}</td><td>${esc(r.step_date)}</td><td>${esc(r.note)}</td>
+        <td>${canWrite() ? '<button class="btn danger ph-delete" style="padding:2px 8px;">Delete</button>' : ''}</td></tr>`).join('')}</tbody>
     </table></div>`;
+  box.querySelectorAll('.ph-delete').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Delete this process step? The document\'s current step will be recalculated from what remains.')) return;
+    const stepRowId = btn.closest('tr').dataset.phId;
+    await withStatus(sb.from('process_history').delete().eq('id', stepRowId), 'Deleting step...');
+    const remaining = await withStatus(sb.from('process_history').select('step').eq('document_id', documentId).order('step_date', { ascending: false }).order('created_at', { ascending: false }).limit(1));
+    const newStatus = remaining[0]?.step || 'ENTR';
+    await withStatus(sb.from('documents').update({ workflow_status: newStatus }).eq('document_id', documentId), 'Updating status...');
+    await onAfterDocChange();
+    await renderDocDetail(documentId);
+  }));
 }
 
 // ---------- New document ----------
@@ -321,7 +387,7 @@ export async function renderTrackingSheet(id) {
         <tr><th>Author</th><td>${esc(labelOf(State.authors, doc.author))}</td></tr>
         <tr><th>Main topic</th><td>${esc(labelOf(State.mainTopics, doc.main_topic))}</td></tr>
         <tr><th>Recipient(s)</th><td>${(doc.recipient || []).map(c => esc(labelOf(State.recipients, c))).join(', ')}</td></tr>
-        <tr><th>Language</th><td>${esc(labelOf(State.langs, doc.original_lang))}</td></tr>
+        <tr><th>Language</th><td>${esc(labelOf(State.langs, doc.language))}</td></tr>
         <tr><th>Source</th><td>${esc(labelOf(State.provenances, doc.provenance))}</td></tr>
         <tr><th>Operator</th><td>${esc(labelOf(State.operators, doc.operator))}</td></tr>
         <tr><th>Reference date / period</th><td>${esc(doc.ref_date)} ${esc(doc.ref_period)}</td></tr>
@@ -330,10 +396,10 @@ export async function renderTrackingSheet(id) {
       </table>
       <h3 style="margin-bottom:6px;">Process Registry</h3>
       <table>
-        <thead><tr><th>#</th><th>Step</th><th>Description</th><th>Date</th><th>Note</th></tr></thead>
+        <thead><tr><th>#</th><th>Step</th><th>Description</th><th>Date</th><th>Signature</th></tr></thead>
         <tbody>${TRACKING_STEPS.map((s, i) => {
           const done = historyRows.find(r => r.step === s[0]);
-          return `<tr><td>${i + 1}</td><td>${esc(s[1])}</td><td>${esc(s[2])}</td><td style="min-width:90px;">${esc(done?.step_date) || '&nbsp;'}</td><td style="min-width:120px;">${esc(done?.note) || '&nbsp;'}</td></tr>`;
+          return `<tr><td>${i + 1}</td><td>${esc(s[1])}</td><td>${esc(s[2])}</td><td style="min-width:90px;">${esc(done?.step_date) || '&nbsp;'}</td><td style="min-width:120px;">&nbsp;</td></tr>`;
         }).join('')}</tbody>
       </table>
       <h3 style="margin:16px 0 6px;">Additional Notes</h3>

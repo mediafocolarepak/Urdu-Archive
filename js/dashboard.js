@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260817134636';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260817134636';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260818230219';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260818230219';
 
 export async function renderDashboardView(main) {
   main.innerHTML = `
@@ -15,13 +15,19 @@ export async function renderDashboardView(main) {
         <div class="field"><label>Author</label><select id="f-author">${optionsHtml(State.authors, State.dashFilters.author, true)}</select></div>
         <div class="field"><label>Main topic</label><select id="f-main_topic">${optionsHtml(State.mainTopics, State.dashFilters.main_topic, true)}</select></div>
         <div class="field"><label>Workflow status</label><select id="f-status">${optionsHtml(State.statuses, State.dashFilters.workflow_status, true)}</select></div>
-        <div class="field"><label>Collection</label><select id="f-collection">${optionsHtml(State.collections, State.dashFilters.collection, true)}</select></div>
       </div>
       <div class="field">
         <label>Recipient(s)</label>
         <div class="btn-row" style="margin:0;">
           ${State.recipients.map(([c, l]) => `<label style="display:flex;align-items:center;gap:4px;font-size:12.5px;font-weight:normal;text-transform:none;">
             <input type="checkbox" class="f-recipient" value="${c}" ${State.dashFilters.recipient.includes(c) ? 'checked' : ''}> ${l}</label>`).join('')}
+        </div>
+      </div>
+      <div class="field">
+        <label>Collection(s)</label>
+        <div class="btn-row" style="margin:0;">
+          ${State.collections.map(([c, l]) => `<label style="display:flex;align-items:center;gap:4px;font-size:12.5px;font-weight:normal;text-transform:none;">
+            <input type="checkbox" class="f-collection" value="${c}" ${State.dashFilters.collection.includes(c) ? 'checked' : ''}> ${l}</label>`).join('')}
         </div>
       </div>
       <div class="field" style="display:flex;flex-wrap:wrap;gap:6px 24px;">
@@ -32,6 +38,7 @@ export async function renderDashboardView(main) {
           <input type="checkbox" id="f-pending" ${State.dashFilters.pendingOnly ? 'checked' : ''}> Show only documents marked for deletion
         </label>
       </div>
+      ${isAdmin() ? '<div class="btn-row"><button class="btn secondary" id="dash-export-csv">Export CSV</button></div>' : ''}
       <div class="split">
         <div>
           <div class="grid-wrap" style="max-height:70vh;"><table class="grid" id="dash-grid"></table></div>
@@ -47,13 +54,17 @@ export async function renderDashboardView(main) {
   document.getElementById('f-author').addEventListener('change', e => { State.dashFilters.author = e.target.value; refreshDashGrid(); });
   document.getElementById('f-main_topic').addEventListener('change', e => { State.dashFilters.main_topic = e.target.value; refreshDashGrid(); });
   document.getElementById('f-status').addEventListener('change', e => { State.dashFilters.workflow_status = e.target.value; refreshDashGrid(); });
-  document.getElementById('f-collection').addEventListener('change', e => { State.dashFilters.collection = e.target.value; refreshDashGrid(); });
   document.getElementById('f-legacy').addEventListener('change', e => { State.dashFilters.legacyOnly = e.target.checked; refreshDashGrid(); });
   document.getElementById('f-pending').addEventListener('change', e => { State.dashFilters.pendingOnly = e.target.checked; refreshDashGrid(); });
   main.querySelectorAll('.f-recipient').forEach(cb => cb.addEventListener('change', () => {
     State.dashFilters.recipient = Array.from(main.querySelectorAll('.f-recipient:checked')).map(c => c.value);
     refreshDashGrid();
   }));
+  main.querySelectorAll('.f-collection').forEach(cb => cb.addEventListener('change', () => {
+    State.dashFilters.collection = Array.from(main.querySelectorAll('.f-collection:checked')).map(c => c.value);
+    refreshDashGrid();
+  }));
+  if (isAdmin()) document.getElementById('dash-export-csv').addEventListener('click', exportDashboardCsv);
 
   // Escape hatch so docdetail.js can trigger a grid refresh after save/delete without
   // importing this module (which would create a circular import - see docdetail.js).
@@ -63,8 +74,8 @@ export async function renderDashboardView(main) {
   await renderDocDetail(State.selectedDocId);
 }
 
-function buildDashQuery() {
-  let q = sb.from('documents').select('document_id,category,author,main_topic,recipient,title,ref_date,workflow_status,legacy_migrated,pending_deletion');
+function buildDashQuery(selectAll) {
+  let q = sb.from('documents').select(selectAll ? '*' : 'document_id,category,author,main_topic,recipient,title,ref_date,workflow_status,legacy_migrated,pending_deletion,is_preferred');
   const f = State.dashFilters;
   if (f.search && f.search.trim()) {
     const like = likeSafe(f.search.trim());
@@ -78,24 +89,34 @@ function buildDashQuery() {
   if (f.author) q = q.eq('author', f.author);
   if (f.main_topic) q = q.eq('main_topic', f.main_topic);
   if (f.workflow_status) q = q.eq('workflow_status', f.workflow_status);
-  if (f.collection) q = q.eq('collection', f.collection);
   if (f.legacyOnly) q = q.eq('legacy_migrated', true);
   if (f.pendingOnly) q = q.eq('pending_deletion', true);
   if (f.recipient.length) q = q.overlaps('recipient', f.recipient);
   return q;
 }
 
+// Collections are many-to-many now (document_collections), so filtering by them is a
+// post-fetch join rather than a single .eq() on the documents query.
+async function filterByCollection(rows) {
+  const f = State.dashFilters;
+  if (!f.collection.length) return rows;
+  const matches = await withStatus(sb.from('document_collections').select('document_id').in('collection_code', f.collection));
+  const idSet = new Set(matches.map(m => m.document_id));
+  return rows.filter(r => idSet.has(r.document_id));
+}
+
 export async function refreshDashGrid() {
   const grid = document.getElementById('dash-grid');
   if (!grid) return;
-  const rows = await withStatus(buildDashQuery().order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Searching...');
+  let rows = await withStatus(buildDashQuery(false).order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Searching...');
+  rows = await filterByCollection(rows);
   document.getElementById('dash-count').textContent = rows.length;
   const arrow = (col) => col !== State.dashSort.col ? '' : (State.dashSort.asc ? ' &uarr;' : ' &darr;');
   grid.innerHTML = `<thead><tr>${Object.entries(DASH_SORTABLE).map(([col, label]) =>
       `<th data-sort="${col}">${label}${arrow(col)}</th>`).join('')}<th>Recipient(s)</th></tr></thead>
     <tbody>${rows.map(r => `<tr data-id="${esc(r.document_id)}" class="${String(r.document_id) === String(State.selectedDocId) ? 'selected' : ''}">
       <td>${esc(r.document_id)}${r.legacy_migrated ? ' <span class="count-badge" style="padding:1px 6px;">legacy</span>' : ''}${r.pending_deletion ? ' <span class="count-badge" style="padding:1px 6px;background:var(--danger);color:#fff;">pending deletion</span>' : ''}</td>
-      <td>${esc(r.title)}</td><td>${esc(labelOf(State.categories, r.category))}</td><td>${esc(labelOf(State.authors, r.author))}</td>
+      <td>${r.is_preferred ? '&#9733; ' : ''}${esc(r.title)}</td><td>${esc(labelOf(State.categories, r.category))}</td><td>${esc(labelOf(State.authors, r.author))}</td>
       <td>${esc(r.ref_date)}</td><td>${esc(labelOf(State.statuses, r.workflow_status))}</td>
       <td>${(r.recipient || []).map(c => esc(labelOf(State.recipients, c))).join(', ')}</td></tr>`).join('')}</tbody>`;
   grid.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', () => {
@@ -108,4 +129,24 @@ export async function refreshDashGrid() {
     await refreshDashGrid();
     await renderDocDetail(State.selectedDocId);
   }));
+}
+
+function csvEscape(v) {
+  const s = v === null || v === undefined ? '' : String(v);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+async function exportDashboardCsv() {
+  let rows = await withStatus(buildDashQuery(true).order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Exporting...');
+  rows = await filterByCollection(rows);
+  if (!rows.length) { alert('No documents match the current filters.'); return; }
+  const columns = Object.keys(rows[0]);
+  const header = columns.join(',');
+  const body = rows.map(r => columns.map(c => csvEscape(Array.isArray(r[c]) ? r[c].join(';') : r[c])).join(',')).join('\n');
+  const blob = new Blob([header + '\n' + body], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'documents-export.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
 }

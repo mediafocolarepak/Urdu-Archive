@@ -2,9 +2,9 @@
 // Run before every publish (see publish.ps1). Only tests functions with no Supabase calls;
 // mocking supabase-js well enough to unit-test the CRUD glue isn't worth it for this app.
 
-import { slugify, computeFileName, yearOf } from './core.js?v=20260817134636';
-import { extractDateFromFilename, titleOverlapScore, normalizeForCompare, slugifyTitle } from './bulkimport.js?v=20260817134636';
-import { rankByDateProximity, rankByYearMonthProximity, pdvApproxDate } from './matchreview.js?v=20260817134636';
+import { slugify, computeFileName, yearOf, titleOverlapScore, normalizeForCompare } from './core.js?v=20260818230219';
+import { extractDateFromFilename } from './bulkimport.js?v=20260818230219';
+import { rankByDateProximity, rankByYearMonthProximity, pdvApproxDate } from './matchreview.js?v=20260818230219';
 
 let passed = 0, failed = 0;
 const results = [];
@@ -18,10 +18,9 @@ function assertEqual(actual, expected, label) {
   assert(ok, `${label} â€” got ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`);
 }
 
-// ---- slugify / slugifyTitle ----
+// ---- slugify ----
 assertEqual(slugify('The Family Life! (draft)'), 'the-family-life-draft', 'slugify strips punctuation');
 assertEqual(slugify(''), 'untitled', 'slugify falls back to untitled on empty input');
-assertEqual(slugifyTitle('The Family Life! (draft)'), 'the-family-life-draft', 'slugifyTitle matches slugify on simple input');
 
 // ---- yearOf ----
 assertEqual(yearOf('1994-10-27', null), '1994', 'yearOf reads year from ref_date');
@@ -30,20 +29,21 @@ assertEqual(yearOf(null, null), 'XXXX', 'yearOf falls back to XXXX with no date 
 
 // ---- computeFileName ----
 assertEqual(
-  computeFileName({ document_id: 1, title: 'Unity', original_lang: 'URD' }),
-  '00001-MISC-unity-URD.pdf',
-  'computeFileName falls back to MISC source when none set'
+  computeFileName({ document_id: 1, title: 'Unity' }),
+  '0001-unity.pdf',
+  'computeFileName: 4-digit ID and title slug'
 );
 assertEqual(
-  computeFileName({ document_id: 500, title: 'A Test Title', provenance: 'STELLA', original_lang: 'ITA' }),
-  '00500-STELLA-a-test-title-ITA.pdf',
-  'computeFileName uses ID, Source, Title and language code'
+  computeFileName({ document_id: 500, title: 'A Test Title' }),
+  '0500-a-test-title.pdf',
+  'computeFileName: pads ID to 4 digits regardless of other fields'
 );
 
 // ---- extractDateFromFilename ----
 assertEqual(extractDateFromFilename('303.Linkup.27.10.94.pdf'), { ref_date: '1994-10-27', ref_period: null }, 'extractDateFromFilename: 2-digit year dd.mm.yy');
 assertEqual(extractDateFromFilename('421-Linkup-9-10-86.pdf'), { ref_date: '1986-10-09', ref_period: null }, 'extractDateFromFilename: dashes, 2-digit year');
 assertEqual(extractDateFromFilename('2003 Maria nel Movimento.pdf'), { ref_date: null, ref_period: '2003' }, 'extractDateFromFilename: bare year only');
+assertEqual(extractDateFromFilename('2003-04p.10.pdf'), { ref_date: null, ref_period: '2003-04' }, 'extractDateFromFilename: year-month only');
 assertEqual(extractDateFromFilename('no-date-here.pdf'), { ref_date: null, ref_period: null }, 'extractDateFromFilename: no date found at all');
 
 // ---- titleOverlapScore / normalizeForCompare ----
