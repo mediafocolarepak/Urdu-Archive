@@ -6,7 +6,7 @@ import {
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
-} from './core.js?v=20260818230219';
+} from './core.js?v=20260819214947';
 
 export function renderDocDetailConsultation(box, doc, workSiblings, docCollections) {
   const row = (label, value) => `<div class="field"><label>${esc(label)}</label><input value="${esc(value)}" disabled></div>`;
@@ -191,7 +191,9 @@ export async function renderDocDetail(id) {
       : `<div class="field"><label>Notes</label><textarea data-f="notes">${esc(doc.notes)}</textarea></div>`}
     <div class="field">
       <label>File</label>
-      ${readOnly ? '' : `<div class="hint">File will be saved as: <b id="filename-preview">${esc(previewName)}</b></div>`}
+      ${doc.file_name
+        ? `<div class="hint">Saved file name (kept as-is unless you upload a replacement below): <b>${esc(doc.file_name)}</b></div>`
+        : (readOnly ? '' : `<div class="hint">No file linked yet - will be named <b id="filename-preview">${esc(previewName)}</b> once you upload one.</div>`)}
       ${doc.storage_path ? `<div class="hint">Currently on file: ${esc(doc.file_name)} â€” <a href="#" id="doc-download">Download</a></div>` : '<div class="hint">No file uploaded yet.</div>'}
       ${readOnly ? '' : '<input type="file" id="doc-file-input" accept=".pdf,.doc,.docx" style="margin-top:6px;">'}
       <button class="btn secondary" id="doc-download-gdrive" style="margin-top:8px;">Download Document (legacy archive)</button>
@@ -250,29 +252,37 @@ export async function renderDocDetail(id) {
     });
   }
   function updatePreview() {
+    const preview = document.getElementById('filename-preview');
+    if (!preview) return; // not shown once the document already has a file_name - see below
     const vals = collectFields();
-    document.getElementById('filename-preview').textContent = computeFileName({ document_id: doc.document_id, ...vals });
+    preview.textContent = computeFileName({ document_id: doc.document_id, ...vals });
   }
   box.querySelectorAll('[data-f="title"]').forEach(el => el.addEventListener('input', updatePreview));
 
   document.getElementById('doc-save').addEventListener('click', async () => {
     const vals = collectFields();
-    const baseName = computeFileName({ document_id: doc.document_id, ...vals });
-    const finalName = await uniqueFileName(baseName, doc.document_id);
-    vals.file_name = finalName;
-
     const fileInput = document.getElementById('doc-file-input');
+    const uploadingNewFile = fileInput.files && fileInput.files[0];
     let storagePath = doc.storage_path;
-    if (fileInput.files && fileInput.files[0]) {
+
+    if (uploadingNewFile) {
+      // A real new file is being attached - safe (and useful) to give it a fresh computed name.
+      const baseName = computeFileName({ document_id: doc.document_id, ...vals });
+      const finalName = await uniqueFileName(baseName, doc.document_id);
       if (storagePath && storagePath !== finalName) {
         await sb.storage.from(BUCKET).remove([storagePath]);
       }
       await withStatus(sb.storage.from(BUCKET).upload(finalName, fileInput.files[0], { upsert: true }), 'Uploading file...');
       storagePath = finalName;
-    } else if (storagePath && storagePath !== finalName) {
-      await sb.storage.from(BUCKET).move(storagePath, finalName);
-      storagePath = finalName;
+      vals.file_name = finalName;
+    } else if (!doc.file_name) {
+      // Nothing linked yet at all - a placeholder name is harmless since there's no real file to disconnect from.
+      const baseName = computeFileName({ document_id: doc.document_id, ...vals });
+      vals.file_name = await uniqueFileName(baseName, doc.document_id);
     }
+    // Else: this document already has a real file (on Drive or in Storage) - file_name is left
+    // out of `vals` entirely, so editing title/metadata can never silently disconnect it from
+    // that file. Renaming an existing linked file is only ever done by uploading a replacement.
     vals.storage_path = storagePath;
 
     await withStatus(sb.from('documents').update(vals).eq('document_id', id), 'Saving...');

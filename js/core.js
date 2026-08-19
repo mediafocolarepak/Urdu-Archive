@@ -180,7 +180,7 @@ export function yearOf(refDate, refPeriod) {
   return 'XXXX';
 }
 export function computeFileName(doc) {
-  const id = String(doc.document_id).padStart(4, '0');
+  const id = String(doc.document_id).padStart(5, '0');
   const slug = slugify(doc.title);
   return `${id}-${slug}.pdf`;
 }

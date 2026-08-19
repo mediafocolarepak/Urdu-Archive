@@ -2,9 +2,9 @@
 // Run before every publish (see publish.ps1). Only tests functions with no Supabase calls;
 // mocking supabase-js well enough to unit-test the CRUD glue isn't worth it for this app.
 
-import { slugify, computeFileName, yearOf, titleOverlapScore, normalizeForCompare } from './core.js?v=20260818230219';
-import { extractDateFromFilename } from './bulkimport.js?v=20260818230219';
-import { rankByDateProximity, rankByYearMonthProximity, pdvApproxDate } from './matchreview.js?v=20260818230219';
+import { slugify, computeFileName, yearOf, titleOverlapScore, normalizeForCompare } from './core.js?v=20260819214947';
+import { extractDateFromFilename } from './bulkimport.js?v=20260819214947';
+import { rankByDateProximity, rankByYearMonthProximity, pdvApproxDate } from './matchreview.js?v=20260819214947';
 
 let passed = 0, failed = 0;
 const results = [];
@@ -30,13 +30,13 @@ assertEqual(yearOf(null, null), 'XXXX', 'yearOf falls back to XXXX with no date 
 // ---- computeFileName ----
 assertEqual(
   computeFileName({ document_id: 1, title: 'Unity' }),
-  '0001-unity.pdf',
-  'computeFileName: 4-digit ID and title slug'
+  '00001-unity.pdf',
+  'computeFileName: 5-digit ID and title slug'
 );
 assertEqual(
   computeFileName({ document_id: 500, title: 'A Test Title' }),
-  '0500-a-test-title.pdf',
-  'computeFileName: pads ID to 4 digits regardless of other fields'
+  '00500-a-test-title.pdf',
+  'computeFileName: pads ID to 5 digits, matching every existing file in Drive'
 );
 
 // ---- extractDateFromFilename ----

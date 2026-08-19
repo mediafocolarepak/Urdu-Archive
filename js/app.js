@@ -1,13 +1,13 @@
-import { State, canWrite, isAdmin, boot, wireAuthButtons } from './core.js?v=20260818230219';
-import { renderDashboardView } from './dashboard.js?v=20260818230219';
-import { renderReportsView } from './reports.js?v=20260818230219';
-import { renderHayatView } from './hayatindex.js?v=20260818230219';
-import { renderMatchReviewView } from './matchreview.js?v=20260818230219';
-import { renderBulkImportView } from './bulkimport.js?v=20260818230219';
-import { renderUsersView, renderOptionsView } from './admin.js?v=20260818230219';
-import { renderAdminEditView } from './adminedit.js?v=20260818230219';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260818230219';
-import { renderHayatEditorView } from './hayateditor.js?v=20260818230219';
+import { State, canWrite, isAdmin, boot, wireAuthButtons } from './core.js?v=20260819214947';
+import { renderDashboardView } from './dashboard.js?v=20260819214947';
+import { renderReportsView } from './reports.js?v=20260819214947';
+import { renderHayatView } from './hayatindex.js?v=20260819214947';
+import { renderMatchReviewView } from './matchreview.js?v=20260819214947';
+import { renderBulkImportView } from './bulkimport.js?v=20260819214947';
+import { renderUsersView, renderOptionsView } from './admin.js?v=20260819214947';
+import { renderAdminEditView } from './adminedit.js?v=20260819214947';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260819214947';
+import { renderHayatEditorView } from './hayateditor.js?v=20260819214947';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
