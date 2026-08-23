@@ -6,12 +6,13 @@ import {
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
-} from './core.js?v=20260823192012';
+} from './core.js?v=20260823193519';
 
 export function renderDocDetailConsultation(box, doc, workSiblings, docCollections) {
   const row = (label, value) => `<div class="field"><label>${esc(label)}</label><input value="${esc(value)}" disabled></div>`;
   box.innerHTML = `
     <h3>Document #${esc(doc.document_id)}</h3>
+    ${renderAllVersionsBar(doc, workSiblings)}
     <div class="field-grid wide">
       ${row('Title (EN)', doc.title)}
       ${row('Original title', doc.original_title)}
@@ -54,6 +55,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     });
   }
   wireWorkSiblingsClicks(box);
+  wireAllVersionsBar(box, doc, workSiblings);
 }
 
 function renderCollectionsSummary(docCollections) {
@@ -114,7 +116,47 @@ function wireWorkSiblingsClicks(box, workId) {
 
 async function fetchWorkSiblings(workId) {
   if (!workId) return [];
-  return await withStatus(sb.from('documents').select('document_id,title,language,provenance,media_type,file_name,is_preferred').eq('work_id', workId));
+  return await withStatus(sb.from('documents').select('document_id,title,language,provenance,media_type,file_name,is_preferred,storage_path').eq('work_id', workId));
+}
+
+// Downloads a specific version, preferring the app-managed Storage copy (signed URL) over the
+// Google Drive lookup-by-name fallback - same precedence the single-document download already uses.
+async function downloadVersion(v) {
+  if (v.storage_path) {
+    const { data } = await sb.storage.from(BUCKET).createSignedUrl(v.storage_path, 60);
+    if (data?.signedUrl) { window.open(data.signedUrl, '_blank'); return; }
+  }
+  downloadFromGDrive(v.file_name);
+}
+
+// A prominent, always-at-the-top row of one download button per version of this Document
+// (the one currently open, plus every linked sibling) - added so a plain User doesn't have to
+// scroll down to the "Other versions" table just to grab a translation or duplicate.
+function renderAllVersionsBar(doc, siblings) {
+  const all = [doc, ...(siblings || []).filter(s => String(s.document_id) !== String(doc.document_id))];
+  if (all.length <= 1) return '';
+  return `
+    <div class="btn-row all-versions-bar" style="margin-top:0;">
+      ${all.map(v => {
+        const isCurrent = String(v.document_id) === String(doc.document_id);
+        const lang = labelOf(State.langs, v.language) || '?';
+        const src = labelOf(State.provenances, v.provenance);
+        const kind = v.media_type === 'VID' ? ' video' : '';
+        return `<button class="btn${isCurrent ? '' : ' secondary'} version-download" data-id="${esc(v.document_id)}">
+          Download ${esc(lang)}${kind}${src ? ' — ' + esc(src) : ''}${isCurrent ? ' (this one)' : ''}
+        </button>`;
+      }).join('')}
+    </div>`;
+}
+
+function wireAllVersionsBar(box, doc, siblings) {
+  const all = [doc, ...(siblings || []).filter(s => String(s.document_id) !== String(doc.document_id))];
+  box.querySelectorAll('.version-download').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const v = all.find(x => String(x.document_id) === btn.dataset.id);
+      if (v) downloadVersion(v);
+    });
+  });
 }
 
 export async function renderDocDetail(id) {
@@ -145,6 +187,7 @@ export async function renderDocDetail(id) {
 
   box.innerHTML = `
     <h3>Document #${esc(doc.document_id)}${doc.legacy_migrated ? ' <span class="count-badge">legacy-migrated</span>' : ''}${doc.pending_deletion ? ' <span class="count-badge" style="background:var(--danger);color:#fff;">pending deletion</span>' : ''}</h3>
+    ${renderAllVersionsBar(doc, siblings)}
     <div class="field-grid wide">
       ${textField('Title (EN)', 'title', doc.title)}
       ${textField('Original title', 'original_title', doc.original_title)}
@@ -226,6 +269,7 @@ export async function renderDocDetail(id) {
   document.getElementById('doc-tracking-sheet').addEventListener('click', () => renderTrackingSheet(id));
   document.getElementById('doc-download-gdrive').addEventListener('click', () => downloadFromGDrive(doc.file_name));
   wireWorkSiblingsClicks(box, doc.work_id);
+  wireAllVersionsBar(box, doc, siblings);
   if (doc.storage_path) {
     document.getElementById('doc-download').addEventListener('click', async e => {
       e.preventDefault();
