@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260823184116';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260823184116';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260823185154';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260823185154';
 
 export async function renderDashboardView(main) {
   main.innerHTML = `
@@ -16,17 +16,18 @@ export async function renderDashboardView(main) {
         <div class="field"><label>Main topic</label><select id="f-main_topic">${optionsHtml(State.mainTopics, State.dashFilters.main_topic, true)}</select></div>
         <div class="field"><label>Workflow status</label><select id="f-status">${optionsHtml(State.statuses, State.dashFilters.workflow_status, true)}</select></div>
       </div>
-      <div class="field" style="max-width:260px;">
-        <label>Recipient(s) <span class="hint" style="text-transform:none;">(ctrl/cmd-click for more than one)</span></label>
-        <select id="f-recipient" multiple size="5">
-          ${State.recipients.map(([c, l]) => `<option value="${c}" ${State.dashFilters.recipient.includes(c) ? 'selected' : ''}>${l}</option>`).join('')}
-        </select>
-      </div>
-      <div class="field">
-        <label>Collection(s)</label>
-        <div class="btn-row" style="margin:0;">
-          ${State.collections.map(([c, l]) => `<label style="display:flex;align-items:center;gap:4px;font-size:12.5px;font-weight:normal;text-transform:none;">
-            <input type="checkbox" class="f-collection" value="${c}" ${State.dashFilters.collection.includes(c) ? 'checked' : ''}> ${l}</label>`).join('')}
+      <div class="btn-row" style="align-items:flex-start;">
+        <div class="field" style="max-width:260px;">
+          <label>Recipient(s) <span class="hint" style="text-transform:none;">(ctrl/cmd-click for more than one)</span></label>
+          <select id="f-recipient" multiple size="5">
+            ${State.recipients.map(([c, l]) => `<option value="${c}" ${State.dashFilters.recipient.includes(c) ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field" style="max-width:260px;">
+          <label>Collection(s) <span class="hint" style="text-transform:none;">(ctrl/cmd-click for more than one)</span></label>
+          <select id="f-collection" multiple size="5">
+            ${State.collections.map(([c, l]) => `<option value="${c}" ${State.dashFilters.collection.includes(c) ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
         </div>
       </div>
       <div class="field" style="display:flex;flex-wrap:wrap;gap:6px 24px;">
@@ -59,10 +60,10 @@ export async function renderDashboardView(main) {
     State.dashFilters.recipient = Array.from(e.target.selectedOptions).map(o => o.value);
     refreshDashGrid();
   });
-  main.querySelectorAll('.f-collection').forEach(cb => cb.addEventListener('change', () => {
-    State.dashFilters.collection = Array.from(main.querySelectorAll('.f-collection:checked')).map(c => c.value);
+  document.getElementById('f-collection').addEventListener('change', e => {
+    State.dashFilters.collection = Array.from(e.target.selectedOptions).map(o => o.value);
     refreshDashGrid();
-  }));
+  });
   if (isAdmin()) document.getElementById('dash-export-csv').addEventListener('click', exportDashboardCsv);
 
   // Escape hatch so docdetail.js can trigger a grid refresh after save/delete without
