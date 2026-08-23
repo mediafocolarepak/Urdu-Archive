@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, withStatus, mergeWorks } from './core.js?v=20260819214947';
-import { renderDocDetail } from './docdetail.js?v=20260819214947';
+import { sb, State, esc, labelOf, withStatus, mergeWorks } from './core.js?v=20260823184116';
+import { renderDocDetail } from './docdetail.js?v=20260823184116';
 
 const ITALIAN_MONTHS = { gennaio: 1, febbraio: 2, marzo: 3, aprile: 4, maggio: 5, giugno: 6, luglio: 7, agosto: 8, settembre: 9, ottobre: 10, novembre: 11, dicembre: 12 };
 export function pdvApproxDate(r) {
