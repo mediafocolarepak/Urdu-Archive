@@ -2,9 +2,9 @@
 // Run before every publish (see publish.ps1). Only tests functions with no Supabase calls;
 // mocking supabase-js well enough to unit-test the CRUD glue isn't worth it for this app.
 
-import { slugify, computeFileName, yearOf, titleOverlapScore, normalizeForCompare } from './core.js?v=20260823193519';
-import { extractDateFromFilename } from './bulkimport.js?v=20260823193519';
-import { rankByDateProximity, rankByYearMonthProximity, pdvApproxDate } from './matchreview.js?v=20260823193519';
+import { slugify, computeFileName, yearOf, titleOverlapScore, normalizeForCompare } from './core.js?v=20260823234040';
+import { extractDateFromFilename } from './bulkimport.js?v=20260823234040';
+import { rankByDateProximity } from './matchreview.js?v=20260823234040';
 
 let passed = 0, failed = 0;
 const results = [];
@@ -58,13 +58,6 @@ assertEqual(normalizeForCompare('Hello, World!.pdf'), 'hello world', 'normalizeF
   assertEqual(ranked[0].id, 'd', 'rankByDateProximity: closest date ranked first');
   assertEqual(ranked[ranked.length - 1].id, 'c', 'rankByDateProximity: no-date candidate appended at the end, not dropped');
   assertEqual(rankByDateProximity(null, refs, 'data').length, 4, 'rankByDateProximity: with no target date, returns everything unranked');
-}
-
-// ---- pdvApproxDate / rankByYearMonthProximity ----
-{
-  const jan2005 = pdvApproxDate({ mese: 'Gennaio 2005', anno: '2005' });
-  assert(jan2005 !== null && new Date(jan2005).getFullYear() === 2005 && new Date(jan2005).getMonth() === 0, 'pdvApproxDate: parses Italian month name + year');
-  assertEqual(pdvApproxDate({ mese: '', anno: '' }), null, 'pdvApproxDate: blank input returns null, not a bogus date');
 }
 
 // ---- render results ----

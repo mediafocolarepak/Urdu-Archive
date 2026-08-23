@@ -6,7 +6,7 @@ import {
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
-} from './core.js?v=20260823193519';
+} from './core.js?v=20260823234040';
 
 export function renderDocDetailConsultation(box, doc, workSiblings, docCollections) {
   const row = (label, value) => `<div class="field"><label>${esc(label)}</label><input value="${esc(value)}" disabled></div>`;
@@ -25,11 +25,10 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
       ${row('Reference date', doc.ref_date)}
       ${row('File name', doc.file_name)}
       ${row('Media type', labelOf(State.mediaTypes, doc.media_type))}
-      ${row('Source', labelOf(State.provenances, doc.provenance))}
+      ${row('Source', labelOf(State.sources, doc.source))}
       ${row('Operator', labelOf(State.operators, doc.operator))}
       ${doc.media_type === 'VID' ? row('Duration', doc.duration) : ''}
       ${doc.media_type === 'VID' ? row('Quality', labelOf(State.qualities, doc.quality)) : ''}
-      ${row('Parola di Vita ref', doc.pdv_ref)}
       ${row('Current step', labelOf(State.statuses, doc.workflow_status))}
     </div>
     <div class="field">
@@ -80,7 +79,7 @@ function renderWorkSiblingsHtml(siblings, currentId, canEdit) {
         <thead><tr><th>ID</th><th>Title</th><th>Language</th><th>Source</th><th>Type</th><th>File</th><th>Preferred</th><th></th></tr></thead>
         <tbody>${others.map(s => `<tr data-sibling-id="${esc(s.document_id)}">
           <td>${esc(s.document_id)}</td><td>${esc(s.title)}</td><td>${esc(labelOf(State.langs, s.language))}</td>
-          <td>${esc(labelOf(State.provenances, s.provenance))}</td><td>${esc(labelOf(State.mediaTypes, s.media_type))}</td>
+          <td>${esc(labelOf(State.sources, s.source))}</td><td>${esc(labelOf(State.mediaTypes, s.media_type))}</td>
           <td>${esc(s.file_name)}</td>
           <td>${s.is_preferred ? '<span class="count-badge">&#9733; Preferred</span>'
               : (canEdit ? `<button class="btn secondary sibling-set-preferred" style="padding:2px 8px;">Set preferred</button>` : '')}</td>
@@ -116,7 +115,7 @@ function wireWorkSiblingsClicks(box, workId) {
 
 async function fetchWorkSiblings(workId) {
   if (!workId) return [];
-  return await withStatus(sb.from('documents').select('document_id,title,language,provenance,media_type,file_name,is_preferred,storage_path').eq('work_id', workId));
+  return await withStatus(sb.from('documents').select('document_id,title,language,source,media_type,file_name,is_preferred,storage_path').eq('work_id', workId));
 }
 
 // Downloads a specific version, preferring the app-managed Storage copy (signed URL) over the
@@ -140,7 +139,7 @@ function renderAllVersionsBar(doc, siblings) {
       ${all.map(v => {
         const isCurrent = String(v.document_id) === String(doc.document_id);
         const lang = labelOf(State.langs, v.language) || '?';
-        const src = labelOf(State.provenances, v.provenance);
+        const src = labelOf(State.sources, v.source);
         const kind = v.media_type === 'VID' ? ' video' : '';
         return `<button class="btn${isCurrent ? '' : ' secondary'} version-download" data-id="${esc(v.document_id)}">
           Download ${esc(lang)}${kind}${src ? ' — ' + esc(src) : ''}${isCurrent ? ' (this one)' : ''}
@@ -186,7 +185,7 @@ export async function renderDocDetail(id) {
   const isVideo = doc.media_type === 'VID';
 
   box.innerHTML = `
-    <h3>Document #${esc(doc.document_id)}${doc.legacy_migrated ? ' <span class="count-badge">legacy-migrated</span>' : ''}${doc.pending_deletion ? ' <span class="count-badge" style="background:var(--danger);color:#fff;">pending deletion</span>' : ''}</h3>
+    <h3>Document #${esc(doc.document_id)}${doc.pending_deletion ? ' <span class="count-badge" style="background:var(--danger);color:#fff;">pending deletion</span>' : ''}</h3>
     ${renderAllVersionsBar(doc, siblings)}
     <div class="field-grid wide">
       ${textField('Title (EN)', 'title', doc.title)}
@@ -195,19 +194,22 @@ export async function renderDocDetail(id) {
       ${textField('Reference date', 'ref_date', doc.ref_date, 'date')}
       ${selectField('Category', 'category', doc.category, State.categories)}
       ${selectField('Author', 'author', doc.author, State.authors)}
+      ${textField('Author (free text)', 'original_author', doc.original_author)}
       ${selectField('Main topic', 'main_topic', doc.main_topic, State.mainTopics)}
       ${textField('Secondary tags', 'secondary_tags', doc.secondary_tags)}
       ${selectField('Language', 'language', doc.language, State.langs)}
       ${textField('Reference period', 'ref_period', doc.ref_period)}
       ${selectField('Media type', 'media_type', doc.media_type, State.mediaTypes)}
-      ${selectField('Source', 'provenance', doc.provenance, State.provenances)}
+      ${selectField('Source', 'source', doc.source, State.sources)}
       ${selectField('Operator', 'operator', doc.operator, State.operators)}
       ${textField('Physical box', 'physical_box', doc.physical_box)}
-      ${textField('Parola di Vita ref', 'pdv_ref', doc.pdv_ref)}
-      ${textField('Match ref (internal cross-reference)', 'match_ref', doc.match_ref)}
+      ${textField('Episode number', 'episode_number', doc.episode_number)}
+      ${textField('Bible verse', 'bible_verse', doc.bible_verse)}
       <div class="field"><label>File name</label><input value="${esc(doc.file_name)}" disabled></div>
       ${textField('Duration (video only)', 'duration', doc.duration)}
       ${selectField('Quality (video only)', 'quality', doc.quality, State.qualities)}
+      <div class="field"><label>Status (free text)</label><input value="${esc(doc.original_status)}" disabled></div>
+      <div class="field"><label>Legacy file name</label><input value="${esc(doc.legacy_file_name)}" disabled></div>
     </div>
     <div class="field">
       <label>Recipient(s)</label>
@@ -253,17 +255,6 @@ export async function renderDocDetail(id) {
       ${canDelete() ? '<button class="btn danger" id="doc-delete">Delete permanently</button>' : ''}
     </div>
     ${renderProcessHistorySection(doc)}
-    <details style="margin-top:14px;">
-      <summary class="hint" style="cursor:pointer;">Legacy data (read-only, kept for reference)</summary>
-      <div class="field-grid wide" style="margin-top:8px;">
-        <div class="field"><label>Legacy category</label><input value="${esc(doc.legacy_category)}" disabled></div>
-        <div class="field"><label>Legacy author</label><input value="${esc(doc.legacy_author)}" disabled></div>
-        <div class="field"><label>Legacy topic</label><input value="${esc(doc.legacy_topic)}" disabled></div>
-        <div class="field"><label>Legacy status</label><input value="${esc(doc.legacy_status)}" disabled></div>
-        <div class="field"><label>Legacy file name</label><input value="${esc(doc.legacy_file_name)}" disabled></div>
-        <div class="field"><label>Video ref - superseded by the document's versions above</label><input value="${esc(doc.video_ref)}" disabled></div>
-      </div>
-    </details>
   `;
 
   document.getElementById('doc-tracking-sheet').addEventListener('click', () => renderTrackingSheet(id));
@@ -442,7 +433,7 @@ export async function renderTrackingSheet(id) {
         <tr><th>Main topic</th><td>${esc(labelOf(State.mainTopics, doc.main_topic))}</td></tr>
         <tr><th>Recipient(s)</th><td>${(doc.recipient || []).map(c => esc(labelOf(State.recipients, c))).join(', ')}</td></tr>
         <tr><th>Language</th><td>${esc(labelOf(State.langs, doc.language))}</td></tr>
-        <tr><th>Source</th><td>${esc(labelOf(State.provenances, doc.provenance))}</td></tr>
+        <tr><th>Source</th><td>${esc(labelOf(State.sources, doc.source))}</td></tr>
         <tr><th>Operator</th><td>${esc(labelOf(State.operators, doc.operator))}</td></tr>
         <tr><th>Reference date / period</th><td>${esc(doc.ref_date)} ${esc(doc.ref_period)}</td></tr>
         <tr><th>File name</th><td>${esc(doc.file_name)}</td></tr>

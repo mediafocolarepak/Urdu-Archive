@@ -5,12 +5,13 @@
 // Collections are shown as a plain multiselect here (no per-collection page number, unlike the
 // document detail page) - editing page numbers still needs the full document detail page.
 
-import { sb, State, esc, isAdmin, withStatus, optionsHtml, BUCKET, DASH_ROW_LIMIT, likeSafe, saveDocumentCollections } from './core.js?v=20260823193519';
+import { sb, State, esc, isAdmin, withStatus, optionsHtml, BUCKET, DASH_ROW_LIMIT, likeSafe, saveDocumentCollections } from './core.js?v=20260823234040';
 
 const EDIT_COLUMNS = [
   ['title', 'Title (EN)', 'text'],
   ['original_title', 'Original title', 'text'],
   ['author', 'Author', 'select', () => State.authors],
+  ['original_author', 'Author (free text)', 'text'],
   ['ref_date', 'Ref. date', 'date'],
   ['place', 'Place', 'text'],
   ['recipient', 'Recipients', 'multiselect', () => State.recipients],
@@ -20,10 +21,11 @@ const EDIT_COLUMNS = [
   ['language', 'Language', 'select', () => State.langs],
   ['ref_period', 'Ref. period', 'text'],
   ['media_type', 'Media type', 'select', () => State.mediaTypes],
-  ['provenance', 'Source', 'select', () => State.provenances],
+  ['source', 'Source', 'select', () => State.sources],
   ['operator', 'Operator', 'select', () => State.operators],
   ['physical_box', 'Physical box', 'text'],
-  ['pdv_ref', 'PdV ref', 'text'],
+  ['episode_number', 'Episode number', 'text'],
+  ['bible_verse', 'Bible verse', 'text'],
   ['duration', 'Duration', 'text'],
   ['quality', 'Quality', 'select', () => State.qualities],
   ['workflow_status', 'Status', 'select', () => State.statuses],
@@ -32,7 +34,6 @@ const EDIT_COLUMNS = [
   ['pending_deletion_note', 'Deletion note', 'text'],
   ['original_inp_file_name', 'Original .INP file', 'text'],
   ['original_doc_file_name', 'Original .DOCX file', 'text'],
-  ['match_ref', 'Match ref', 'text'],
   ['is_preferred', 'Preferred', 'checkbox'],
 ];
 
@@ -56,7 +57,7 @@ export async function renderAdminEditView(main) {
       </div>
       <div class="field" style="display:flex;flex-wrap:wrap;gap:6px 24px;">
         <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:12.5px;">
-          <input type="checkbox" id="ae-f-legacy" ${f.legacyOnly ? 'checked' : ''}> Show legacy-migrated documents only
+          <input type="checkbox" id="ae-f-legacy" ${f.legacyOnly ? 'checked' : ''}> Show only documents from the original Access import
         </label>
         <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:12.5px;">
           <input type="checkbox" id="ae-f-pending" ${f.pendingOnly ? 'checked' : ''}> Show only documents marked for deletion

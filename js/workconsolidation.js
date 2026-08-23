@@ -9,7 +9,7 @@
 // management lives on the document detail page (Other Versions table) rather than duplicated
 // here.
 
-import { sb, esc, withStatus, labelOf, State, downloadFromGDrive, mergeWorks, titleOverlapScore } from './core.js?v=20260823193519';
+import { sb, esc, withStatus, labelOf, State, downloadFromGDrive, mergeWorks, titleOverlapScore } from './core.js?v=20260823234040';
 
 const SIMILARITY_THRESHOLD = 0.6;
 const MAX_FOR_SUGGESTIONS = 1500; // guard against an O(n^2) scan over a very large catalogue
@@ -28,7 +28,7 @@ export async function renderWorkConsolidationView(main) {
     </div>`;
 
   const docs = await withStatus(
-    sb.from('documents').select('document_id,title,author,ref_date,language,provenance,work_id,file_name').order('document_id'),
+    sb.from('documents').select('document_id,title,author,ref_date,language,source,work_id,file_name').order('document_id'),
     'Loading works...'
   );
   const countByWork = {};
@@ -41,7 +41,7 @@ export async function renderWorkConsolidationView(main) {
 
 function docRowCells(d) {
   return `<td>${esc(d.document_id)}</td><td>${esc(d.title)}</td><td>${esc(labelOf(State.authors, d.author))}</td>
-    <td>${esc(d.ref_date)}</td><td>${esc(labelOf(State.langs, d.language))}</td><td>${esc(labelOf(State.provenances, d.provenance))}</td>`;
+    <td>${esc(d.ref_date)}</td><td>${esc(labelOf(State.langs, d.language))}</td><td>${esc(labelOf(State.sources, d.source))}</td>`;
 }
 
 function renderSingleDocGrid(singleDocs) {

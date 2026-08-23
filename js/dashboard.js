@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260823193519';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260823193519';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260823234040';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260823234040';
 
 export async function renderDashboardView(main) {
   main.innerHTML = `
@@ -32,7 +32,7 @@ export async function renderDashboardView(main) {
       </div>
       <div class="field" style="display:flex;flex-wrap:wrap;gap:6px 24px;">
         <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:12.5px;">
-          <input type="checkbox" id="f-legacy" ${State.dashFilters.legacyOnly ? 'checked' : ''}> Show legacy-migrated documents only
+          <input type="checkbox" id="f-legacy" ${State.dashFilters.legacyOnly ? 'checked' : ''}> Show only documents from the original Access import
         </label>
         <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:12.5px;">
           <input type="checkbox" id="f-pending" ${State.dashFilters.pendingOnly ? 'checked' : ''}> Show only documents marked for deletion
@@ -115,7 +115,7 @@ export async function refreshDashGrid() {
   grid.innerHTML = `<thead><tr>${Object.entries(DASH_SORTABLE).map(([col, label]) =>
       `<th data-sort="${col}">${label}${arrow(col)}</th>`).join('')}<th>Recipient(s)</th></tr></thead>
     <tbody>${rows.map(r => `<tr data-id="${esc(r.document_id)}" class="${String(r.document_id) === String(State.selectedDocId) ? 'selected' : ''}">
-      <td>${esc(r.document_id)}${r.legacy_migrated ? ' <span class="count-badge" style="padding:1px 6px;">legacy</span>' : ''}${r.pending_deletion ? ' <span class="count-badge" style="padding:1px 6px;background:var(--danger);color:#fff;">pending deletion</span>' : ''}</td>
+      <td>${esc(r.document_id)}${r.pending_deletion ? ' <span class="count-badge" style="padding:1px 6px;background:var(--danger);color:#fff;">pending deletion</span>' : ''}</td>
       <td>${r.is_preferred ? '&#9733; ' : ''}${esc(r.title)}</td><td>${esc(labelOf(State.categories, r.category))}</td><td>${esc(labelOf(State.authors, r.author))}</td>
       <td>${esc(r.ref_date)}</td><td>${esc(labelOf(State.statuses, r.workflow_status))}</td>
       <td>${(r.recipient || []).map(c => esc(labelOf(State.recipients, c))).join(', ')}</td></tr>`).join('')}</tbody>`;

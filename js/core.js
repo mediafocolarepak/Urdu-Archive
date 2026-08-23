@@ -39,7 +39,7 @@ export async function downloadFromGDrive(fileName) {
 export const State = {
   // fixed vocabularies, loaded from option_lists at sign-in
   categories: [], authors: [], mainTopics: [], recipients: [], langs: [], statuses: [],
-  mediaTypes: [], provenances: [], collections: [], qualities: [], operators: [],
+  mediaTypes: [], sources: [], collections: [], qualities: [], operators: [],
   currentRole: 'user',
   appShown: false,
   selectedDocId: null,
@@ -48,7 +48,6 @@ export const State = {
   dashSort: { col: 'document_id', asc: false },
   adminEditFilters: { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', collection: '', recipient: [], legacyOnly: false, pendingOnly: false },
   reportFilters: { category: '', main_topic: '', author: '', recipient: '', workflow_status: '', from: '', to: '' },
-  matchListKey: 'collegamenti',
   matchQueue: [],
   matchIndex: 0,
   matchRefRows: [],
@@ -65,11 +64,11 @@ export const DASH_SORTABLE = { document_id: 'ID', title: 'Title', category: 'Cat
 // two keep their fixed, CHECK-constrained vocabularies (see 15_versions_editors_schema.sql),
 // while the Hayat Editor's Autore/Argomento comboboxes are free-typing - a new value there
 // must never risk violating the documents table's constraints on author/main_topic.
-export const OPTION_LIST_NAMES = ['category', 'author', 'main_topic', 'recipient', 'language', 'workflow_status', 'media_type', 'provenance', 'collection', 'quality', 'operator', 'hayat_author', 'hayat_argomento'];
+export const OPTION_LIST_NAMES = ['category', 'author', 'main_topic', 'recipient', 'language', 'workflow_status', 'media_type', 'source', 'collection', 'quality', 'operator', 'hayat_author', 'hayat_argomento'];
 export const OPTION_LIST_LABELS = {
   category: 'Category', author: 'Author', main_topic: 'Main topic', recipient: 'Recipient',
   language: 'Language', workflow_status: 'Workflow status', media_type: 'Media type',
-  provenance: 'Source', collection: 'Collection', quality: 'Quality', operator: 'Operator',
+  source: 'Source', collection: 'Collection', quality: 'Quality', operator: 'Operator',
   hayat_author: 'Hayat: Autore', hayat_argomento: 'Hayat: Argomento',
 };
 
@@ -79,7 +78,7 @@ export async function loadOptions() {
   for (const r of rows) { if (byList[r.list_name]) byList[r.list_name].push([r.code, r.label]); }
   State.categories = byList.category; State.authors = byList.author; State.mainTopics = byList.main_topic;
   State.recipients = byList.recipient; State.langs = byList.language; State.statuses = byList.workflow_status;
-  State.mediaTypes = byList.media_type; State.provenances = byList.provenance;
+  State.mediaTypes = byList.media_type; State.sources = byList.source;
   State.collections = byList.collection; State.qualities = byList.quality; State.operators = byList.operator;
   State.optionListsByName = byList;
 }
@@ -222,13 +221,13 @@ export async function extractHayatRowToDocument(row) {
   const workId = await createWorkFor(row.titolo || row.title);
   const draft = {
     document_id: newId, title: row.title || row.titolo, original_title: row.titolo || row.title,
-    legacy_category: row.category, legacy_author: row.autore,
+    original_author: row.autore,
     hayat_index_ref: row.id, to_whom: row.branca,
-    hayat_issue: `${row.mese_anno || ''}p.${row.pagina || ''}`, legacy_topic: row.argomento,
+    hayat_issue: `${row.mese_anno || ''}p.${row.pagina || ''}`,
     category: row.category || null, author: mapHayatAuthor(row.autore), main_topic: 'GENR', secondary_tags: row.argomento,
     ref_period: row.mese_anno || null,
     language: 'URD', workflow_status: 'ENTR', legacy_migrated: false,
-    provenance: 'HAYAT', media_type: 'DOC', work_id: workId,
+    source: 'HAYAT', media_type: 'DOC', work_id: workId,
   };
   draft.file_name = await uniqueFileName(computeFileName(draft), null);
   await withStatus(sb.from('documents').insert(draft));

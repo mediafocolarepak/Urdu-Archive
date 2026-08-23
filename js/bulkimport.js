@@ -4,7 +4,7 @@
 // (by title similarity against what's already catalogued) are still detected, but only
 // reported afterwards in the summary, not used to block or pre-exclude anything.
 
-import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore } from './core.js?v=20260823193519';
+import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore } from './core.js?v=20260823234040';
 
 export function titleFromFilename(name) {
   const noExt = name.replace(/\.[a-z0-9]+$/i, '');
@@ -40,7 +40,7 @@ export function extractDateFromFilename(name) {
   return { ref_date: null, ref_period: null };
 }
 
-let batchProvenance = '';
+let batchSource = '';
 let batchOperator = '';
 let batchMediaType = 'DOC';
 let batchCollection = '';
@@ -55,7 +55,7 @@ export async function renderBulkImportView(main) {
       ${supported ? '' : '<div class="empty-msg">This feature needs Chrome or Edge (it uses a browser API to read and rename local files that Firefox/Safari do not support).</div>'}
       ${supported ? `
       <div class="field-grid" style="max-width:600px;">
-        <div class="field"><label>Source (applies to this whole batch)</label><select id="bi-provenance">${optionsHtml(State.provenances, batchProvenance, true)}</select></div>
+        <div class="field"><label>Source (applies to this whole batch)</label><select id="bi-source">${optionsHtml(State.sources, batchSource, true)}</select></div>
         <div class="field"><label>Operator (applies to this whole batch)</label><select id="bi-operator">${optionsHtml(State.operators, batchOperator, true)}</select></div>
         <div class="field"><label>Language (applies to this whole batch)</label><select id="bi-lang">${optionsHtml(State.langs, batchLang, true)}</select></div>
         <div class="field"><label>Media type (applies to this whole batch)</label><select id="bi-media-type">${optionsHtml(State.mediaTypes, batchMediaType, false)}</select></div>
@@ -66,7 +66,7 @@ export async function renderBulkImportView(main) {
     </div>`;
   if (!supported) return;
   document.getElementById('bi-pick-folder').addEventListener('click', () => {
-    batchProvenance = document.getElementById('bi-provenance').value;
+    batchSource = document.getElementById('bi-source').value;
     batchOperator = document.getElementById('bi-operator').value;
     batchLang = document.getElementById('bi-lang').value;
     batchMediaType = document.getElementById('bi-media-type').value;
@@ -138,7 +138,7 @@ async function scanAndImport() {
         document_id: r.document_id, title: r.title, workflow_status: 'ENTR',
         catalog_date: today(), ref_date: r.ref_date, ref_period: r.ref_period,
         file_name: r.newFileName, legacy_migrated: false, work_id: workId,
-        provenance: batchProvenance || null, operator: batchOperator || null, language: batchLang || null,
+        source: batchSource || null, operator: batchOperator || null, language: batchLang || null,
         media_type: batchMediaType, collection: batchCollection || null,
         original_inp_file_name: r.original_inp_file_name, original_doc_file_name: r.original_doc_file_name,
       }));

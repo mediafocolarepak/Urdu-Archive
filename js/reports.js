@@ -1,4 +1,4 @@
-import { sb, State, esc, labelOf, optionsHtml, withStatusCount } from './core.js?v=20260823193519';
+import { sb, State, esc, labelOf, optionsHtml, withStatusCount } from './core.js?v=20260823234040';
 
 export function renderReportsView(main) {
   main.innerHTML = `
@@ -11,7 +11,7 @@ export function renderReportsView(main) {
         <div class="field"><label>Recipient</label><select id="r-recipient">${optionsHtml(State.recipients, '', true)}</select></div>
         <div class="field"><label>Workflow status</label><select id="r-status">${optionsHtml(State.statuses, '', true)}</select></div>
         <div class="field"><label>Collection</label><select id="r-collection">${optionsHtml(State.collections, '', true)}</select></div>
-        <div class="field"><label>Source</label><select id="r-provenance">${optionsHtml(State.provenances, '', true)}</select></div>
+        <div class="field"><label>Source</label><select id="r-source">${optionsHtml(State.sources, '', true)}</select></div>
         <div class="field"><label>Date from</label><input id="r-from" type="date"></div>
         <div class="field"><label>Date to</label><input id="r-to" type="date"></div>
       </div>
@@ -36,7 +36,7 @@ async function generateFilteredReport() {
   const recipient = document.getElementById('r-recipient').value;
   const status = document.getElementById('r-status').value;
   const collection = document.getElementById('r-collection').value;
-  const provenance = document.getElementById('r-provenance').value;
+  const source = document.getElementById('r-source').value;
   const from = document.getElementById('r-from').value;
   const to = document.getElementById('r-to').value;
 
@@ -46,7 +46,7 @@ async function generateFilteredReport() {
   if (author) q = q.eq('author', author);
   if (status) q = q.eq('workflow_status', status);
   if (collection) q = q.eq('collection', collection);
-  if (provenance) q = q.eq('provenance', provenance);
+  if (source) q = q.eq('source', source);
   if (recipient) q = q.overlaps('recipient', [recipient]);
   if (from) q = q.gte('ref_date', from);
   if (to) q = q.lte('ref_date', to);
