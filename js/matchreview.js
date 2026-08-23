@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, withStatus, mergeWorks } from './core.js?v=20260823185154';
-import { renderDocDetail } from './docdetail.js?v=20260823185154';
+import { sb, State, esc, labelOf, withStatus, mergeWorks } from './core.js?v=20260823192012';
+import { renderDocDetail } from './docdetail.js?v=20260823192012';
 
 const ITALIAN_MONTHS = { gennaio: 1, febbraio: 2, marzo: 3, aprile: 4, maggio: 5, giugno: 6, luglio: 7, agosto: 8, settembre: 9, ottobre: 10, novembre: 11, dicembre: 12 };
 export function pdvApproxDate(r) {
@@ -34,7 +34,7 @@ const MATCH_LISTS = {
     label: 'Collegamenti (Italian titles)',
     docFilter: d => d.category === 'Lkp' && !d.match_ref,
     refTable: 'ref_collegamenti',
-    refLabel: r => `${r.data || '?'} â€” ${r.titolo}${r.luogo ? ' (' + r.luogo + ')' : ''}`,
+    refLabel: r => `${r.data || '?'} — ${r.titolo}${r.luogo ? ' (' + r.luogo + ')' : ''}`,
     refValue: r => r.titolo,
     field: 'match_ref',
     rank: (doc, refs) => rankByDateProximity(doc.ref_date, refs, 'data'),
@@ -43,7 +43,7 @@ const MATCH_LISTS = {
     label: 'Video index',
     docFilter: d => !d.video_ref,
     refTable: 'ref_video_index',
-    refLabel: r => `${r.numero} â€” ${r.descrizione}${r.data ? ' (' + r.data + ')' : ''}`,
+    refLabel: r => `${r.numero} — ${r.descrizione}${r.data ? ' (' + r.data + ')' : ''}`,
     refValue: r => r.numero,
     field: 'video_ref',
     rank: (doc, refs) => rankByDateProximity(doc.ref_date, refs, 'data'),
@@ -52,7 +52,7 @@ const MATCH_LISTS = {
     label: 'Parola di Vita',
     docFilter: d => d.category === 'Wol' && !d.pdv_ref,
     refTable: 'ref_parola_di_vita',
-    refLabel: r => `${r.mese} â€” ${r.versetto}`,
+    refLabel: r => `${r.mese} — ${r.versetto}`,
     refValue: r => r.link,
     field: 'pdv_ref',
     rank: (doc, refs) => rankByYearMonthProximity(doc.ref_date, refs),
@@ -104,7 +104,7 @@ function renderMatchBody() {
   const box = document.getElementById('match-body');
   const cfg = MATCH_LISTS[State.matchListKey];
   if (State.matchQueue.length === 0) {
-    box.innerHTML = `<div class="empty-msg">Nothing to review for this list right now â€” either all matched, or no documents currently qualify.</div>`;
+    box.innerHTML = `<div class="empty-msg">Nothing to review for this list right now — either all matched, or no documents currently qualify.</div>`;
     return;
   }
   if (State.matchIndex >= State.matchQueue.length) {
@@ -143,7 +143,7 @@ function renderMatchBody() {
 }
 
 function candidateLabel(r, cfg) {
-  if (cfg.isWorkLink) return `#${r.document_id} â€” ${r.title || '(untitled)'} â€” ${r.ref_date || 'no date'} â€” ${r.provenance || '?'}/${r.language || '?'}`;
+  if (cfg.isWorkLink) return `#${r.document_id} — ${r.title || '(untitled)'} — ${r.ref_date || 'no date'} — ${r.provenance || '?'}/${r.language || '?'}`;
   return cfg.refLabel(r);
 }
 
@@ -155,7 +155,7 @@ function renderCandidates(list, cfg, doc) {
     const sameVariant = cfg.isWorkLink && r.provenance === doc.provenance && r.language === doc.language;
     return `<div class="panel" style="margin-bottom:8px;padding:10px;">
       <div style="font-size:13px;">${esc(candidateLabel(r, cfg))}${sameVariant ? ' <span class="hint">(same source/language - more likely a duplicate than a translation)</span>' : ''}</div>
-      <button class="btn" data-i="${i}" style="margin-top:6px;padding:4px 10px;">${cfg.isWorkLink ? 'Same document â€” merge' : 'Assign'}</button>
+      <button class="btn" data-i="${i}" style="margin-top:6px;padding:4px 10px;">${cfg.isWorkLink ? 'Same document — merge' : 'Assign'}</button>
     </div>`;
   }).join('');
   box.querySelectorAll('[data-i]').forEach(btn => btn.addEventListener('click', async () => {

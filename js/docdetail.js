@@ -6,7 +6,7 @@ import {
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
-} from './core.js?v=20260823185154';
+} from './core.js?v=20260823192012';
 
 export function renderDocDetailConsultation(box, doc, workSiblings, docCollections) {
   const row = (label, value) => `<div class="field"><label>${esc(label)}</label><input value="${esc(value)}" disabled></div>`;
@@ -33,7 +33,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     </div>
     <div class="field">
       <label>Recipient(s)</label>
-      <div style="font-size:13px;padding:4px 0;">${(doc.recipient || []).map(c => esc(labelOf(State.recipients, c))).join(', ') || 'â€”'}</div>
+      <div style="font-size:13px;padding:4px 0;">${(doc.recipient || []).map(c => esc(labelOf(State.recipients, c))).join(', ') || '—'}</div>
     </div>
     <div class="field">
       <label>Collections</label>
@@ -57,7 +57,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
 }
 
 function renderCollectionsSummary(docCollections) {
-  if (!docCollections || !docCollections.length) return 'â€”';
+  if (!docCollections || !docCollections.length) return '—';
   return docCollections.map(dc => esc(labelOf(State.collections, dc.collection_code)) + (dc.page_number ? ` (p.${esc(dc.page_number)})` : '')).join(', ');
 }
 
@@ -194,7 +194,7 @@ export async function renderDocDetail(id) {
       ${doc.file_name
         ? `<div class="hint">Saved file name (kept as-is unless you upload a replacement below): <b>${esc(doc.file_name)}</b></div>`
         : (readOnly ? '' : `<div class="hint">No file linked yet - will be named <b id="filename-preview">${esc(previewName)}</b> once you upload one.</div>`)}
-      ${doc.storage_path ? `<div class="hint">Currently on file: ${esc(doc.file_name)} â€” <a href="#" id="doc-download">Download</a></div>` : '<div class="hint">No file uploaded yet.</div>'}
+      ${doc.storage_path ? `<div class="hint">Currently on file: ${esc(doc.file_name)} — <a href="#" id="doc-download">Download</a></div>` : '<div class="hint">No file uploaded yet.</div>'}
       ${readOnly ? '' : '<input type="file" id="doc-file-input" accept=".pdf,.doc,.docx" style="margin-top:6px;">'}
       <button class="btn secondary" id="doc-download-gdrive" style="margin-top:8px;">Download Document (legacy archive)</button>
     </div>
@@ -313,7 +313,7 @@ async function onAfterDocChange() {
 function renderProcessHistorySection(doc) {
   return `
     <div class="panel" style="margin-top:14px;">
-      <h3>Process history <span class="hint">â€” current step: ${esc(labelOf(State.statuses, doc.workflow_status)) || 'â€”'}</span></h3>
+      <h3>Process history <span class="hint">— current step: ${esc(labelOf(State.statuses, doc.workflow_status)) || '—'}</span></h3>
       <div id="process-history-log"><div class="empty-msg">Loading...</div></div>
       ${canWrite() ? `
       <div class="field-grid" style="margin-top:10px;">

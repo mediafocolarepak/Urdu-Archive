@@ -6,8 +6,8 @@
 // the meantime), per the project's "don't pollute a fixed vocabulary with unreviewed values"
 // rule that also applies to Bulk Import and the rest of this session's schema changes.
 
-import { sb, State, esc, today, canWrite, withStatus, extractHayatRowToDocument, SessionCache } from './core.js?v=20260823185154';
-import { comboboxHtml, wireCombobox } from './combobox.js?v=20260823185154';
+import { sb, State, esc, today, canWrite, withStatus, extractHayatRowToDocument, SessionCache } from './core.js?v=20260823192012';
+import { comboboxHtml, wireCombobox } from './combobox.js?v=20260823192012';
 
 let currentRows = [];
 
@@ -18,7 +18,7 @@ export async function renderHayatEditorView(main) {
       <p class="hint">Edit one Hayat edition at a time. Tab/Shift+Tab to move between fields, Enter to save the current row. Autore/Categoria/Branca/Argomento accept new values - they're only added to the shared lists when that row is extracted.</p>
       <div class="field" style="max-width:280px;">
         <label>Edition (Month-Year)</label>
-        <select id="he-edition"><option value="">Loadingâ€¦</option></select>
+        <select id="he-edition"><option value="">Loading…</option></select>
       </div>
       <div class="hint" id="he-progress" style="margin-bottom:10px;"></div>
       <div class="btn-row">

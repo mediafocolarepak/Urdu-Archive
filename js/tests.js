@@ -2,9 +2,9 @@
 // Run before every publish (see publish.ps1). Only tests functions with no Supabase calls;
 // mocking supabase-js well enough to unit-test the CRUD glue isn't worth it for this app.
 
-import { slugify, computeFileName, yearOf, titleOverlapScore, normalizeForCompare } from './core.js?v=20260823185154';
-import { extractDateFromFilename } from './bulkimport.js?v=20260823185154';
-import { rankByDateProximity, rankByYearMonthProximity, pdvApproxDate } from './matchreview.js?v=20260823185154';
+import { slugify, computeFileName, yearOf, titleOverlapScore, normalizeForCompare } from './core.js?v=20260823192012';
+import { extractDateFromFilename } from './bulkimport.js?v=20260823192012';
+import { rankByDateProximity, rankByYearMonthProximity, pdvApproxDate } from './matchreview.js?v=20260823192012';
 
 let passed = 0, failed = 0;
 const results = [];
@@ -15,7 +15,7 @@ function assert(condition, label) {
 }
 function assertEqual(actual, expected, label) {
   const ok = JSON.stringify(actual) === JSON.stringify(expected);
-  assert(ok, `${label} â€” got ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`);
+  assert(ok, `${label} — got ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`);
 }
 
 // ---- slugify ----
@@ -70,7 +70,7 @@ assertEqual(normalizeForCompare('Hello, World!.pdf'), 'hello world', 'normalizeF
 // ---- render results ----
 const root = document.getElementById('results');
 root.innerHTML = `
-  <h1>${failed === 0 ? 'âœ…' : 'âŒ'} ${passed} passed, ${failed} failed</h1>
+  <h1>${failed === 0 ? '✅' : '❌'} ${passed} passed, ${failed} failed</h1>
   <table border="1" cellpadding="6" style="border-collapse:collapse;font-family:monospace;font-size:13px;">
     ${results.map(r => `<tr style="background:${r.ok ? '#e6ffed' : '#ffecec'}"><td>${r.ok ? 'PASS' : 'FAIL'}</td><td>${r.label}</td></tr>`).join('')}
   </table>

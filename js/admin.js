@@ -1,4 +1,4 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260823185154';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260823192012';
 
 // ---------- Users ----------
 
@@ -17,7 +17,7 @@ export async function renderUsersView(main) {
           <td>${esc((r.created_at || '').slice(0, 10))}</td>
           <td><button class="btn danger remove-user-btn" data-uid="${esc(r.user_id)}" data-email="${esc(r.email)}" style="padding:4px 10px;">Remove access</button></td></tr>`).join('')}</tbody>
       </table></div>
-      <p class="hint" style="margin-top:8px;">"Remove access" drops the person back to no role at all (they lose the app entirely until re-registered or re-added) - it does not delete their login/auth account. To fully delete an account, use the Supabase Dashboard (Authentication â†’ Users).</p>
+      <p class="hint" style="margin-top:8px;">"Remove access" drops the person back to no role at all (they lose the app entirely until re-registered or re-added) - it does not delete their login/auth account. To fully delete an account, use the Supabase Dashboard (Authentication → Users).</p>
     </div>`;
   main.querySelectorAll('.role-select').forEach(sel => sel.addEventListener('change', async () => {
     await withStatus(sb.from('user_roles').update({ role: sel.value }).eq('user_id', sel.dataset.uid), 'Updating role...');
@@ -35,7 +35,7 @@ export async function renderOptionsView(main) {
   if (!isAdmin()) { main.innerHTML = '<div class="empty-msg">Admin access required.</div>'; return; }
   main.innerHTML = `
     <div class="panel">
-      <h2>Options <span class="hint">â€” edit the dropdown lists used across the app</span></h2>
+      <h2>Options <span class="hint">— edit the dropdown lists used across the app</span></h2>
       <div class="field" style="max-width:280px;">
         <label>List</label>
         <select id="opt-list-select">${OPTION_LIST_NAMES.map(n => `<option value="${n}" ${n === State.optionsSelectedList ? 'selected' : ''}>${OPTION_LIST_LABELS[n]}</option>`).join('')}</select>
@@ -67,7 +67,7 @@ async function renderOptionsEditor() {
       </tr>
       </tbody>
     </table></div>
-    <p class="hint" style="margin-top:8px;">Changing or removing a code here does not update documents that already use the old code â€” edit those separately if needed.</p>
+    <p class="hint" style="margin-top:8px;">Changing or removing a code here does not update documents that already use the old code — edit those separately if needed.</p>
   `;
   box.querySelectorAll('tr[data-code]:not([data-code=""])').forEach(tr => {
     const originalCode = tr.dataset.code;

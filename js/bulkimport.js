@@ -4,7 +4,7 @@
 // (by title similarity against what's already catalogued) are still detected, but only
 // reported afterwards in the summary, not used to block or pre-exclude anything.
 
-import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore } from './core.js?v=20260823185154';
+import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore } from './core.js?v=20260823192012';
 
 export function titleFromFilename(name) {
   const noExt = name.replace(/\.[a-z0-9]+$/i, '');
@@ -61,7 +61,7 @@ export async function renderBulkImportView(main) {
         <div class="field"><label>Media type (applies to this whole batch)</label><select id="bi-media-type">${optionsHtml(State.mediaTypes, batchMediaType, false)}</select></div>
         <div class="field"><label>Collection (optional)</label><select id="bi-collection">${optionsHtml(State.collections, batchCollection, true)}</select></div>
       </div>
-      <div class="btn-row"><button class="btn" id="bi-pick-folder">Select folderâ€¦</button></div>` : ''}
+      <div class="btn-row"><button class="btn" id="bi-pick-folder">Select folder…</button></div>` : ''}
       <div id="bi-body"></div>
     </div>`;
   if (!supported) return;
@@ -88,7 +88,7 @@ async function scanAndImport() {
   } catch (e) {
     return; // user cancelled the picker
   }
-  body.innerHTML = '<div class="empty-msg">Scanning folderâ€¦</div>';
+  body.innerHTML = '<div class="empty-msg">Scanning folder…</div>';
 
   const extensions = batchMediaType === 'VID' ? ['.mp4', '.mov', '.avi', '.mkv'] : ['.pdf'];
   const files = [];
@@ -128,7 +128,7 @@ async function scanAndImport() {
     return;
   }
 
-  body.innerHTML = '<div class="empty-msg">Importingâ€¦</div>';
+  body.innerHTML = '<div class="empty-msg">Importing…</div>';
   let imported = 0, failed = 0;
   const errors = [];
   for (const r of plan) {
