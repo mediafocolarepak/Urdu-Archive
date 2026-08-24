@@ -139,6 +139,17 @@ table.grid tbody tr:hover { background: var(--accent-soft); }
 table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600; }
 .grid-wrap { max-height: 46vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
 
+/* Dashboard grid: columns are wider than the panel can fit, so the wrapper above scrolls
+   horizontally (overflow: auto already does that) - here the table just needs to be free to
+   grow past 100% width instead of being squeezed into it, and the two title columns need
+   enough room to actually be readable instead of ellipsis-truncated. */
+#dash-grid { width: auto; min-width: 100%; }
+#dash-grid th, #dash-grid td { max-width: none; }
+#dash-grid td:nth-child(2), #dash-grid th:nth-child(2),
+#dash-grid td:nth-child(3), #dash-grid th:nth-child(3) {
+  min-width: 300px; max-width: 440px; white-space: normal; word-break: break-word;
+}
+
 .split { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; align-items: start; }
 @media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
 

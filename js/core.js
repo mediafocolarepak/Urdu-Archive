@@ -58,7 +58,7 @@ export const State = {
 };
 
 export const DASH_ROW_LIMIT = 5000;
-export const DASH_SORTABLE = { document_id: 'ID', title: 'Title', category: 'Category', author: 'Author', ref_date: 'Ref. date', workflow_status: 'Status' };
+export const DASH_SORTABLE = { document_id: 'ID', title: 'Title (EN)', original_title: 'Original title', author: 'Author', place: 'Place', category: 'Category' };
 
 // hayat_author / hayat_argomento are deliberately separate from author / main_topic: those
 // two keep their fixed, CHECK-constrained vocabularies (see 15_versions_editors_schema.sql),

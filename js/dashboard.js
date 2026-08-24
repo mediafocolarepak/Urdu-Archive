@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260824120821';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260824120821';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260824122248';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260824122248';
 
 export async function renderDashboardView(main) {
   main.innerHTML = `
@@ -75,7 +75,7 @@ export async function renderDashboardView(main) {
 }
 
 function buildDashQuery(selectAll) {
-  let q = sb.from('documents').select(selectAll ? '*' : 'document_id,category,author,main_topic,recipient,title,ref_date,workflow_status,legacy_migrated,pending_deletion,is_preferred');
+  let q = sb.from('documents').select(selectAll ? '*' : 'document_id,category,author,main_topic,recipient,title,original_title,place,pending_deletion,is_preferred');
   const f = State.dashFilters;
   if (f.search && f.search.trim()) {
     const like = likeSafe(f.search.trim());
@@ -113,12 +113,14 @@ export async function refreshDashGrid() {
   document.getElementById('dash-count').textContent = rows.length;
   const arrow = (col) => col !== State.dashSort.col ? '' : (State.dashSort.asc ? ' &uarr;' : ' &darr;');
   grid.innerHTML = `<thead><tr>${Object.entries(DASH_SORTABLE).map(([col, label]) =>
-      `<th data-sort="${col}">${label}${arrow(col)}</th>`).join('')}<th>Recipient(s)</th></tr></thead>
+      `<th data-sort="${col}">${label}${arrow(col)}</th>`).join('')}</tr></thead>
     <tbody>${rows.map(r => `<tr data-id="${esc(r.document_id)}" class="${String(r.document_id) === String(State.selectedDocId) ? 'selected' : ''}">
       <td>${esc(r.document_id)}${r.pending_deletion ? ' <span class="count-badge" style="padding:1px 6px;background:var(--danger);color:#fff;">pending deletion</span>' : ''}</td>
-      <td>${r.is_preferred ? '&#9733; ' : ''}${esc(r.title)}</td><td>${esc(labelOf(State.categories, r.category))}</td><td>${esc(labelOf(State.authors, r.author))}</td>
-      <td>${esc(r.ref_date)}</td><td>${esc(labelOf(State.statuses, r.workflow_status))}</td>
-      <td>${(r.recipient || []).map(c => esc(labelOf(State.recipients, c))).join(', ')}</td></tr>`).join('')}</tbody>`;
+      <td>${r.is_preferred ? '&#9733; ' : ''}${esc(r.title)}</td>
+      <td>${esc(r.original_title)}</td>
+      <td>${esc(labelOf(State.authors, r.author))}</td>
+      <td>${esc(r.place)}</td>
+      <td>${esc(labelOf(State.categories, r.category))}</td></tr>`).join('')}</tbody>`;
   grid.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', () => {
     const col = th.dataset.sort;
     if (State.dashSort.col === col) State.dashSort.asc = !State.dashSort.asc; else State.dashSort = { col, asc: true };
