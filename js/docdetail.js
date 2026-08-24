@@ -6,7 +6,7 @@ import {
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
-} from './core.js?v=20260823234040';
+} from './core.js?v=20260824120821';
 
 export function renderDocDetailConsultation(box, doc, workSiblings, docCollections) {
   const row = (label, value) => `<div class="field"><label>${esc(label)}</label><input value="${esc(value)}" disabled></div>`;
@@ -208,7 +208,6 @@ export async function renderDocDetail(id) {
       <div class="field"><label>File name</label><input value="${esc(doc.file_name)}" disabled></div>
       ${textField('Duration (video only)', 'duration', doc.duration)}
       ${selectField('Quality (video only)', 'quality', doc.quality, State.qualities)}
-      <div class="field"><label>Status (free text)</label><input value="${esc(doc.original_status)}" disabled></div>
       <div class="field"><label>Legacy file name</label><input value="${esc(doc.legacy_file_name)}" disabled></div>
     </div>
     <div class="field">
