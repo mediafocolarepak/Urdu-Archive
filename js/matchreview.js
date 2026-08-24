@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, withStatus, mergeWorks, likeSafe, DASH_ROW_LIMIT } from './core.js?v=20260824214857';
-import { renderDocDetail } from './docdetail.js?v=20260824214857';
+import { sb, State, esc, labelOf, optionsHtml, withStatus, mergeWorks, likeSafe, DASH_ROW_LIMIT, downloadFromGDrive, BUCKET } from './core.js?v=20260824220421';
+import { renderDocDetail } from './docdetail.js?v=20260824220421';
 
 export function rankByDateProximity(refDate, refs, dateField) {
   // Ranks by closeness to refDate, but never drops a candidate just because it (or
@@ -13,7 +13,14 @@ export function rankByDateProximity(refDate, refs, dateField) {
   return [...withDate, ...withoutDate];
 }
 
-const MATCH_SORTABLE = { document_id: 'ID', category: 'Category', title: 'Title (EN)', original_title: 'Original title', ref_date: 'Ref. date' };
+// Recipient/Collection are shown but not sortable: recipient is an array column and
+// collection is a many-to-many join (document_collections), neither sorts meaningfully
+// with a plain .order() on documents.
+const MATCH_COLUMNS = [
+  ['document_id', 'ID', true], ['category', 'Category', true], ['author', 'Author', true],
+  ['title', 'Title (EN)', true], ['original_title', 'Original title', true], ['ref_date', 'Ref. date', true],
+  ['recipient', 'Recipient', false], ['collection', 'Collection', false], ['workflow_status', 'Workflow status', true],
+];
 
 export async function renderMatchReviewView(main) {
   const f = State.matchFilters;
@@ -49,7 +56,7 @@ export async function renderMatchReviewView(main) {
 }
 
 function buildMatchQuery() {
-  let q = sb.from('documents').select('document_id,category,title,original_title,ref_date,pending_deletion');
+  let q = sb.from('documents').select('document_id,category,author,title,original_title,ref_date,recipient,workflow_status,pending_deletion');
   const f = State.matchFilters;
   if (f.search && f.search.trim()) {
     const like = likeSafe(f.search.trim());
@@ -76,18 +83,35 @@ async function filterByCollection(rows) {
   return rows.filter(r => idSet.has(r.document_id));
 }
 
+async function fetchCollectionsMap(ids) {
+  if (!ids.length) return {};
+  const rows = await withStatus(sb.from('document_collections').select('document_id,collection_code').in('document_id', ids));
+  const map = {};
+  for (const r of rows) (map[r.document_id] ||= []).push(r.collection_code);
+  return map;
+}
+
+function matchCell(r, col, collectionsMap) {
+  if (col === 'category') return esc(labelOf(State.categories, r.category));
+  if (col === 'author') return esc(labelOf(State.authors, r.author));
+  if (col === 'workflow_status') return esc(labelOf(State.statuses, r.workflow_status));
+  if (col === 'recipient') return (r.recipient || []).map(c => esc(labelOf(State.recipients, c))).join(', ');
+  if (col === 'collection') return (collectionsMap[r.document_id] || []).map(c => esc(labelOf(State.collections, c))).join(', ');
+  return esc(r[col]);
+}
+
 async function refreshMatchGrid() {
   const grid = document.getElementById('mr-grid');
   if (!grid) return;
   let rows = await withStatus(buildMatchQuery().order(State.matchSort.col, { ascending: State.matchSort.asc }).limit(DASH_ROW_LIMIT), 'Searching...');
   rows = rows.filter(r => !r.pending_deletion);
   rows = await filterByCollection(rows);
+  const collectionsMap = await fetchCollectionsMap(rows.map(r => r.document_id));
   const arrow = (col) => col !== State.matchSort.col ? '' : (State.matchSort.asc ? ' &uarr;' : ' &darr;');
-  grid.innerHTML = `<thead><tr>${Object.entries(MATCH_SORTABLE).map(([col, label]) =>
-      `<th data-sort="${col}">${label}${arrow(col)}</th>`).join('')}</tr></thead>
+  grid.innerHTML = `<thead><tr>${MATCH_COLUMNS.map(([col, label, sortable]) =>
+      sortable ? `<th data-sort="${col}">${label}${arrow(col)}</th>` : `<th>${label}</th>`).join('')}</tr></thead>
     <tbody>${rows.map(r => `<tr data-id="${esc(r.document_id)}" class="${String(r.document_id) === String(State.matchSelectedId) ? 'selected' : ''}">
-      <td>${esc(r.document_id)}</td><td>${esc(labelOf(State.categories, r.category))}</td>
-      <td>${esc(r.title)}</td><td>${esc(r.original_title)}</td><td>${esc(r.ref_date)}</td></tr>`).join('')}</tbody>`;
+      ${MATCH_COLUMNS.map(([col]) => `<td>${matchCell(r, col, collectionsMap)}</td>`).join('')}</tr>`).join('')}</tbody>`;
   grid.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', () => {
     const col = th.dataset.sort;
     if (State.matchSort.col === col) State.matchSort.asc = !State.matchSort.asc; else State.matchSort = { col, asc: true };
@@ -110,7 +134,7 @@ async function renderMatchBody() {
   const doc = rows[0];
   if (!doc) { box.innerHTML = '<div class="empty-msg">Document not found.</div>'; return; }
 
-  const candidateRows = await withStatus(sb.from('documents').select('document_id,title,ref_date,source,language,pending_deletion').neq('document_id', doc.document_id));
+  const candidateRows = await withStatus(sb.from('documents').select('document_id,title,category,ref_date,source,language,file_name,storage_path,pending_deletion').neq('document_id', doc.document_id));
   const candidates = candidateRows.filter(r => !r.pending_deletion);
   const ranked = rankByDateProximity(doc.ref_date, candidates, 'ref_date');
 
@@ -138,7 +162,17 @@ async function renderMatchBody() {
 }
 
 function candidateLabel(r) {
-  return `#${r.document_id} — ${r.title || '(untitled)'} — ${r.ref_date || 'no date'} — ${r.source || '?'}/${r.language || '?'}`;
+  return `#${r.document_id} — ${r.title || '(untitled)'} — ${labelOf(State.categories, r.category) || '?'} — ${r.ref_date || 'no date'} — ${r.source || '?'}/${r.language || '?'}`;
+}
+
+// Opens the candidate's actual file (Storage signed URL first, Drive-by-filename fallback) so
+// the reviewer can visually confirm it's really the same document before merging.
+async function openCandidateDocument(r) {
+  if (r.storage_path) {
+    const { data } = await sb.storage.from(BUCKET).createSignedUrl(r.storage_path, 60);
+    if (data?.signedUrl) { window.open(data.signedUrl, '_blank'); return; }
+  }
+  downloadFromGDrive(r.file_name);
 }
 
 function renderCandidates(list, doc) {
@@ -149,9 +183,15 @@ function renderCandidates(list, doc) {
     const sameVariant = r.source === doc.source && r.language === doc.language;
     return `<div class="panel" style="margin-bottom:8px;padding:10px;">
       <div style="font-size:13px;">${esc(candidateLabel(r))}${sameVariant ? ' <span class="hint">(same source/language - more likely a duplicate than a translation)</span>' : ''}</div>
-      <button class="btn" data-i="${i}" style="margin-top:6px;padding:4px 10px;">Same document — merge</button>
+      <div class="btn-row" style="margin-top:6px;">
+        <button class="btn secondary" data-open="${i}" style="padding:4px 10px;">Open Document</button>
+        <button class="btn" data-i="${i}" style="padding:4px 10px;">Same document — merge</button>
+      </div>
     </div>`;
   }).join('');
+  box.querySelectorAll('[data-open]').forEach(btn => btn.addEventListener('click', () => {
+    openCandidateDocument(list[btn.dataset.open]);
+  }));
   box.querySelectorAll('[data-i]').forEach(btn => btn.addEventListener('click', async () => {
     const r = list[btn.dataset.i];
     await mergeWorks(r.document_id, [doc.document_id]);
