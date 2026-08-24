@@ -1,9 +1,9 @@
-import { sb, State, esc, withStatus, mergeWorks } from './core.js?v=20260824122248';
-import { renderDocDetail } from './docdetail.js?v=20260824122248';
+import { sb, State, esc, labelOf, optionsHtml, withStatus, mergeWorks, likeSafe, DASH_ROW_LIMIT } from './core.js?v=20260824214857';
+import { renderDocDetail } from './docdetail.js?v=20260824214857';
 
 export function rankByDateProximity(refDate, refs, dateField) {
-  // Ranks by closeness to refDate, but never drops a candidate just because it (or the
-  // document) has no date - those are appended at the end instead, so the full list stays
+  // Ranks by closeness to refDate, but never drops a candidate just because it (or
+  // the document) has no date - those are appended at the end instead, so the full list stays
   // browsable and a genuine match with a missing/blank date can still be found and merged.
   if (!refDate) return refs;
   const target = new Date(refDate).getTime();
@@ -13,61 +13,126 @@ export function rankByDateProximity(refDate, refs, dateField) {
   return [...withDate, ...withoutDate];
 }
 
+const MATCH_SORTABLE = { document_id: 'ID', category: 'Category', title: 'Title (EN)', original_title: 'Original title', ref_date: 'Ref. date' };
+
 export async function renderMatchReviewView(main) {
+  const f = State.matchFilters;
   main.innerHTML = `
     <div class="panel">
       <h2>Match Review</h2>
-      <p class="hint">Step through documents that are still alone in their Document group, and merge in any other catalogued item that's really the same document (a translation, a duplicate scan, another language version...). Candidates are pre-ranked by date; use search to find others.</p>
-      <div id="match-body"></div>
+      <p class="hint">Search and pick a document below, then merge it with a matching item on the right - a translation, a duplicate scan, another language version...</p>
+      <div class="searchbar">
+        <input id="mr-search" placeholder="Search by title or tags..." value="${esc(f.search)}">
+      </div>
+      <div class="field-grid" style="margin-bottom:10px;">
+        <div class="field"><label>ID #</label><input id="mr-search-id" placeholder="ID #" value="${esc(f.idSearch)}"></div>
+        <div class="field"><label>Category</label><select id="mr-f-category">${optionsHtml(State.categories, f.category, true)}</select></div>
+        <div class="field"><label>Author</label><select id="mr-f-author">${optionsHtml(State.authors, f.author, true)}</select></div>
+        <div class="field"><label>Workflow status</label><select id="mr-f-status">${optionsHtml(State.statuses, f.workflow_status, true)}</select></div>
+        <div class="field"><label>Recipient</label><select id="mr-f-recipient">${optionsHtml(State.recipients, f.recipient, true)}</select></div>
+        <div class="field"><label>Collection</label><select id="mr-f-collection">${optionsHtml(State.collections, f.collection, true)}</select></div>
+      </div>
+      <div class="grid-wrap" style="max-height:34vh;"><table class="grid" id="mr-grid"></table></div>
+      <div id="match-body" style="margin-top:14px;"></div>
     </div>`;
-  await loadMatchQueue();
-  renderMatchBody();
+
+  document.getElementById('mr-search').addEventListener('input', e => { f.search = e.target.value; refreshMatchGrid(); });
+  document.getElementById('mr-search-id').addEventListener('input', e => { f.idSearch = e.target.value; refreshMatchGrid(); });
+  document.getElementById('mr-f-category').addEventListener('change', e => { f.category = e.target.value; refreshMatchGrid(); });
+  document.getElementById('mr-f-author').addEventListener('change', e => { f.author = e.target.value; refreshMatchGrid(); });
+  document.getElementById('mr-f-status').addEventListener('change', e => { f.workflow_status = e.target.value; refreshMatchGrid(); });
+  document.getElementById('mr-f-recipient').addEventListener('change', e => { f.recipient = e.target.value; refreshMatchGrid(); });
+  document.getElementById('mr-f-collection').addEventListener('change', e => { f.collection = e.target.value; refreshMatchGrid(); });
+
+  await refreshMatchGrid();
+  await renderMatchBody();
 }
 
-async function loadMatchQueue() {
-  const docs = await withStatus(sb.from('documents').select('document_id,title,ref_date,work_id,source,language,pending_deletion').order('document_id'));
-  const countByWork = {};
-  for (const d of docs) if (d.work_id) countByWork[d.work_id] = (countByWork[d.work_id] || 0) + 1;
-  const singleItem = docs.filter(d => !d.pending_deletion && d.work_id && countByWork[d.work_id] === 1);
-  State.matchQueue = singleItem;
-  State.matchRefRows = singleItem;
+function buildMatchQuery() {
+  let q = sb.from('documents').select('document_id,category,title,original_title,ref_date,pending_deletion');
+  const f = State.matchFilters;
+  if (f.search && f.search.trim()) {
+    const like = likeSafe(f.search.trim());
+    q = q.or(`title.ilike.${like},secondary_tags.ilike.${like}`);
+  }
+  if (f.idSearch && f.idSearch.trim()) {
+    const idNum = parseInt(f.idSearch.trim(), 10);
+    q = Number.isFinite(idNum) ? q.eq('document_id', idNum) : q.eq('document_id', -1);
+  }
+  if (f.category) q = q.eq('category', f.category);
+  if (f.author) q = q.eq('author', f.author);
+  if (f.workflow_status) q = q.eq('workflow_status', f.workflow_status);
+  if (f.recipient) q = q.overlaps('recipient', [f.recipient]);
+  return q;
 }
 
-function renderMatchBody() {
+// Collections are many-to-many (document_collections), so filtering by them is a post-fetch
+// join rather than a single .eq() on the documents query - same approach as the Dashboard.
+async function filterByCollection(rows) {
+  const f = State.matchFilters;
+  if (!f.collection) return rows;
+  const matches = await withStatus(sb.from('document_collections').select('document_id').eq('collection_code', f.collection));
+  const idSet = new Set(matches.map(m => m.document_id));
+  return rows.filter(r => idSet.has(r.document_id));
+}
+
+async function refreshMatchGrid() {
+  const grid = document.getElementById('mr-grid');
+  if (!grid) return;
+  let rows = await withStatus(buildMatchQuery().order(State.matchSort.col, { ascending: State.matchSort.asc }).limit(DASH_ROW_LIMIT), 'Searching...');
+  rows = rows.filter(r => !r.pending_deletion);
+  rows = await filterByCollection(rows);
+  const arrow = (col) => col !== State.matchSort.col ? '' : (State.matchSort.asc ? ' &uarr;' : ' &darr;');
+  grid.innerHTML = `<thead><tr>${Object.entries(MATCH_SORTABLE).map(([col, label]) =>
+      `<th data-sort="${col}">${label}${arrow(col)}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(r => `<tr data-id="${esc(r.document_id)}" class="${String(r.document_id) === String(State.matchSelectedId) ? 'selected' : ''}">
+      <td>${esc(r.document_id)}</td><td>${esc(labelOf(State.categories, r.category))}</td>
+      <td>${esc(r.title)}</td><td>${esc(r.original_title)}</td><td>${esc(r.ref_date)}</td></tr>`).join('')}</tbody>`;
+  grid.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', () => {
+    const col = th.dataset.sort;
+    if (State.matchSort.col === col) State.matchSort.asc = !State.matchSort.asc; else State.matchSort = { col, asc: true };
+    refreshMatchGrid();
+  }));
+  grid.querySelectorAll('tbody tr').forEach(tr => tr.addEventListener('click', async () => {
+    State.matchSelectedId = tr.dataset.id;
+    await refreshMatchGrid();
+    await renderMatchBody();
+  }));
+}
+
+async function renderMatchBody() {
   const box = document.getElementById('match-body');
-  if (State.matchQueue.length === 0) {
-    box.innerHTML = `<div class="empty-msg">Nothing to review right now — either everything is already merged, or no documents currently qualify.</div>`;
+  if (!State.matchSelectedId) {
+    box.innerHTML = `<div class="empty-msg">Select a document from the list above to start matching.</div>`;
     return;
   }
-  if (State.matchIndex >= State.matchQueue.length) {
-    box.innerHTML = `<div class="empty-msg">All done for now! Check back after new documents are added.</div>`;
-    return;
-  }
-  const doc = State.matchQueue[State.matchIndex];
-  const ranked = rankByDateProximity(doc.ref_date, State.matchRefRows.filter(r => r.document_id !== doc.document_id), 'ref_date');
+  const rows = await withStatus(sb.from('documents').select('document_id,title,ref_date,source,language,pending_deletion').eq('document_id', State.matchSelectedId));
+  const doc = rows[0];
+  if (!doc) { box.innerHTML = '<div class="empty-msg">Document not found.</div>'; return; }
+
+  const candidateRows = await withStatus(sb.from('documents').select('document_id,title,ref_date,source,language,pending_deletion').neq('document_id', doc.document_id));
+  const candidates = candidateRows.filter(r => !r.pending_deletion);
+  const ranked = rankByDateProximity(doc.ref_date, candidates, 'ref_date');
+
   box.innerHTML = `
-    <div class="hint" style="margin:10px 0;">${State.matchIndex + 1} of ${State.matchQueue.length} remaining</div>
     <div class="split">
       <div class="panel" style="margin:0;">
-        <div class="btn-row" style="margin-top:0;"><button class="btn secondary" id="match-skip">Skip &rarr;</button></div>
         <p class="hint">Full document record - fix or fill in anything you notice while matching.</p>
-        <div id="doc-detail" style="max-height:70vh;overflow-y:auto;"></div>
+        <div id="doc-detail" style="max-height:60vh;overflow-y:auto;"></div>
       </div>
       <div>
         <h3>Candidates <span class="hint" id="match-candidates-count"></span></h3>
         <input id="match-search" placeholder="Search candidates...">
-        <div id="match-candidates" style="max-height:60vh;overflow-y:auto;margin-top:8px;"></div>
+        <div id="match-candidates" style="max-height:55vh;overflow-y:auto;margin-top:8px;"></div>
       </div>
     </div>
   `;
   renderCandidates(ranked, doc);
   renderDocDetail(doc.document_id);
-  document.getElementById('match-skip').addEventListener('click', () => { State.matchIndex++; renderMatchBody(); });
   document.getElementById('match-search').addEventListener('input', e => {
     const term = e.target.value.toLowerCase();
     if (!term) { renderCandidates(ranked, doc); return; }
-    const pool = State.matchRefRows.filter(r => r.document_id !== doc.document_id);
-    const filtered = pool.filter(r => candidateLabel(r).toLowerCase().includes(term));
+    const filtered = candidates.filter(r => candidateLabel(r).toLowerCase().includes(term));
     renderCandidates(filtered, doc);
   });
 }
@@ -90,7 +155,7 @@ function renderCandidates(list, doc) {
   box.querySelectorAll('[data-i]').forEach(btn => btn.addEventListener('click', async () => {
     const r = list[btn.dataset.i];
     await mergeWorks(r.document_id, [doc.document_id]);
-    State.matchIndex++;
-    renderMatchBody();
+    await refreshMatchGrid();
+    await renderMatchBody();
   }));
 }

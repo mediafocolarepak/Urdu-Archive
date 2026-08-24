@@ -48,9 +48,9 @@ export const State = {
   dashSort: { col: 'document_id', asc: false },
   adminEditFilters: { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', collection: '', recipient: [], legacyOnly: false, pendingOnly: false },
   reportFilters: { category: '', main_topic: '', author: '', recipient: '', workflow_status: '', from: '', to: '' },
-  matchQueue: [],
-  matchIndex: 0,
-  matchRefRows: [],
+  matchFilters: { search: '', idSearch: '', category: '', author: '', workflow_status: '', recipient: '', collection: '' },
+  matchSort: { col: 'document_id', asc: false },
+  matchSelectedId: null,
   optionsSelectedList: 'category',
   docCollections: [],  // { document_id, collection_code, page_number } for the open document
   optionListsByName: {},  // option_lists rows grouped by list_name, as [code,label] pairs - generic lookup used by SessionCache/combobox
