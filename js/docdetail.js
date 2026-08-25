@@ -6,7 +6,7 @@ import {
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
-} from './core.js?v=20260825114048';
+} from './core.js?v=20260825122146';
 
 export function renderDocDetailConsultation(box, doc, workSiblings, docCollections) {
   const row = (label, value) => `<div class="field"><label>${esc(label)}</label><input value="${esc(value)}" disabled></div>`;
@@ -211,11 +211,8 @@ export async function renderDocDetail(id) {
       <div class="field"><label>Legacy file name</label><input value="${esc(doc.legacy_file_name)}" disabled></div>
     </div>
     <div class="field">
-      <label>Recipient(s)</label>
-      <div class="btn-row" style="margin:0;">
-        ${State.recipients.map(([c, l]) => `<label style="display:flex;align-items:center;gap:4px;font-size:12.5px;font-weight:normal;text-transform:none;">
-          <input type="checkbox" class="f-doc-recipient" value="${c}" ${(doc.recipient || []).includes(c) ? 'checked' : ''} ${readOnly ? 'disabled' : ''}> ${l}</label>`).join('')}
-      </div>
+      <label>Recipient</label>
+      <select id="f-doc-recipient" ${readOnly ? 'disabled' : ''}>${optionsHtml(State.recipients, (doc.recipient || [])[0], true)}</select>
     </div>
     <div class="field">
       <label>Collections</label>
@@ -273,8 +270,8 @@ export async function renderDocDetail(id) {
   function collectFields() {
     const out = {};
     box.querySelectorAll('[data-f]').forEach(el => out[el.dataset.f] = el.value === '' ? null : el.value);
-    out.recipient = Array.from(box.querySelectorAll('.f-doc-recipient:checked')).map(c => c.value);
-    if (out.recipient.length === 0) out.recipient = null;
+    const recipientVal = document.getElementById('f-doc-recipient').value;
+    out.recipient = recipientVal ? [recipientVal] : null;
     out.pending_deletion = document.getElementById('f-pending-deletion').checked;
     return out;
   }
