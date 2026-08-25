@@ -5,7 +5,7 @@
 // Collections are shown as a plain multiselect here (no per-collection page number, unlike the
 // document detail page) - editing page numbers still needs the full document detail page.
 
-import { sb, State, esc, isAdmin, withStatus, optionsHtml, BUCKET, DASH_ROW_LIMIT, likeSafe, saveDocumentCollections } from './core.js?v=20260825154817';
+import { sb, State, esc, isAdmin, withStatus, optionsHtml, BUCKET, DASH_ROW_LIMIT, likeSafe, saveDocumentCollections } from './core.js?v=20260825155642';
 
 const EDIT_COLUMNS = [
   ['title', 'Title (EN)', 'text'],
@@ -55,6 +55,8 @@ export async function renderAdminEditView(main) {
         <div class="field"><label>Workflow status</label><select id="ae-f-status">${optionsHtml(State.statuses, f.workflow_status, true)}</select></div>
         <div class="field"><label>Collection</label><select id="ae-f-collection">${optionsHtml(State.collections, f.collection, true)}</select></div>
         <div class="field"><label>Language</label><select id="ae-f-language">${optionsHtml(State.langs, f.language, true)}</select></div>
+        <div class="field"><label>Recipient</label><select id="ae-f-recipient">${optionsHtml(State.recipients, f.recipient, true)}</select></div>
+        <div class="field"><label>Source</label><select id="ae-f-source">${optionsHtml(State.sources, f.source, true)}</select></div>
       </div>
       <div class="field" style="display:flex;flex-wrap:wrap;gap:6px 24px;">
         <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:12.5px;">
@@ -75,6 +77,8 @@ export async function renderAdminEditView(main) {
   document.getElementById('ae-f-status').addEventListener('change', e => { f.workflow_status = e.target.value; refreshAdminEditGrid(); });
   document.getElementById('ae-f-collection').addEventListener('change', e => { f.collection = e.target.value; refreshAdminEditGrid(); });
   document.getElementById('ae-f-language').addEventListener('change', e => { f.language = e.target.value; refreshAdminEditGrid(); });
+  document.getElementById('ae-f-recipient').addEventListener('change', e => { f.recipient = e.target.value; refreshAdminEditGrid(); });
+  document.getElementById('ae-f-source').addEventListener('change', e => { f.source = e.target.value; refreshAdminEditGrid(); });
   document.getElementById('ae-f-legacy').addEventListener('change', e => { f.legacyOnly = e.target.checked; refreshAdminEditGrid(); });
   document.getElementById('ae-f-pending').addEventListener('change', e => { f.pendingOnly = e.target.checked; refreshAdminEditGrid(); });
 
@@ -97,6 +101,8 @@ function buildAdminEditQuery() {
   if (f.main_topic) q = q.eq('main_topic', f.main_topic);
   if (f.workflow_status) q = q.eq('workflow_status', f.workflow_status);
   if (f.language) q = q.eq('language', f.language);
+  if (f.recipient) q = q.overlaps('recipient', [f.recipient]);
+  if (f.source) q = q.eq('source', f.source);
   if (f.legacyOnly) q = q.eq('legacy_migrated', true);
   if (f.pendingOnly) q = q.eq('pending_deletion', true);
   return q;
@@ -105,7 +111,10 @@ function buildAdminEditQuery() {
 // Per-field width bumps requested 2026-08-25: Category +3ch, Title/Original title +10ch
 // over the grid's normal minimums (text inputs default to 120px ~= 17ch; select had no
 // explicit width before, so its baseline is estimated from its longest label).
-const WIDTH_OVERRIDES = { title: '30ch', original_title: '30ch', category: '19ch' };
+const WIDTH_OVERRIDES = {
+  title: '30ch', original_title: '30ch', category: '19ch',
+  recipient: '26ch', source: '21ch', operator: '21ch',
+};
 
 function cellHtml(doc, col) {
   const [name, , type, listFn] = col;
