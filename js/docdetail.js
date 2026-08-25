@@ -6,30 +6,33 @@ import {
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
-} from './core.js?v=20260825162441';
+} from './core.js?v=20260825180604';
+
+// Builds the "riassunto" text block that replaces the old grid of disabled input fields -
+// one line per group of related info, empty groups dropped entirely so the block stays short.
+function renderDocSummary(doc) {
+  const line = (...parts) => parts.filter(Boolean).join(' · ');
+  const lines = [
+    line(esc(labelOf(State.categories, doc.category)), esc(labelOf(State.authors, doc.author)), esc(labelOf(State.mainTopics, doc.main_topic))),
+    line(doc.place ? 'Place: ' + esc(doc.place) : '', doc.ref_date ? 'Reference date: ' + esc(doc.ref_date) : ''),
+    doc.secondary_tags ? 'Tags: ' + esc(doc.secondary_tags) : '',
+    line('Language: ' + esc(labelOf(State.langs, doc.language)), esc(labelOf(State.mediaTypes, doc.media_type)),
+      doc.media_type === 'VID' && doc.duration ? 'Duration: ' + esc(doc.duration) : '',
+      doc.media_type === 'VID' && doc.quality ? 'Quality: ' + esc(labelOf(State.qualities, doc.quality)) : ''),
+  ].filter(Boolean);
+  return lines.map(l => `<div>${l}</div>`).join('');
+}
 
 export function renderDocDetailConsultation(box, doc, workSiblings, docCollections) {
-  const row = (label, value) => `<div class="field"><label>${esc(label)}</label><input value="${esc(value)}" disabled></div>`;
   box.innerHTML = `
-    <h3>Document #${esc(doc.document_id)}</h3>
+    <div class="btn-row" style="justify-content:space-between;align-items:center;margin:0 0 8px;">
+      <h3 style="margin:0;">Document #${esc(doc.document_id)}</h3>
+      <button class="btn" id="doc-download-gdrive">Download Document</button>
+    </div>
     ${renderAllVersionsBar(doc, workSiblings)}
-    <div class="field-grid wide">
-      ${row('Title (EN)', doc.title)}
-      ${row('Original title', doc.original_title)}
-      ${row('Place', doc.place)}
-      ${row('Category', labelOf(State.categories, doc.category))}
-      ${row('Author', labelOf(State.authors, doc.author))}
-      ${row('Main topic', labelOf(State.mainTopics, doc.main_topic))}
-      ${row('Secondary tags', doc.secondary_tags)}
-      ${row('Language', labelOf(State.langs, doc.language))}
-      ${row('Reference date', doc.ref_date)}
-      ${row('File name', doc.file_name)}
-      ${row('Media type', labelOf(State.mediaTypes, doc.media_type))}
-      ${row('Source', labelOf(State.sources, doc.source))}
-      ${row('Operator', labelOf(State.operators, doc.operator))}
-      ${doc.media_type === 'VID' ? row('Duration', doc.duration) : ''}
-      ${doc.media_type === 'VID' ? row('Quality', labelOf(State.qualities, doc.quality)) : ''}
-      ${row('Current step', labelOf(State.statuses, doc.workflow_status))}
+    <div class="field" style="font-size:13px;line-height:1.7;">
+      <div style="font-weight:600;font-size:14px;margin-bottom:2px;">${esc(doc.title)}${doc.original_title ? ' — ' + esc(doc.original_title) : ''}</div>
+      ${renderDocSummary(doc)}
     </div>
     <div class="field">
       <label>Recipient(s)</label>
@@ -40,9 +43,6 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
       <div style="font-size:13px;padding:4px 0;">${renderCollectionsSummary(docCollections)}</div>
     </div>
     ${renderWorkSiblingsHtml(workSiblings, doc.document_id, false)}
-    <div class="btn-row">
-      <button class="btn" id="doc-download-gdrive">Download Document</button>
-    </div>
     ${doc.storage_path ? `<div class="field"><label>File</label><a href="#" id="doc-download">Download</a></div>` : ''}
   `;
   document.getElementById('doc-download-gdrive').addEventListener('click', () => downloadFromGDrive(doc.file_name));

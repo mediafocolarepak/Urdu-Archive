@@ -45,6 +45,7 @@ export const State = {
   selectedDocId: null,
   selectedCategoryId: null,
   dashFilters: { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', collection: '', recipient: '', language: '', legacyOnly: false, pendingOnly: false },
+  dashUserDefaultsApplied: false,
   dashSort: { col: 'document_id', asc: false },
   adminEditFilters: { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', collection: '', recipient: '', source: '', language: '', legacyOnly: false, pendingOnly: false },
   reportFilters: { category: '', main_topic: '', author: '', recipient: '', workflow_status: '', from: '', to: '' },

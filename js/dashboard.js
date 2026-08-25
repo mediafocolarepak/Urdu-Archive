@@ -1,7 +1,17 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260825162441';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260825162441';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260825180604';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260825180604';
 
 export async function renderDashboardView(main) {
+  const isUser = State.currentRole === 'user';
+
+  // Plain Users land on the archive filtered to Urdu by default (the vast majority of what
+  // they consult); applied once per session so a manual change to the filter later isn't
+  // silently reset on every dashboard revisit.
+  if (isUser && !State.dashUserDefaultsApplied) {
+    State.dashFilters.language = 'URD';
+    State.dashUserDefaultsApplied = true;
+  }
+
   main.innerHTML = `
     <div class="panel">
       <h2>Dashboard <span class="count-badge" id="dash-count"></span></h2>
@@ -14,21 +24,21 @@ export async function renderDashboardView(main) {
         <div class="field"><label>Category</label><select id="f-category">${optionsHtml(State.categories, State.dashFilters.category, true)}</select></div>
         <div class="field"><label>Author</label><select id="f-author">${optionsHtml(State.authors, State.dashFilters.author, true)}</select></div>
         <div class="field"><label>Main topic</label><select id="f-main_topic">${optionsHtml(State.mainTopics, State.dashFilters.main_topic, true)}</select></div>
-        <div class="field"><label>Workflow status</label><select id="f-status">${optionsHtml(State.statuses, State.dashFilters.workflow_status, true)}</select></div>
+        ${isUser ? '' : `<div class="field"><label>Workflow status</label><select id="f-status">${optionsHtml(State.statuses, State.dashFilters.workflow_status, true)}</select></div>`}
         <div class="field"><label>Recipient</label><select id="f-recipient">${optionsHtml(State.recipients, State.dashFilters.recipient, true)}</select></div>
         <div class="field"><label>Collection</label><select id="f-collection">${optionsHtml(State.collections, State.dashFilters.collection, true)}</select></div>
         <div class="field"><label>Language</label><select id="f-language">${optionsHtml(State.langs, State.dashFilters.language, true)}</select></div>
       </div>
-      <div class="field" style="display:flex;flex-wrap:wrap;gap:6px 24px;">
+      ${isUser ? '' : `<div class="field" style="display:flex;flex-wrap:wrap;gap:6px 24px;">
         <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:12.5px;">
           <input type="checkbox" id="f-legacy" ${State.dashFilters.legacyOnly ? 'checked' : ''}> Show only documents from the original Access import
         </label>
         <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:12.5px;">
           <input type="checkbox" id="f-pending" ${State.dashFilters.pendingOnly ? 'checked' : ''}> Show only documents marked for deletion
         </label>
-      </div>
+      </div>`}
       ${isAdmin() ? '<div class="btn-row"><button class="btn secondary" id="dash-export-csv">Export CSV</button></div>' : ''}
-      <div class="split">
+      <div class="split${isUser ? ' split-wide-left' : ''}">
         <div>
           <div class="grid-wrap" style="max-height:70vh;"><table class="grid" id="dash-grid"></table></div>
         </div>
@@ -42,9 +52,11 @@ export async function renderDashboardView(main) {
   document.getElementById('f-category').addEventListener('change', e => { State.dashFilters.category = e.target.value; refreshDashGrid(); });
   document.getElementById('f-author').addEventListener('change', e => { State.dashFilters.author = e.target.value; refreshDashGrid(); });
   document.getElementById('f-main_topic').addEventListener('change', e => { State.dashFilters.main_topic = e.target.value; refreshDashGrid(); });
-  document.getElementById('f-status').addEventListener('change', e => { State.dashFilters.workflow_status = e.target.value; refreshDashGrid(); });
-  document.getElementById('f-legacy').addEventListener('change', e => { State.dashFilters.legacyOnly = e.target.checked; refreshDashGrid(); });
-  document.getElementById('f-pending').addEventListener('change', e => { State.dashFilters.pendingOnly = e.target.checked; refreshDashGrid(); });
+  if (!isUser) {
+    document.getElementById('f-status').addEventListener('change', e => { State.dashFilters.workflow_status = e.target.value; refreshDashGrid(); });
+    document.getElementById('f-legacy').addEventListener('change', e => { State.dashFilters.legacyOnly = e.target.checked; refreshDashGrid(); });
+    document.getElementById('f-pending').addEventListener('change', e => { State.dashFilters.pendingOnly = e.target.checked; refreshDashGrid(); });
+  }
   document.getElementById('f-recipient').addEventListener('change', e => { State.dashFilters.recipient = e.target.value; refreshDashGrid(); });
   document.getElementById('f-collection').addEventListener('change', e => { State.dashFilters.collection = e.target.value; refreshDashGrid(); });
   document.getElementById('f-language').addEventListener('change', e => { State.dashFilters.language = e.target.value; refreshDashGrid(); });
@@ -59,7 +71,7 @@ export async function renderDashboardView(main) {
 }
 
 function buildDashQuery(selectAll) {
-  let q = sb.from('documents').select(selectAll ? '*' : 'document_id,category,author,main_topic,recipient,title,original_title,place,pending_deletion,is_preferred');
+  let q = sb.from('documents').select(selectAll ? '*' : 'document_id,category,author,main_topic,recipient,title,original_title,place,ref_date,pending_deletion,is_preferred');
   const f = State.dashFilters;
   if (f.search && f.search.trim()) {
     const like = likeSafe(f.search.trim());
@@ -90,14 +102,20 @@ async function filterByCollection(rows) {
   return rows.filter(r => idSet.has(r.document_id));
 }
 
+// Plain Users get two extra columns (Recipients, Ref. date) in the widened left-hand grid;
+// Operators/Admins keep the original compact set (see split-wide-left in the CSS).
+const DASH_SORTABLE_USER = { ...DASH_SORTABLE, recipient: 'Recipient(s)', ref_date: 'Ref. date' };
+
 export async function refreshDashGrid() {
   const grid = document.getElementById('dash-grid');
   if (!grid) return;
+  const isUser = State.currentRole === 'user';
+  const cols = isUser ? DASH_SORTABLE_USER : DASH_SORTABLE;
   let rows = await withStatus(buildDashQuery(false).order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Searching...');
   rows = await filterByCollection(rows);
   document.getElementById('dash-count').textContent = rows.length;
   const arrow = (col) => col !== State.dashSort.col ? '' : (State.dashSort.asc ? ' &uarr;' : ' &darr;');
-  grid.innerHTML = `<thead><tr>${Object.entries(DASH_SORTABLE).map(([col, label]) =>
+  grid.innerHTML = `<thead><tr>${Object.entries(cols).map(([col, label]) =>
       `<th data-sort="${col}">${label}${arrow(col)}</th>`).join('')}</tr></thead>
     <tbody>${rows.map(r => `<tr data-id="${esc(r.document_id)}" class="${String(r.document_id) === String(State.selectedDocId) ? 'selected' : ''}">
       <td>${esc(r.document_id)}${r.pending_deletion ? ' <span class="count-badge" style="padding:1px 6px;background:var(--danger);color:#fff;">pending deletion</span>' : ''}</td>
@@ -105,7 +123,8 @@ export async function refreshDashGrid() {
       <td>${esc(r.original_title)}</td>
       <td>${esc(labelOf(State.authors, r.author))}</td>
       <td>${esc(r.place)}</td>
-      <td>${esc(labelOf(State.categories, r.category))}</td></tr>`).join('')}</tbody>`;
+      <td>${esc(labelOf(State.categories, r.category))}</td>
+      ${isUser ? `<td>${(r.recipient || []).map(c => esc(labelOf(State.recipients, c))).join(', ')}</td><td>${esc(r.ref_date)}</td>` : ''}</tr>`).join('')}</tbody>`;
   grid.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', () => {
     const col = th.dataset.sort;
     if (State.dashSort.col === col) State.dashSort.asc = !State.dashSort.asc; else State.dashSort = { col, asc: true };

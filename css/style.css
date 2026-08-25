@@ -151,7 +151,8 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
 }
 
 .split { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; align-items: start; }
-@media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+.split.split-wide-left { grid-template-columns: 1.8fr 1fr; }
+@media (max-width: 900px) { .split, .split.split-wide-left { grid-template-columns: 1fr; } }
 
 .searchbar { display: flex; gap: 8px; margin-bottom: 10px; }
 .searchbar input { flex: 1; }
