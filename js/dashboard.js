@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260825180604';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260825180604';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260825203153';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260825203153';
 
 export async function renderDashboardView(main) {
   const isUser = State.currentRole === 'user';
@@ -71,11 +71,11 @@ export async function renderDashboardView(main) {
 }
 
 function buildDashQuery(selectAll) {
-  let q = sb.from('documents').select(selectAll ? '*' : 'document_id,category,author,main_topic,recipient,title,original_title,place,ref_date,pending_deletion,is_preferred');
+  let q = sb.from('documents').select(selectAll ? '*' : 'document_id,category,author,main_topic,recipient,title,original_title,en_title,place,ref_date,pending_deletion,is_preferred');
   const f = State.dashFilters;
   if (f.search && f.search.trim()) {
     const like = likeSafe(f.search.trim());
-    q = q.or(`title.ilike.${like},secondary_tags.ilike.${like}`);
+    q = q.or(`title.ilike.${like},original_title.ilike.${like},en_title.ilike.${like},secondary_tags.ilike.${like}`);
   }
   if (f.idSearch && f.idSearch.trim()) {
     const idNum = parseInt(f.idSearch.trim(), 10);
@@ -102,9 +102,11 @@ async function filterByCollection(rows) {
   return rows.filter(r => idSet.has(r.document_id));
 }
 
-// Plain Users get two extra columns (Recipients, Ref. date) in the widened left-hand grid;
-// Operators/Admins keep the original compact set (see split-wide-left in the CSS).
-const DASH_SORTABLE_USER = { ...DASH_SORTABLE, recipient: 'Recipient(s)', ref_date: 'Ref. date' };
+// Plain Users see the dedicated English-translated title (en_title) as a single "Title"
+// column instead of Title(EN)/Original title, plus Recipients/Ref. date in the widened
+// left-hand grid; Operators/Admins keep the original compact set (see split-wide-left in
+// the CSS) since they need to see both title fields as entered/edited.
+const DASH_SORTABLE_USER = { document_id: 'ID', en_title: 'Title', author: 'Author', place: 'Place', category: 'Category', recipient: 'Recipient(s)', ref_date: 'Ref. date' };
 
 export async function refreshDashGrid() {
   const grid = document.getElementById('dash-grid');
@@ -117,14 +119,22 @@ export async function refreshDashGrid() {
   const arrow = (col) => col !== State.dashSort.col ? '' : (State.dashSort.asc ? ' &uarr;' : ' &darr;');
   grid.innerHTML = `<thead><tr>${Object.entries(cols).map(([col, label]) =>
       `<th data-sort="${col}">${label}${arrow(col)}</th>`).join('')}</tr></thead>
-    <tbody>${rows.map(r => `<tr data-id="${esc(r.document_id)}" class="${String(r.document_id) === String(State.selectedDocId) ? 'selected' : ''}">
+    <tbody>${rows.map(r => {
+      const star = r.is_preferred ? '&#9733; ' : '';
+      const titleCells = isUser
+        ? `<td>${star}${esc(r.en_title) || '<span class="hint">(no title)</span>'}</td>`
+        : `<td>${star}${esc(r.title)}</td><td>${esc(r.original_title)}</td>`;
+      const extraCells = isUser
+        ? `<td>${(r.recipient || []).map(c => esc(labelOf(State.recipients, c))).join(', ')}</td><td>${esc(r.ref_date)}</td>`
+        : '';
+      return `<tr data-id="${esc(r.document_id)}" class="${String(r.document_id) === String(State.selectedDocId) ? 'selected' : ''}">
       <td>${esc(r.document_id)}${r.pending_deletion ? ' <span class="count-badge" style="padding:1px 6px;background:var(--danger);color:#fff;">pending deletion</span>' : ''}</td>
-      <td>${r.is_preferred ? '&#9733; ' : ''}${esc(r.title)}</td>
-      <td>${esc(r.original_title)}</td>
+      ${titleCells}
       <td>${esc(labelOf(State.authors, r.author))}</td>
       <td>${esc(r.place)}</td>
       <td>${esc(labelOf(State.categories, r.category))}</td>
-      ${isUser ? `<td>${(r.recipient || []).map(c => esc(labelOf(State.recipients, c))).join(', ')}</td><td>${esc(r.ref_date)}</td>` : ''}</tr>`).join('')}</tbody>`;
+      ${extraCells}</tr>`;
+    }).join('')}</tbody>`;
   grid.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', () => {
     const col = th.dataset.sort;
     if (State.dashSort.col === col) State.dashSort.asc = !State.dashSort.asc; else State.dashSort = { col, asc: true };

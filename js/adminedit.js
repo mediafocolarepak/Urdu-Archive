@@ -5,7 +5,7 @@
 // Collections are shown as a plain multiselect here (no per-collection page number, unlike the
 // document detail page) - editing page numbers still needs the full document detail page.
 
-import { sb, State, esc, isAdmin, withStatus, optionsHtml, BUCKET, DASH_ROW_LIMIT, likeSafe, saveDocumentCollections } from './core.js?v=20260825180604';
+import { sb, State, esc, isAdmin, withStatus, optionsHtml, BUCKET, DASH_ROW_LIMIT, likeSafe, saveDocumentCollections } from './core.js?v=20260825203153';
 
 const EDIT_COLUMNS = [
   ['title', 'Title (EN)', 'text'],

@@ -6,7 +6,7 @@ import {
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
-} from './core.js?v=20260825180604';
+} from './core.js?v=20260825203153';
 
 // Builds the "riassunto" text block that replaces the old grid of disabled input fields -
 // one line per group of related info, empty groups dropped entirely so the block stays short.
@@ -31,7 +31,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     </div>
     ${renderAllVersionsBar(doc, workSiblings)}
     <div class="field" style="font-size:13px;line-height:1.7;">
-      <div style="font-weight:600;font-size:14px;margin-bottom:2px;">${esc(doc.title)}${doc.original_title ? ' — ' + esc(doc.original_title) : ''}</div>
+      <div style="font-weight:600;font-size:14px;margin-bottom:2px;">${esc(doc.en_title) || '<span class="hint">(no title)</span>'}</div>
       ${renderDocSummary(doc)}
     </div>
     <div class="field">
