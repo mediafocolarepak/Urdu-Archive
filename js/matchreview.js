@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, withStatus, mergeWorks, likeSafe, DASH_ROW_LIMIT, downloadFromGDrive, BUCKET } from './core.js?v=20260825113041';
-import { renderDocDetail } from './docdetail.js?v=20260825113041';
+import { sb, State, esc, labelOf, optionsHtml, withStatus, mergeWorks, likeSafe, DASH_ROW_LIMIT, downloadFromGDrive, BUCKET } from './core.js?v=20260825114048';
+import { renderDocDetail } from './docdetail.js?v=20260825114048';
 
 export function rankByDateProximity(refDate, refs, dateField) {
   // Ranks by closeness to refDate, but never drops a candidate just because it (or
@@ -38,6 +38,7 @@ export async function renderMatchReviewView(main) {
         <div class="field"><label>Workflow status</label><select id="mr-f-status">${optionsHtml(State.statuses, f.workflow_status, true)}</select></div>
         <div class="field"><label>Recipient</label><select id="mr-f-recipient">${optionsHtml(State.recipients, f.recipient, true)}</select></div>
         <div class="field"><label>Collection</label><select id="mr-f-collection">${optionsHtml(State.collections, f.collection, true)}</select></div>
+        <div class="field"><label>Language</label><select id="mr-f-language">${optionsHtml(State.langs, f.language, true)}</select></div>
       </div>
       <div class="grid-wrap" style="max-height:34vh;"><table class="grid" id="mr-grid"></table></div>
       <div id="match-body" style="margin-top:14px;"></div>
@@ -50,6 +51,7 @@ export async function renderMatchReviewView(main) {
   document.getElementById('mr-f-status').addEventListener('change', e => { f.workflow_status = e.target.value; refreshMatchGrid(); });
   document.getElementById('mr-f-recipient').addEventListener('change', e => { f.recipient = e.target.value; refreshMatchGrid(); });
   document.getElementById('mr-f-collection').addEventListener('change', e => { f.collection = e.target.value; refreshMatchGrid(); });
+  document.getElementById('mr-f-language').addEventListener('change', e => { f.language = e.target.value; refreshMatchGrid(); });
 
   await refreshMatchGrid();
   await renderMatchBody();
@@ -70,6 +72,7 @@ function buildMatchQuery() {
   if (f.author) q = q.eq('author', f.author);
   if (f.workflow_status) q = q.eq('workflow_status', f.workflow_status);
   if (f.recipient) q = q.overlaps('recipient', [f.recipient]);
+  if (f.language) q = q.eq('language', f.language);
   return q;
 }
 

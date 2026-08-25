@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260825113041';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260825113041';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260825114048';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260825114048';
 
 export async function renderDashboardView(main) {
   main.innerHTML = `
@@ -17,6 +17,7 @@ export async function renderDashboardView(main) {
         <div class="field"><label>Workflow status</label><select id="f-status">${optionsHtml(State.statuses, State.dashFilters.workflow_status, true)}</select></div>
         <div class="field"><label>Recipient</label><select id="f-recipient">${optionsHtml(State.recipients, State.dashFilters.recipient, true)}</select></div>
         <div class="field"><label>Collection</label><select id="f-collection">${optionsHtml(State.collections, State.dashFilters.collection, true)}</select></div>
+        <div class="field"><label>Language</label><select id="f-language">${optionsHtml(State.langs, State.dashFilters.language, true)}</select></div>
       </div>
       <div class="field" style="display:flex;flex-wrap:wrap;gap:6px 24px;">
         <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:12.5px;">
@@ -46,6 +47,7 @@ export async function renderDashboardView(main) {
   document.getElementById('f-pending').addEventListener('change', e => { State.dashFilters.pendingOnly = e.target.checked; refreshDashGrid(); });
   document.getElementById('f-recipient').addEventListener('change', e => { State.dashFilters.recipient = e.target.value; refreshDashGrid(); });
   document.getElementById('f-collection').addEventListener('change', e => { State.dashFilters.collection = e.target.value; refreshDashGrid(); });
+  document.getElementById('f-language').addEventListener('change', e => { State.dashFilters.language = e.target.value; refreshDashGrid(); });
   if (isAdmin()) document.getElementById('dash-export-csv').addEventListener('click', exportDashboardCsv);
 
   // Escape hatch so docdetail.js can trigger a grid refresh after save/delete without
@@ -74,6 +76,7 @@ function buildDashQuery(selectAll) {
   if (f.legacyOnly) q = q.eq('legacy_migrated', true);
   if (f.pendingOnly) q = q.eq('pending_deletion', true);
   if (f.recipient) q = q.overlaps('recipient', [f.recipient]);
+  if (f.language) q = q.eq('language', f.language);
   return q;
 }
 
