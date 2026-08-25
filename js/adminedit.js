@@ -5,7 +5,7 @@
 // Collections are shown as a plain multiselect here (no per-collection page number, unlike the
 // document detail page) - editing page numbers still needs the full document detail page.
 
-import { sb, State, esc, isAdmin, withStatus, optionsHtml, BUCKET, DASH_ROW_LIMIT, likeSafe, saveDocumentCollections } from './core.js?v=20260825155642';
+import { sb, State, esc, isAdmin, withStatus, optionsHtml, BUCKET, DASH_ROW_LIMIT, likeSafe, saveDocumentCollections } from './core.js?v=20260825162441';
 
 const EDIT_COLUMNS = [
   ['title', 'Title (EN)', 'text'],
@@ -193,6 +193,13 @@ export async function refreshAdminEditGrid() {
     // Enter saves the row without needing to reach for the Save button.
     tr.addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); saveRow(); }
+    });
+    // Clicking anywhere in the row also saves it - lets you edit a field then just click
+    // elsewhere in the same row instead of hunting for the Save button. Skip Save (would just
+    // double-fire) and Delete (a click there means delete, not save).
+    tr.addEventListener('click', e => {
+      if (e.target.closest('.ae-save, .ae-delete')) return;
+      saveRow();
     });
     tr.querySelector('.ae-delete').addEventListener('click', async () => {
       if (!confirm(`Permanently delete document #${id}? This cannot be undone.`)) return;
