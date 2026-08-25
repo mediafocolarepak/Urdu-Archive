@@ -5,7 +5,7 @@
 // Collections are shown as a plain multiselect here (no per-collection page number, unlike the
 // document detail page) - editing page numbers still needs the full document detail page.
 
-import { sb, State, esc, isAdmin, withStatus, optionsHtml, BUCKET, DASH_ROW_LIMIT, likeSafe, saveDocumentCollections } from './core.js?v=20260825122146';
+import { sb, State, esc, isAdmin, withStatus, optionsHtml, BUCKET, DASH_ROW_LIMIT, likeSafe, saveDocumentCollections } from './core.js?v=20260825154817';
 
 const EDIT_COLUMNS = [
   ['title', 'Title (EN)', 'text'],
@@ -14,7 +14,7 @@ const EDIT_COLUMNS = [
   ['original_author', 'Author (free text)', 'text'],
   ['ref_date', 'Ref. date', 'date'],
   ['place', 'Place', 'text'],
-  ['recipient', 'Recipients', 'multiselect', () => State.recipients],
+  ['recipient', 'Recipient', 'select', () => State.recipients],
   ['category', 'Category', 'select', () => State.categories],
   ['main_topic', 'Main topic', 'select', () => State.mainTopics],
   ['secondary_tags', 'Secondary tags', 'text'],
@@ -102,28 +102,27 @@ function buildAdminEditQuery() {
   return q;
 }
 
+// Per-field width bumps requested 2026-08-25: Category +3ch, Title/Original title +10ch
+// over the grid's normal minimums (text inputs default to 120px ~= 17ch; select had no
+// explicit width before, so its baseline is estimated from its longest label).
+const WIDTH_OVERRIDES = { title: '30ch', original_title: '30ch', category: '19ch' };
+
 function cellHtml(doc, col) {
   const [name, , type, listFn] = col;
-  const value = doc[name];
+  const value = name === 'recipient' ? (doc[name] || [])[0] : doc[name];
+  const widthStyle = WIDTH_OVERRIDES[name] ? `min-width:${WIDTH_OVERRIDES[name]};` : '';
   if (type === 'select') {
-    return `<select data-f="${name}">${optionsHtml(listFn(), value, true)}</select>`;
-  }
-  if (type === 'multiselect') {
-    const list = listFn();
-    const selected = new Set(value || []);
-    return `<select data-f="${name}" multiple size="3" style="min-width:120px;">
-      ${list.map(([c, l]) => `<option value="${c}" ${selected.has(c) ? 'selected' : ''}>${l}</option>`).join('')}
-    </select>`;
+    return `<select data-f="${name}" style="${widthStyle}">${optionsHtml(listFn(), value, true)}</select>`;
   }
   if (type === 'checkbox') {
     return `<input type="checkbox" data-f="${name}" ${value ? 'checked' : ''}>`;
   }
-  return `<input data-f="${name}" type="${type}" value="${esc(value)}" style="min-width:120px;">`;
+  return `<input data-f="${name}" type="${type}" value="${esc(value)}" style="min-width:120px;${widthStyle}">`;
 }
 
 function collectionsCellHtml(docId, collectionsByDoc) {
   const selected = new Set((collectionsByDoc[docId] || []).map(c => c.collection_code));
-  return `<select data-collections multiple size="3" style="min-width:120px;">
+  return `<select data-collections multiple size="2" style="min-width:120px;">
     ${State.collections.map(([c, l]) => `<option value="${c}" ${selected.has(c) ? 'selected' : ''}>${l}</option>`).join('')}
   </select>`;
 }
@@ -134,12 +133,8 @@ function collectRowValues(tr) {
     const [name, , type] = col;
     const el = tr.querySelector(`[data-f="${name}"]`);
     if (type === 'checkbox') { out[name] = el.checked; }
-    else if (type === 'multiselect') {
-      const picked = Array.from(el.selectedOptions).map(o => o.value);
-      out[name] = picked.length ? picked : null;
-    } else {
-      out[name] = el.value === '' ? null : el.value;
-    }
+    else if (name === 'recipient') { out[name] = el.value ? [el.value] : null; }
+    else { out[name] = el.value === '' ? null : el.value; }
   }
   return out;
 }
@@ -174,7 +169,7 @@ export async function refreshAdminEditGrid() {
 
   grid.querySelectorAll('tbody tr').forEach(tr => {
     const id = tr.dataset.id;
-    tr.querySelector('.ae-save').addEventListener('click', async () => {
+    const saveRow = async () => {
       const vals = collectRowValues(tr);
       await withStatus(sb.from('documents').update(vals).eq('document_id', id), 'Saving...');
       const selectedCodes = Array.from(tr.querySelector('[data-collections]').selectedOptions).map(o => o.value);
@@ -184,6 +179,11 @@ export async function refreshAdminEditGrid() {
         return { collection_code: code, page_number: prior ? prior.page_number : null };
       });
       await saveDocumentCollections(id, payload);
+    };
+    tr.querySelector('.ae-save').addEventListener('click', saveRow);
+    // Enter saves the row without needing to reach for the Save button.
+    tr.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); saveRow(); }
     });
     tr.querySelector('.ae-delete').addEventListener('click', async () => {
       if (!confirm(`Permanently delete document #${id}? This cannot be undone.`)) return;

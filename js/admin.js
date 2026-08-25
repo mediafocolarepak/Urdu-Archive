@@ -1,4 +1,4 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260825122146';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260825154817';
 
 // ---------- Users ----------
 
