@@ -65,12 +65,13 @@ export const DASH_SORTABLE = { document_id: 'ID', title: 'Title (EN)', original_
 // two keep their fixed, CHECK-constrained vocabularies (see 15_versions_editors_schema.sql),
 // while the Hayat Editor's Autore/Argomento comboboxes are free-typing - a new value there
 // must never risk violating the documents table's constraints on author/main_topic.
-export const OPTION_LIST_NAMES = ['category', 'author', 'main_topic', 'recipient', 'language', 'workflow_status', 'media_type', 'source', 'collection', 'quality', 'operator', 'hayat_author', 'hayat_argomento'];
+export const OPTION_LIST_NAMES = ['category', 'author', 'main_topic', 'recipient', 'language', 'workflow_status', 'media_type', 'source', 'collection', 'quality', 'operator', 'hayat_author', 'hayat_argomento', 'membership_type'];
 export const OPTION_LIST_LABELS = {
   category: 'Category', author: 'Author', main_topic: 'Main topic', recipient: 'Recipient',
   language: 'Language', workflow_status: 'Workflow status', media_type: 'Media type',
   source: 'Source', collection: 'Collection', quality: 'Quality', operator: 'Operator',
   hayat_author: 'Hayat: Autore', hayat_argomento: 'Hayat: Argomento',
+  membership_type: 'Focolare membership type',
 };
 
 export async function loadOptions() {
@@ -359,6 +360,40 @@ async function showApp(session, renderDashboardTab) {
 
   await loadOptions();
   renderDashboardTab();
+  await maybeShowSplash();
+}
+
+// ---------- Splash-screen announcements ----------
+// Shown once per browser session (not on every tab switch), and again after a fresh
+// login - the sessionStorage flag is set here and cleared by the sign-out handler below.
+
+async function maybeShowSplash() {
+  if (sessionStorage.getItem('splashShown')) return;
+  const { data, error } = await sb.from('splash_messages').select('*').order('created_at', { ascending: false }).limit(1);
+  if (error || !data || !data.length) { sessionStorage.setItem('splashShown', '1'); return; }
+  const msg = data[0];
+  const backdrop = document.createElement('div');
+  backdrop.className = 'overlay-backdrop';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel">
+      <h2>Announcements</h2>
+      <div class="overlay-message">${esc(msg.message_text)}</div>
+      <p class="hint">Posted by ${esc(msg.created_by_email)} on ${esc((msg.created_at || '').slice(0, 10))}</p>
+      <div class="btn-row" style="justify-content:flex-end;">
+        <button class="btn" id="splash-dismiss-btn">Got it</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  document.getElementById('splash-dismiss-btn').addEventListener('click', () => {
+    backdrop.remove();
+    sessionStorage.setItem('splashShown', '1');
+  });
+}
+
+// Populates the signup form's membership-type dropdown before login (anon-readable list).
+export async function loadMembershipOptionsForSignup() {
+  const { data, error } = await sb.from('option_lists').select('code,label').eq('list_name', 'membership_type').order('sort_order');
+  return error ? [] : data.map(r => [r.code, r.label]);
 }
 
 // Called explicitly from app.js, not run automatically on import - tests.html imports
@@ -373,17 +408,47 @@ export function wireAuthButtons() {
     if (error) errBox.textContent = error.message;
   });
 
+  const signupFields = document.getElementById('signup-fields');
+  const switchLink = document.getElementById('auth-switch-link');
+  const switchHint = document.getElementById('auth-switch-hint');
+  let signupMode = false;
+
+  function setSignupMode(on) {
+    signupMode = on;
+    signupFields.style.display = on ? 'block' : 'none';
+    document.getElementById('login-btn').style.display = on ? 'none' : 'flex';
+    document.getElementById('signup-btn').style.display = on ? 'flex' : 'none';
+    switchHint.textContent = on ? 'Already have an account?' : 'New here?';
+    switchLink.textContent = on ? 'Sign in' : 'Sign up';
+    document.getElementById('login-error').textContent = '';
+  }
+  switchLink.addEventListener('click', () => setSignupMode(!signupMode));
+  setSignupMode(false);
+
+  loadMembershipOptionsForSignup().then(rows => {
+    document.getElementById('signup-membership').innerHTML =
+      '<option value=""></option>' + rows.map(([c, l]) => `<option value="${c}">${esc(l)}</option>`).join('');
+  });
+
   document.getElementById('signup-btn').addEventListener('click', async () => {
     const email = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
+    const full_name = document.getElementById('signup-fullname').value.trim();
+    const city = document.getElementById('signup-city').value.trim();
+    const membership_type = document.getElementById('signup-membership').value;
+    const phone = document.getElementById('signup-phone').value.trim();
     const errBox = document.getElementById('login-error');
     errBox.textContent = '';
     if (!email || password.length < 6) { errBox.textContent = 'Email and password (min. 6 characters) are required.'; return; }
-    const { error } = await sb.auth.signUp({ email, password });
+    if (!full_name || !city || !membership_type || !phone) { errBox.textContent = 'Full name, city, membership type and phone are required.'; return; }
+    const { error } = await sb.auth.signUp({ email, password, options: { data: { full_name, city, membership_type, phone } } });
     if (error) { errBox.textContent = error.message; return; }
     errBox.style.color = 'var(--accent)';
     errBox.textContent = 'Sign-up submitted. Check your email to confirm, then sign in.';
   });
 
-  document.getElementById('logout-btn').addEventListener('click', () => sb.auth.signOut());
+  document.getElementById('logout-btn').addEventListener('click', () => {
+    sessionStorage.removeItem('splashShown');
+    sb.auth.signOut();
+  });
 }
