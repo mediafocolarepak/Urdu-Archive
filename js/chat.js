@@ -3,7 +3,7 @@
 // admins see every message and can reply + dismiss. Everything stays in chat_messages
 // forever - "dismiss" is a soft flag hiding a row from the admin's default list, not a delete.
 
-import { sb, esc, isAdmin, withStatus } from './core.js?v=20260826120000';
+import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20260826160000';
 
 const REPORT_TYPES = [
   ['REVISION', 'Revision'],
@@ -12,7 +12,6 @@ const REPORT_TYPES = [
   ['SUGGESTION', 'Suggestion'],
 ];
 const REPORT_TYPE_LABEL = Object.fromEntries(REPORT_TYPES);
-const DOC_ID_REQUIRED_TYPES = ['REVISION', 'DOWNLOAD_ERROR'];
 
 function formatDateTime(iso) {
   return esc((iso || '').slice(0, 16).replace('T', ' '));
@@ -21,6 +20,8 @@ function formatDateTime(iso) {
 // ---------- User-facing chat ----------
 
 export async function renderChatView(main) {
+  const { data: { user } } = await sb.auth.getUser();
+  markChatSeen('user_' + user.id);
   main.innerHTML = `
     <div class="panel">
       <h2>Chat with Admin</h2>
@@ -29,25 +30,18 @@ export async function renderChatView(main) {
         <div class="field"><label>Report type</label>
           <select id="chat-report-type">${REPORT_TYPES.map(([c, l]) => `<option value="${c}">${l}</option>`).join('')}</select>
         </div>
-        <div class="field" id="chat-docid-field"><label>Document ID</label><input id="chat-document-id" type="number" min="1"></div>
+        <div class="field"><label>Document ID <span class="hint">(optional)</span></label><input id="chat-document-id" type="number" min="1" value="${State.selectedDocId ? esc(State.selectedDocId) : ''}"></div>
       </div>
       <div class="field"><label>Message</label><textarea id="chat-message-text" rows="3"></textarea></div>
       <div class="btn-row"><button class="btn" id="chat-send-btn">Send</button></div>
     </div>`;
   await refreshChatThread();
-  const typeSelect = document.getElementById('chat-report-type');
-  const docIdField = document.getElementById('chat-docid-field');
-  const syncDocIdVisibility = () => { docIdField.style.display = DOC_ID_REQUIRED_TYPES.includes(typeSelect.value) ? 'block' : 'none'; };
-  typeSelect.addEventListener('change', syncDocIdVisibility);
-  syncDocIdVisibility();
 
   document.getElementById('chat-send-btn').addEventListener('click', async () => {
-    const report_type = typeSelect.value;
+    const report_type = document.getElementById('chat-report-type').value;
     const document_id = document.getElementById('chat-document-id').value.trim();
     const message_text = document.getElementById('chat-message-text').value.trim();
     if (!message_text) { alert('Please enter a message.'); return; }
-    if (DOC_ID_REQUIRED_TYPES.includes(report_type) && !document_id) { alert('Document ID is required for Revision and Download error reports.'); return; }
-    const { data: { user } } = await sb.auth.getUser();
     await withStatus(sb.from('chat_messages').insert({
       user_id: user.id, user_email: user.email, report_type,
       document_id: document_id ? parseInt(document_id, 10) : null,
@@ -83,6 +77,8 @@ async function refreshChatThread() {
 
 export async function renderAdminMessagesView(main) {
   if (!isAdmin()) { main.innerHTML = '<div class="empty-msg">Admin access required.</div>'; return; }
+  const { data: { user } } = await sb.auth.getUser();
+  markChatSeen('admin_' + user.id);
   main.innerHTML = `
     <div class="panel">
       <h2>Messages</h2>
@@ -151,4 +147,64 @@ async function refreshAdminMessages() {
       await refreshAdminMessages();
     });
   });
+}
+
+// ---------- Live "new message" notifications ----------
+// "Seen" is tracked per role+user in localStorage (not sessionStorage, since it must survive
+// across logins - the whole point is to still notify someone who was offline when a message
+// arrived). A Supabase Realtime subscription covers the "online right now" case; the one-off
+// backlog check covers "offline, catches up at next login". Both paths funnel into the same
+// toast so there's only one notification UI to maintain.
+
+function seenKey(who) { return `chatSeenAt_${who}`; }
+function getSeenAt(who) { return localStorage.getItem(seenKey(who)) || '1970-01-01T00:00:00.000Z'; }
+function markChatSeen(who) { localStorage.setItem(seenKey(who), new Date().toISOString()); }
+
+function showChatToast(title, message, onView) {
+  document.querySelectorAll('.toast-notification').forEach(t => t.remove());
+  const toast = document.createElement('div');
+  toast.className = 'toast-notification';
+  toast.innerHTML = `
+    <div class="toast-title">${esc(title)}</div>
+    <div class="toast-body">${esc(message)}</div>
+    <div class="btn-row" style="margin:8px 0 0;">
+      <button class="btn" id="toast-view-btn" style="padding:4px 10px;">View</button>
+      <button class="btn secondary" id="toast-close-btn" style="padding:4px 10px;">Dismiss</button>
+    </div>`;
+  document.body.appendChild(toast);
+  document.getElementById('toast-close-btn').addEventListener('click', () => toast.remove());
+  document.getElementById('toast-view-btn').addEventListener('click', () => { toast.remove(); onView(); });
+}
+
+let notifyChannel = null;
+
+// Called once per login (from app.js, after the dashboard is first shown). navigateToChat
+// should switch to the Chat/Messages tab - passed in rather than imported to avoid a circular
+// import with app.js (core.js's star-import convention: feature modules never import each other).
+export async function initChatNotifications(navigateToChat) {
+  if (notifyChannel) { sb.removeChannel(notifyChannel); notifyChannel = null; }
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return;
+
+  if (isAdmin()) {
+    const who = 'admin_' + user.id;
+    const { data } = await sb.from('chat_messages').select('id').eq('dismissed', false).gt('created_at', getSeenAt(who));
+    if (data && data.length) showChatToast('New Messages', `${data.length} report${data.length > 1 ? 's' : ''} waiting for a reply.`, navigateToChat);
+
+    notifyChannel = sb.channel('chat-admin-notify')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, () => {
+        showChatToast('New Messages', 'A user just sent a new report.', navigateToChat);
+      })
+      .subscribe();
+  } else {
+    const who = 'user_' + user.id;
+    const { data } = await sb.from('chat_messages').select('id').eq('user_id', user.id).not('reply_text', 'is', null).gt('replied_at', getSeenAt(who));
+    if (data && data.length) showChatToast('New reply from Admin', 'Admin replied to one of your messages.', navigateToChat);
+
+    notifyChannel = sb.channel('chat-user-notify-' + user.id)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages', filter: `user_id=eq.${user.id}` }, payload => {
+        if (payload.new.reply_text) showChatToast('New reply from Admin', 'Admin replied to your message.', navigateToChat);
+      })
+      .subscribe();
+  }
 }
