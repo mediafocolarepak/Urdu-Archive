@@ -1,4 +1,4 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260826120000';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260826160000';
 
 // ---------- Users ----------
 
@@ -18,10 +18,13 @@ export async function renderUsersView(main) {
           <td><select class="role-select" data-uid="${esc(r.user_id)}">${optionsHtml([['user', 'User'], ['operator', 'Operator'], ['admin', 'Admin']], r.role, false)}</select></td>
           <td>${esc(p.full_name)}</td>
           <td>${esc(p.city)}</td>
-          <td>${esc(p.membership_type)}</td>
+          <td>${esc(labelOf(State.optionListsByName.membership_type || [], p.membership_type))}</td>
           <td>${esc(p.phone)}</td>
           <td>${esc((r.created_at || '').slice(0, 10))}</td>
-          <td><button class="btn danger remove-user-btn" data-uid="${esc(r.user_id)}" data-email="${esc(r.email)}" style="padding:4px 10px;">Remove access</button></td></tr>`; }).join('')}</tbody>
+          <td>
+            <button class="btn secondary edit-profile-btn" data-uid="${esc(r.user_id)}" data-email="${esc(r.email)}" style="padding:4px 10px;">Edit</button>
+            <button class="btn danger remove-user-btn" data-uid="${esc(r.user_id)}" data-email="${esc(r.email)}" style="padding:4px 10px;">Remove access</button>
+          </td></tr>`; }).join('')}</tbody>
       </table></div>
       <p class="hint" style="margin-top:8px;">"Remove access" drops the person back to no role at all (they lose the app entirely until re-registered or re-added) - it does not delete their login/auth account. To fully delete an account, use the Supabase Dashboard (Authentication → Users).</p>
     </div>`;
@@ -33,6 +36,39 @@ export async function renderUsersView(main) {
     await withStatus(sb.from('user_roles').delete().eq('user_id', btn.dataset.uid), 'Removing...');
     await renderUsersView(main);
   }));
+  main.querySelectorAll('.edit-profile-btn').forEach(btn => btn.addEventListener('click', () => {
+    showEditProfileModal(btn.dataset.uid, btn.dataset.email, profileByUid[btn.dataset.uid] || {}, main);
+  }));
+}
+
+function showEditProfileModal(uid, email, profile, main) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'overlay-backdrop';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel">
+      <h2>Edit profile <span class="hint">— ${esc(email)}</span></h2>
+      <div class="field"><label>Full name</label><input id="edit-profile-fullname" value="${esc(profile.full_name)}"></div>
+      <div class="field"><label>City</label><input id="edit-profile-city" value="${esc(profile.city)}"></div>
+      <div class="field"><label>Focolare membership type</label>
+        <select id="edit-profile-membership">${optionsHtml(State.optionListsByName.membership_type || [], profile.membership_type, true)}</select>
+      </div>
+      <div class="field"><label>Mobile phone</label><input id="edit-profile-phone" value="${esc(profile.phone)}"></div>
+      <div class="btn-row" style="justify-content:flex-end;">
+        <button class="btn secondary" id="edit-profile-cancel">Cancel</button>
+        <button class="btn" id="edit-profile-save">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  document.getElementById('edit-profile-cancel').addEventListener('click', () => backdrop.remove());
+  document.getElementById('edit-profile-save').addEventListener('click', async () => {
+    const full_name = document.getElementById('edit-profile-fullname').value.trim();
+    const city = document.getElementById('edit-profile-city').value.trim();
+    const membership_type = document.getElementById('edit-profile-membership').value;
+    const phone = document.getElementById('edit-profile-phone').value.trim();
+    await withStatus(sb.from('user_profiles').upsert({ user_id: uid, email, full_name, city, membership_type, phone }), 'Saving...');
+    backdrop.remove();
+    await renderUsersView(main);
+  });
 }
 
 // ---------- Options (admin-editable dropdown lists) ----------
