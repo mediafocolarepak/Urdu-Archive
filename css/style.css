@@ -154,6 +154,19 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
 .split.split-wide-left { grid-template-columns: 1.8fr 1fr; }
 @media (max-width: 900px) { .split, .split.split-wide-left { grid-template-columns: 1fr; } }
 
+/* Dashboard card list: the mobile-friendly alternative to the wide, horizontally-scrolling
+   #dash-grid table above. Both are always rendered (see dashboard.js) - this query is the
+   only thing deciding which one is visible, so there's no JS resize-listener to maintain. */
+.dash-cards { display: none; }
+@media (max-width: 700px) {
+  .dash-grid-wrap { display: none; }
+  .dash-cards { display: block; max-height: 70vh; overflow: auto; }
+}
+.dash-card { padding: 10px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.dash-card:hover { background: var(--accent-soft); }
+.dash-card-title { font-weight: 600; font-size: 13.5px; margin-bottom: 3px; }
+.dash-card-meta { font-size: 12px; color: var(--ink-soft); }
+
 .searchbar { display: flex; gap: 8px; margin-bottom: 10px; }
 .searchbar input { flex: 1; }
 
