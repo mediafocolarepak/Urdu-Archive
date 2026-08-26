@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260826160000';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260826160000';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260826170000';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260826170000';
 
 export async function renderDashboardView(main) {
   const isUser = State.currentRole === 'user';
@@ -40,7 +40,8 @@ export async function renderDashboardView(main) {
       ${isAdmin() ? '<div class="btn-row"><button class="btn secondary" id="dash-export-csv">Export CSV</button></div>' : ''}
       <div class="split${isUser ? ' split-wide-left' : ''}">
         <div>
-          <div class="grid-wrap" style="max-height:70vh;"><table class="grid" id="dash-grid"></table></div>
+          <div class="grid-wrap dash-grid-wrap" style="max-height:70vh;"><table class="grid" id="dash-grid"></table></div>
+          <div class="dash-cards" id="dash-cards"></div>
         </div>
         <div class="panel" id="doc-detail" style="margin:0;"></div>
       </div>
@@ -140,11 +141,26 @@ export async function refreshDashGrid() {
     if (State.dashSort.col === col) State.dashSort.asc = !State.dashSort.asc; else State.dashSort = { col, asc: true };
     refreshDashGrid();
   }));
-  grid.querySelectorAll('tbody tr').forEach(tr => tr.addEventListener('click', async () => {
-    State.selectedDocId = tr.dataset.id;
-    await refreshDashGrid();
-    await renderDocDetail(State.selectedDocId);
-  }));
+
+  const selectDoc = async id => { State.selectedDocId = id; await refreshDashGrid(); await renderDocDetail(State.selectedDocId); };
+  grid.querySelectorAll('tbody tr').forEach(tr => tr.addEventListener('click', () => selectDoc(tr.dataset.id)));
+
+  // Card list is the mobile-friendly alternative to the wide, horizontally-scrolling table
+  // above - same rows, same click behaviour, just stacked instead of columnar. Both are
+  // always in the DOM; a CSS media query (css/style.css) picks one per screen width.
+  const cardsBox = document.getElementById('dash-cards');
+  if (cardsBox) {
+    cardsBox.innerHTML = rows.map(r => {
+      const star = r.is_preferred ? '&#9733; ' : '';
+      const title = isUser ? (esc(r.en_title) || '(no title)') : esc(r.title);
+      return `<div class="dash-card" data-id="${esc(r.document_id)}">
+        <div class="dash-card-title">${star}${title}</div>
+        <div class="dash-card-meta">#${esc(r.document_id)} &middot; ${esc(labelOf(State.authors, r.author))} &middot; ${esc(r.place)} &middot; ${esc(labelOf(State.categories, r.category))}</div>
+        ${r.pending_deletion ? '<span class="count-badge" style="padding:1px 6px;background:var(--danger);color:#fff;">pending deletion</span>' : ''}
+      </div>`;
+    }).join('') || '<div class="empty-msg">No documents match the current filters.</div>';
+    cardsBox.querySelectorAll('.dash-card').forEach(card => card.addEventListener('click', () => selectDoc(card.dataset.id)));
+  }
 }
 
 function csvEscape(v) {
