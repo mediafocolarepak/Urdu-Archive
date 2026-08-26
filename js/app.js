@@ -1,14 +1,15 @@
-import { State, canWrite, isAdmin, boot, wireAuthButtons } from './core.js?v=20260825220019';
-import { renderDashboardView } from './dashboard.js?v=20260825220019';
-import { renderReportsView } from './reports.js?v=20260825220019';
-import { renderHayatView } from './hayatindex.js?v=20260825220019';
-import { renderMatchReviewView } from './matchreview.js?v=20260825220019';
-import { renderBulkImportView } from './bulkimport.js?v=20260825220019';
-import { renderUsersView, renderOptionsView } from './admin.js?v=20260825220019';
-import { renderAdminEditView } from './adminedit.js?v=20260825220019';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260825220019';
-import { renderHayatEditorView } from './hayateditor.js?v=20260825220019';
-import { renderUserGuideView } from './userguide.js?v=20260825220019';
+import { State, canWrite, isAdmin, boot, wireAuthButtons } from './core.js?v=20260826120000';
+import { renderDashboardView } from './dashboard.js?v=20260826120000';
+import { renderReportsView } from './reports.js?v=20260826120000';
+import { renderHayatView } from './hayatindex.js?v=20260826120000';
+import { renderMatchReviewView } from './matchreview.js?v=20260826120000';
+import { renderBulkImportView } from './bulkimport.js?v=20260826120000';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260826120000';
+import { renderChatView, renderAdminMessagesView } from './chat.js?v=20260826120000';
+import { renderAdminEditView } from './adminedit.js?v=20260826120000';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260826120000';
+import { renderHayatEditorView } from './hayateditor.js?v=20260826120000';
+import { renderUserGuideView } from './userguide.js?v=20260826120000';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -24,7 +25,8 @@ function getTabs() {
     tabs.push({ id: 'hayateditor', label: 'Hayat Editor' });
     tabs.push({ id: 'bulkimport', label: 'Bulk Import' });
   }
-  if (isAdmin()) { tabs.push({ id: 'users', label: 'Users' }); tabs.push({ id: 'options', label: 'Options' }); tabs.push({ id: 'adminedit', label: 'Edit Records' }); }
+  if (isAdmin()) { tabs.push({ id: 'users', label: 'Users' }); tabs.push({ id: 'options', label: 'Options' }); tabs.push({ id: 'adminedit', label: 'Edit Records' }); tabs.push({ id: 'announcements', label: 'Announcements' }); }
+  tabs.push({ id: 'chat', label: isAdmin() ? 'Messages' : 'Chat' });
   tabs.push({ id: 'help', label: 'Help' });
   return tabs;
 }
@@ -50,6 +52,8 @@ function renderTab(id) {
   else if (id === 'workconsolidation') renderWorkConsolidationView(main);
   else if (id === 'hayateditor') renderHayatEditorView(main);
   else if (id === 'bulkimport') renderBulkImportView(main);
+  else if (id === 'announcements') renderAnnouncementsView(main);
+  else if (id === 'chat') { isAdmin() ? renderAdminMessagesView(main) : renderChatView(main); }
   else if (id === 'help') renderUserGuideView(main);
 }
 

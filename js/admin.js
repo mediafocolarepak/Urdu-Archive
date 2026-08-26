@@ -1,21 +1,27 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260825220019';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260826120000';
 
 // ---------- Users ----------
 
 export async function renderUsersView(main) {
   if (!isAdmin()) { main.innerHTML = '<div class="empty-msg">Admin access required.</div>'; return; }
   const rows = await withStatus(sb.from('user_roles').select('*').order('email'));
+  const profileRows = await withStatus(sb.from('user_profiles').select('*'));
+  const profileByUid = {}; for (const p of profileRows) profileByUid[p.user_id] = p;
   main.innerHTML = `
     <div class="panel">
       <h2>Users <span class="count-badge">${rows.length}</span></h2>
       <p class="hint">User = read/search only. Operator = can create and edit, and mark documents for deletion. Admin = can also delete permanently and manage roles.</p>
       <div class="grid-wrap"><table class="grid" id="users-grid">
-        <thead><tr><th>Email</th><th>Role</th><th>Since</th><th></th></tr></thead>
-        <tbody>${rows.map(r => `<tr data-uid="${esc(r.user_id)}">
+        <thead><tr><th>Email</th><th>Role</th><th>Full name</th><th>City</th><th>Membership</th><th>Phone</th><th>Since</th><th></th></tr></thead>
+        <tbody>${rows.map(r => { const p = profileByUid[r.user_id] || {}; return `<tr data-uid="${esc(r.user_id)}">
           <td>${esc(r.email)}</td>
           <td><select class="role-select" data-uid="${esc(r.user_id)}">${optionsHtml([['user', 'User'], ['operator', 'Operator'], ['admin', 'Admin']], r.role, false)}</select></td>
+          <td>${esc(p.full_name)}</td>
+          <td>${esc(p.city)}</td>
+          <td>${esc(p.membership_type)}</td>
+          <td>${esc(p.phone)}</td>
           <td>${esc((r.created_at || '').slice(0, 10))}</td>
-          <td><button class="btn danger remove-user-btn" data-uid="${esc(r.user_id)}" data-email="${esc(r.email)}" style="padding:4px 10px;">Remove access</button></td></tr>`).join('')}</tbody>
+          <td><button class="btn danger remove-user-btn" data-uid="${esc(r.user_id)}" data-email="${esc(r.email)}" style="padding:4px 10px;">Remove access</button></td></tr>`; }).join('')}</tbody>
       </table></div>
       <p class="hint" style="margin-top:8px;">"Remove access" drops the person back to no role at all (they lose the app entirely until re-registered or re-added) - it does not delete their login/auth account. To fully delete an account, use the Supabase Dashboard (Authentication → Users).</p>
     </div>`;
@@ -100,4 +106,41 @@ async function renderOptionsEditor() {
     await loadOptions();
     await renderOptionsEditor();
   });
+}
+
+// ---------- Announcements (splash-screen editor, admin-only) ----------
+
+export async function renderAnnouncementsView(main) {
+  if (!isAdmin()) { main.innerHTML = '<div class="empty-msg">Admin access required.</div>'; return; }
+  main.innerHTML = `
+    <div class="panel">
+      <h2>Announcements <span class="hint">— shown to every user in a splash screen on their next login</span></h2>
+      <div class="field"><label>New announcement text</label><textarea id="splash-new-text" rows="4"></textarea></div>
+      <div class="btn-row"><button class="btn" id="splash-publish-btn">Publish</button></div>
+    </div>
+    <div class="panel">
+      <h2>History</h2>
+      <div class="grid-wrap"><table class="grid" id="splash-history-grid">
+        <thead><tr><th>Date</th><th>Published by</th><th>Message</th></tr></thead>
+        <tbody id="splash-history-body"></tbody>
+      </table></div>
+    </div>`;
+  await refreshAnnouncementsHistory();
+  document.getElementById('splash-publish-btn').addEventListener('click', async () => {
+    const text = document.getElementById('splash-new-text').value.trim();
+    if (!text) { alert('Announcement text is required.'); return; }
+    const { data: { user } } = await sb.auth.getUser();
+    await withStatus(sb.from('splash_messages').insert({ message_text: text, created_by_email: user.email }), 'Publishing...');
+    document.getElementById('splash-new-text').value = '';
+    await refreshAnnouncementsHistory();
+  });
+}
+
+async function refreshAnnouncementsHistory() {
+  const rows = await withStatus(sb.from('splash_messages').select('*').order('created_at', { ascending: false }));
+  document.getElementById('splash-history-body').innerHTML = rows.map(r => `<tr>
+    <td>${esc((r.created_at || '').slice(0, 16).replace('T', ' '))}</td>
+    <td>${esc(r.created_by_email)}</td>
+    <td style="white-space:normal;">${esc(r.message_text)}</td>
+  </tr>`).join('') || '<tr><td colspan="3">No announcements yet.</td></tr>';
 }
