@@ -6,8 +6,8 @@
 // the meantime), per the project's "don't pollute a fixed vocabulary with unreviewed values"
 // rule that also applies to Bulk Import and the rest of this session's schema changes.
 
-import { sb, State, esc, today, canWrite, withStatus, withStatusCount, labelOf, extractHayatRowToDocument, SessionCache } from './core.js?v=20260827210000';
-import { comboboxHtml, wireCombobox } from './combobox.js?v=20260827210000';
+import { sb, State, esc, today, canWrite, withStatus, withStatusCount, labelOf, extractHayatRowToDocument, SessionCache } from './core.js?v=20260827220000';
+import { comboboxHtml, wireCombobox } from './combobox.js?v=20260827220000';
 
 let currentRows = [];
 
@@ -418,8 +418,8 @@ async function showPromptModal() {
   // try/catch - if that ever failed, the save silently did nothing with no error shown,
   // which matches a real report of "Save looked like it worked but nothing persisted").
   try {
-    const { data } = await withStatus(sb.from('app_settings').select('value').eq('key', PROMPT_SETTING_KEY));
-    textarea.value = (data && data[0] && data[0].value) || '';
+    const rows = await withStatus(sb.from('app_settings').select('value').eq('key', PROMPT_SETTING_KEY));
+    textarea.value = (rows && rows[0] && rows[0].value) || '';
   } catch (err) {
     textarea.value = '';
     resultBox.style.color = 'var(--danger)';
