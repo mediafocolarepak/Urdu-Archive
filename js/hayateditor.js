@@ -6,8 +6,8 @@
 // the meantime), per the project's "don't pollute a fixed vocabulary with unreviewed values"
 // rule that also applies to Bulk Import and the rest of this session's schema changes.
 
-import { sb, State, esc, today, canWrite, withStatus, labelOf, extractHayatRowToDocument, SessionCache } from './core.js?v=20260827140000';
-import { comboboxHtml, wireCombobox } from './combobox.js?v=20260827140000';
+import { sb, State, esc, today, canWrite, withStatus, setStatus, labelOf, extractHayatRowToDocument, SessionCache } from './core.js?v=20260827160000';
+import { comboboxHtml, wireCombobox } from './combobox.js?v=20260827160000';
 
 let currentRows = [];
 
@@ -61,6 +61,7 @@ async function populateEditionSelect() {
   }
   sel.innerHTML = editions.map(e => `<option value="${esc(e)}" ${e === State.hayatEditorEdition ? 'selected' : ''}>${esc(e)}</option>`).join('')
     || '<option value="">No editions yet</option>';
+  sel.value = State.hayatEditorEdition; // some browsers don't re-sync the displayed value from `selected` alone after an innerHTML rebuild
 }
 
 const HE_COMBO_FIELDS = [
@@ -296,14 +297,18 @@ async function runCsvImport(text, edition) {
     });
     return obj;
   });
-  if (!confirm(`Import ${rows.length} row(s) as new entries in edition "${edition}"? This appends new rows - it does not update existing ones.`)) return;
+  // No confirm() dialog here on purpose: clicking "Import" in the modal (with the edition
+  // already typed in) is itself the explicit confirmation. Native confirm()/alert() are
+  // unreliable inside an installed/standalone PWA on several mobile browsers - they can
+  // resolve immediately as "cancelled" with no visible dialog, which silently skipped this
+  // entire import (the bug this comment replaces).
   let maxRows = await withStatus(sb.from('hayat_indice').select('id').order('id', { ascending: false }).limit(1));
   let nextId = (maxRows[0]?.id || 0) + 1;
   for (const r of rows) {
     await withStatus(sb.from('hayat_indice').insert({ ...r, id: nextId, mese_anno: edition }), 'Importing...');
     nextId++;
   }
-  alert(`Imported ${rows.length} row(s).`);
+  setStatus(`Imported ${rows.length} row(s) into ${edition}.`, false);
   State.hayatEditorEdition = edition;
   await populateEditionSelect();
   await refreshHayatEditorGrid();
