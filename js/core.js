@@ -372,14 +372,16 @@ async function maybeShowSplash() {
   const { data, error } = await sb.from('splash_messages').select('*').order('created_at', { ascending: false }).limit(1);
   if (error || !data || !data.length) { sessionStorage.setItem('splashShown', '1'); return; }
   const msg = data[0];
+  const authorName = await getDisplayNameByEmail(msg.created_by_email);
   const backdrop = document.createElement('div');
   backdrop.className = 'overlay-backdrop';
   backdrop.innerHTML = `
     <div class="panel overlay-panel">
       <h2>Announcements</h2>
       <div class="overlay-message">${esc(msg.message_text)}</div>
-      <p class="hint">Posted by ${esc(msg.created_by_email)} on ${esc((msg.created_at || '').slice(0, 10))}</p>
+      <p class="hint">Posted by ${esc(authorName)} on ${esc((msg.created_at || '').slice(0, 10))}</p>
       <div class="btn-row" style="justify-content:flex-end;">
+        <button class="btn secondary" id="splash-history-btn">Previous Announcements</button>
         <button class="btn" id="splash-dismiss-btn">Got it</button>
       </div>
     </div>`;
@@ -388,6 +390,43 @@ async function maybeShowSplash() {
     backdrop.remove();
     sessionStorage.setItem('splashShown', '1');
   });
+  document.getElementById('splash-history-btn').addEventListener('click', showSplashHistory);
+}
+
+// Read-only scrollable list of every past announcement, opened from the splash screen's
+// "Previous Announcements" button. Stacks on top of the splash overlay (which stays open
+// underneath) rather than replacing it, so "Got it" still works normally after closing this.
+async function showSplashHistory() {
+  const { data } = await sb.from('splash_messages').select('*').order('created_at', { ascending: false });
+  const rows = data || [];
+  const names = await Promise.all(rows.map(r => getDisplayNameByEmail(r.created_by_email)));
+  const backdrop = document.createElement('div');
+  backdrop.className = 'overlay-backdrop';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel">
+      <h2>Previous Announcements</h2>
+      <div class="chat-thread" style="max-height:60vh;">
+        ${rows.map((r, i) => `<div class="field" style="margin-bottom:8px;">
+            <div class="hint">${esc((r.created_at || '').slice(0, 10))} &middot; ${esc(names[i])}</div>
+            <div class="overlay-message">${esc(r.message_text)}</div>
+          </div>`).join('') || '<div class="empty-msg">No previous announcements.</div>'}
+      </div>
+      <div class="btn-row" style="justify-content:flex-end;">
+        <button class="btn" id="splash-history-close-btn">Close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  document.getElementById('splash-history-close-btn').addEventListener('click', () => backdrop.remove());
+}
+
+// Resolves an email to its user_profiles.full_name, falling back to the email itself if no
+// profile/name is on file. RLS only lets this succeed for admins' profiles when the caller
+// isn't that same user or another admin (see sql/18) - fine here since every caller is an
+// admin's own email (splash authors, chat repliers).
+export async function getDisplayNameByEmail(email) {
+  if (!email) return '';
+  const { data } = await sb.from('user_profiles').select('full_name').eq('email', email).limit(1);
+  return (data && data[0] && data[0].full_name) || email;
 }
 
 // Populates the signup form's membership-type dropdown before login (anon-readable list).
