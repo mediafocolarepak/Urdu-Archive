@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260827110000';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260827110000';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260827120000';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260827120000';
 
 export async function renderDashboardView(main) {
   const isUser = State.currentRole === 'user';
@@ -76,7 +76,7 @@ function buildDashQuery(selectAll) {
   const f = State.dashFilters;
   if (f.search && f.search.trim()) {
     const like = likeSafe(f.search.trim());
-    q = q.or(`title.ilike.${like},original_title.ilike.${like},en_title.ilike.${like},secondary_tags.ilike.${like}`);
+    q = q.or(`title.ilike.${like},original_title.ilike.${like},ur_title.ilike.${like},en_title.ilike.${like},secondary_tags.ilike.${like}`);
   }
   if (f.idSearch && f.idSearch.trim()) {
     const idNum = parseInt(f.idSearch.trim(), 10);

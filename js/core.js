@@ -223,6 +223,7 @@ export async function extractHayatRowToDocument(row) {
   const workId = await createWorkFor(row.titolo || row.title);
   const draft = {
     document_id: newId, title: row.title || row.titolo, original_title: row.titolo || row.title,
+    ur_title: row.ur_title || null,
     original_author: row.autore,
     hayat_index_ref: row.id, to_whom: row.branca,
     hayat_issue: `${row.mese_anno || ''}p.${row.pagina || ''}`,
