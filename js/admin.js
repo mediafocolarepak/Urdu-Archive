@@ -1,4 +1,4 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260826170000';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260827110000';
 
 // ---------- Users ----------
 
@@ -174,9 +174,10 @@ export async function renderAnnouncementsView(main) {
 
 async function refreshAnnouncementsHistory() {
   const rows = await withStatus(sb.from('splash_messages').select('*').order('created_at', { ascending: false }));
-  document.getElementById('splash-history-body').innerHTML = rows.map(r => `<tr>
+  const names = await Promise.all(rows.map(r => getDisplayNameByEmail(r.created_by_email)));
+  document.getElementById('splash-history-body').innerHTML = rows.map((r, i) => `<tr>
     <td>${esc((r.created_at || '').slice(0, 16).replace('T', ' '))}</td>
-    <td>${esc(r.created_by_email)}</td>
+    <td>${esc(names[i])}</td>
     <td style="white-space:normal;">${esc(r.message_text)}</td>
   </tr>`).join('') || '<tr><td colspan="3">No announcements yet.</td></tr>';
 }
