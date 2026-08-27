@@ -2,7 +2,7 @@
 // For actual editing use the Hayat Editor tab; this view's only action is one-click Extract,
 // sharing core.js's extractHayatRowToDocument so both tabs create documents identically.
 
-import { sb, esc, likeSafe, canWrite, withStatus, extractHayatRowToDocument } from './core.js?v=20260827110000';
+import { sb, esc, likeSafe, canWrite, withStatus, extractHayatRowToDocument } from './core.js?v=20260827120000';
 
 export async function renderHayatView(main) {
   main.innerHTML = `
@@ -21,15 +21,15 @@ async function refreshHayatGrid(filterText) {
   let query = sb.from('hayat_indice').select('*, document_categories(document_category)');
   if (filterText && filterText.trim()) {
     const like = likeSafe(filterText.trim());
-    query = query.or(`titolo.ilike.${like},title.ilike.${like},autore.ilike.${like},argomento.ilike.${like}`);
+    query = query.or(`titolo.ilike.${like},title.ilike.${like},ur_title.ilike.${like},autore.ilike.${like},argomento.ilike.${like}`);
   }
   const rows = await withStatus(query);
   rows.sort((a, b) => (a.idtranscription || 0) - (b.idtranscription || 0) || (a.autore || '').localeCompare(b.autore || '') || (a.mese_anno || '').localeCompare(b.mese_anno || ''));
-  grid.innerHTML = `<thead><tr><th></th><th>Id</th><th>Month-Year</th><th>Page</th><th>Category</th><th>Branch</th><th>Author</th><th>Title</th><th>Topic</th><th>Extracted</th></tr></thead>
+  grid.innerHTML = `<thead><tr><th></th><th>Id</th><th>Month-Year</th><th>Page</th><th>Category</th><th>Branch</th><th>Author</th><th>Title</th><th>Ur-Title</th><th>Topic</th><th>Extracted</th></tr></thead>
     <tbody>${rows.map(r => `<tr data-id="${esc(r.id)}">
       <td>${(!r.estratto && canWrite()) ? `<button class="btn" data-extract="${esc(r.id)}" style="padding:3px 8px;">Extract &rarr;</button>` : ''}</td>
       <td>${esc(r.id)}</td><td>${esc(r.mese_anno)}</td><td>${esc(r.pagina)}</td><td>${esc(r.document_categories?.document_category)}</td>
-      <td>${esc(r.branca)}</td><td>${esc(r.autore)}</td><td>${esc(r.titolo)}</td><td>${esc(r.argomento)}</td><td>${esc(r.estratto)}</td></tr>`).join('')}</tbody>`;
+      <td>${esc(r.branca)}</td><td>${esc(r.autore)}</td><td>${esc(r.titolo)}</td><td dir="auto">${esc(r.ur_title)}</td><td>${esc(r.argomento)}</td><td>${esc(r.estratto)}</td></tr>`).join('')}</tbody>`;
   grid.querySelectorAll('[data-extract]').forEach(btn => btn.addEventListener('click', async e => {
     e.stopPropagation();
     await extractHayatRow(btn.dataset.extract);

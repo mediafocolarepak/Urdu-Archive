@@ -6,8 +6,8 @@
 // the meantime), per the project's "don't pollute a fixed vocabulary with unreviewed values"
 // rule that also applies to Bulk Import and the rest of this session's schema changes.
 
-import { sb, State, esc, today, canWrite, withStatus, extractHayatRowToDocument, SessionCache } from './core.js?v=20260827110000';
-import { comboboxHtml, wireCombobox } from './combobox.js?v=20260827110000';
+import { sb, State, esc, today, canWrite, withStatus, extractHayatRowToDocument, SessionCache } from './core.js?v=20260827120000';
+import { comboboxHtml, wireCombobox } from './combobox.js?v=20260827120000';
 
 let currentRows = [];
 
@@ -79,6 +79,7 @@ function rowHtml(r) {
     <td>${combo('autore', 'hayat_author', 'Autore')}</td>
     <td><input data-f="titolo" value="${esc(r.titolo)}" placeholder="Titolo (Urdu)" style="min-width:160px;" dir="auto"></td>
     <td><input data-f="title" value="${esc(r.title)}" placeholder="Title (EN)" style="min-width:160px;"></td>
+    <td><input data-f="ur_title" value="${esc(r.ur_title)}" placeholder="Ur-Title" style="min-width:160px;" dir="auto"></td>
     <td>${combo('category', 'category', 'Categoria')}</td>
     <td>${combo('branca', 'recipient', 'Branca')}</td>
     <td>${combo('argomento', 'hayat_argomento', 'Argomento')}</td>
@@ -99,7 +100,7 @@ export async function refreshHayatEditorGrid() {
 
   const readOnly = !canWrite();
   grid.innerHTML = `<thead><tr>
-      <th></th><th>ID</th><th>Pagina</th><th>Autore</th><th>Titolo (Urdu)</th><th>Title (EN)</th>
+      <th></th><th>ID</th><th>Pagina</th><th>Autore</th><th>Titolo (Urdu)</th><th>Title (EN)</th><th>Ur-Title</th>
       <th>Categoria</th><th>Branca</th><th>Argomento</th><th>Estratto</th>
     </tr></thead>
     <tbody>${currentRows.map(rowHtml).join('')}</tbody>`;
@@ -201,7 +202,7 @@ function csvEscape(v) {
   const s = v === null || v === undefined ? '' : String(v);
   return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
-const CSV_COLUMNS = ['pagina', 'autore', 'titolo', 'title', 'category', 'branca', 'argomento'];
+const CSV_COLUMNS = ['pagina', 'autore', 'titolo', 'title', 'ur_title', 'category', 'branca', 'argomento'];
 
 function exportCsv() {
   if (!currentRows.length) { alert('Nothing to export for this edition.'); return; }
