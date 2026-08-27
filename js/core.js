@@ -7,6 +7,11 @@ export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 export const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 export const BUCKET = 'archive-files';
 
+// Debug escape hatch: lets a DevTools console diagnose issues against the real, already-
+// authenticated session without creating a second Supabase client (which collides with this
+// one over the same localStorage session key and can produce confusing, unrelated errors).
+window.__sb = sb;
+
 // Legacy PDF archive: files live in a shared, publicly-readable Google Drive folder
 // and are looked up by exact file_name match (the API key is restricted to Drive API
 // + this site's domain in Google Cloud Console, so it's safe to ship in client code).
