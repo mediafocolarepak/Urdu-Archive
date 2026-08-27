@@ -6,8 +6,8 @@
 // the meantime), per the project's "don't pollute a fixed vocabulary with unreviewed values"
 // rule that also applies to Bulk Import and the rest of this session's schema changes.
 
-import { sb, State, esc, today, canWrite, withStatus, extractHayatRowToDocument, SessionCache } from './core.js?v=20260827120000';
-import { comboboxHtml, wireCombobox } from './combobox.js?v=20260827120000';
+import { sb, State, esc, today, canWrite, withStatus, labelOf, extractHayatRowToDocument, SessionCache } from './core.js?v=20260827140000';
+import { comboboxHtml, wireCombobox } from './combobox.js?v=20260827140000';
 
 let currentRows = [];
 
@@ -28,7 +28,7 @@ export async function renderHayatEditorView(main) {
         <button class="btn danger" id="he-delete">Delete selected</button>
         <button class="btn secondary" id="he-duplicate">Duplicate selected</button>
         <button class="btn secondary" id="he-import">Import CSV</button>
-        <input type="file" id="he-import-file" accept=".csv" style="display:none;">` : ''}
+        <button class="btn secondary" id="he-paste-import">Paste CSV</button>` : ''}
         <button class="btn secondary" id="he-export">Export CSV</button>
       </div>
       <div class="grid-wrap" style="max-height:65vh;overflow:auto;"><table class="grid" id="he-grid"></table></div>
@@ -44,8 +44,8 @@ export async function renderHayatEditorView(main) {
     document.getElementById('he-extract').addEventListener('click', extractSelected);
     document.getElementById('he-delete').addEventListener('click', deleteSelected);
     document.getElementById('he-duplicate').addEventListener('click', duplicateSelected);
-    document.getElementById('he-import').addEventListener('click', () => document.getElementById('he-import-file').click());
-    document.getElementById('he-import-file').addEventListener('change', importCsv);
+    document.getElementById('he-import').addEventListener('click', () => showCsvImportModal('file'));
+    document.getElementById('he-paste-import').addEventListener('click', () => showCsvImportModal('paste'));
   }
   document.getElementById('he-export').addEventListener('click', exportCsv);
 
@@ -202,12 +202,22 @@ function csvEscape(v) {
   const s = v === null || v === undefined ? '' : String(v);
   return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
-const CSV_COLUMNS = ['pagina', 'autore', 'titolo', 'title', 'ur_title', 'category', 'branca', 'argomento'];
+
+// Export produces the same 11-column layout used by the external extraction tool (PDF ->
+// CSV) that this format was designed to round-trip with: mese_anno and the Italian
+// "categoria" label are derived rather than stored verbatim (categoria from the category
+// code via labelOf; mese_anno is the same for every row in a single-edition export).
+const EXPORT_HEADERS = ['mese_anno', 'pagina', 'categoria', 'category', 'branca', 'autore', 'titolo', 'argomento', 'data_pdv', 'title', 'Ur-Title'];
 
 function exportCsv() {
   if (!currentRows.length) { alert('Nothing to export for this edition.'); return; }
-  const header = CSV_COLUMNS.join(',');
-  const body = currentRows.map(r => CSV_COLUMNS.map(c => csvEscape(r[c])).join(',')).join('\n');
+  const header = EXPORT_HEADERS.join(',');
+  const body = currentRows.map(r => EXPORT_HEADERS.map(h => {
+    if (h === 'mese_anno') return csvEscape(State.hayatEditorEdition);
+    if (h === 'categoria') return csvEscape(labelOf(State.categories, r.category));
+    if (h === 'Ur-Title') return csvEscape(r.ur_title);
+    return csvEscape(r[h]);
+  }).join(',')).join('\n');
   const blob = new Blob([header + '\n' + body], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -232,27 +242,69 @@ function parseCsvLine(line) {
   return out;
 }
 
-async function importCsv(e) {
-  const file = e.target.files[0];
-  e.target.value = '';
-  if (!file) return;
-  if (!State.hayatEditorEdition) { alert('Select an edition first.'); return; }
-  const text = await file.text();
+// Import accepts the same 11-column layout: mese_anno and categoria are read from the file
+// only to be ignored (the edition comes from the modal's own field - the user types it once
+// there rather than trusting the file - and categoria is redundant with the category code);
+// "Ur-Title" is the one header that doesn't match its DB column name (ur_title) verbatim.
+const IMPORT_HEADER_ALIASES = { 'Ur-Title': 'ur_title' };
+const IMPORT_COLUMNS = ['pagina', 'autore', 'titolo', 'title', 'ur_title', 'category', 'branca', 'argomento', 'data_pdv'];
+
+function showCsvImportModal(mode) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'overlay-backdrop';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel" style="max-width:600px;">
+      <h2>${mode === 'paste' ? 'Paste CSV' : 'Import CSV'}</h2>
+      <div class="field"><label>Edition (Month-Year)</label><input id="csv-import-edition" placeholder="YYYY-MM" value="${esc(State.hayatEditorEdition || '')}"></div>
+      ${mode === 'paste'
+        ? '<div class="field"><label>Paste CSV text</label><textarea id="csv-import-text" rows="14" style="font-family:monospace;font-size:12px;"></textarea></div>'
+        : '<div class="field"><label>CSV file</label><input id="csv-import-file" type="file" accept=".csv"></div>'}
+      <div class="btn-row" style="justify-content:flex-end;">
+        <button class="btn secondary" id="csv-import-cancel">Cancel</button>
+        <button class="btn" id="csv-import-go">Import</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  document.getElementById('csv-import-cancel').addEventListener('click', () => backdrop.remove());
+  document.getElementById('csv-import-go').addEventListener('click', async () => {
+    const edition = document.getElementById('csv-import-edition').value.trim();
+    if (!/^\d{4}-\d{2}$/.test(edition)) { alert('Please enter the edition as YYYY-MM (e.g. 2022-05).'); return; }
+    let text;
+    if (mode === 'paste') {
+      text = document.getElementById('csv-import-text').value;
+      if (!text.trim()) { alert('Please paste CSV text first.'); return; }
+    } else {
+      const file = document.getElementById('csv-import-file').files[0];
+      if (!file) { alert('Please choose a CSV file first.'); return; }
+      text = await file.text();
+    }
+    backdrop.remove();
+    await runCsvImport(text, edition);
+  });
+}
+
+async function runCsvImport(text, edition) {
   const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
   if (lines.length < 2) { alert('CSV has no data rows.'); return; }
-  const header = parseCsvLine(lines[0]).map(h => h.trim());
+  const header = parseCsvLine(lines[0]).map(h => { const t = h.trim(); return IMPORT_HEADER_ALIASES[t] || t; });
   const rows = lines.slice(1).map(l => {
     const cells = parseCsvLine(l);
-    const obj = {}; header.forEach((h, i) => { if (CSV_COLUMNS.includes(h)) obj[h] = cells[i] || null; });
+    const obj = {}; header.forEach((h, i) => {
+      if (!IMPORT_COLUMNS.includes(h)) return;
+      const v = cells[i];
+      obj[h] = (!v || v.trim().toUpperCase() === 'NULL') ? null : v;
+    });
     return obj;
   });
-  if (!confirm(`Import ${rows.length} row(s) as new entries in edition "${State.hayatEditorEdition}"? This appends new rows - it does not update existing ones.`)) return;
+  if (!confirm(`Import ${rows.length} row(s) as new entries in edition "${edition}"? This appends new rows - it does not update existing ones.`)) return;
   let maxRows = await withStatus(sb.from('hayat_indice').select('id').order('id', { ascending: false }).limit(1));
   let nextId = (maxRows[0]?.id || 0) + 1;
   for (const r of rows) {
-    await withStatus(sb.from('hayat_indice').insert({ ...r, id: nextId, mese_anno: State.hayatEditorEdition }), 'Importing...');
+    await withStatus(sb.from('hayat_indice').insert({ ...r, id: nextId, mese_anno: edition }), 'Importing...');
     nextId++;
   }
   alert(`Imported ${rows.length} row(s).`);
+  State.hayatEditorEdition = edition;
+  await populateEditionSelect();
   await refreshHayatEditorGrid();
 }
