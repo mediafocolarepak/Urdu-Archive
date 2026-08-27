@@ -6,8 +6,8 @@
 // the meantime), per the project's "don't pollute a fixed vocabulary with unreviewed values"
 // rule that also applies to Bulk Import and the rest of this session's schema changes.
 
-import { sb, State, esc, today, canWrite, withStatus, withStatusCount, labelOf, extractHayatRowToDocument, SessionCache } from './core.js?v=20260827190000';
-import { comboboxHtml, wireCombobox } from './combobox.js?v=20260827190000';
+import { sb, State, esc, today, canWrite, withStatus, withStatusCount, labelOf, extractHayatRowToDocument, SessionCache } from './core.js?v=20260827200000';
+import { comboboxHtml, wireCombobox } from './combobox.js?v=20260827200000';
 
 let currentRows = [];
 
@@ -372,46 +372,75 @@ async function runCsvImport(rows, edition) {
 const PROMPT_SETTING_KEY = 'hayat_csv_gemini_prompt';
 
 async function showPromptModal() {
-  const { data } = await withStatus(sb.from('app_settings').select('value').eq('key', PROMPT_SETTING_KEY));
-  const current = (data && data[0] && data[0].value) || '';
   const backdrop = document.createElement('div');
   backdrop.className = 'overlay-backdrop';
   backdrop.innerHTML = `
     <div class="panel overlay-panel" style="max-width:700px;">
       <h2>Gemini Prompt <span class="hint">— shared with the team, used to extract a Hayat edition's CSV from its PDF</span></h2>
-      <div class="field"><textarea id="prompt-text" rows="16" style="font-family:monospace;font-size:12.5px;">${esc(current)}</textarea></div>
+      <div class="field"><textarea id="prompt-text" rows="16" readonly style="font-family:monospace;font-size:12.5px;">Loading…</textarea></div>
       <div id="prompt-result" class="hint" style="min-height:1.4em;"></div>
       <div class="btn-row" style="justify-content:flex-end;">
         <button class="btn secondary" id="prompt-copy">Copy to clipboard</button>
-        <button class="btn secondary" id="prompt-save">Save</button>
+        <button class="btn secondary" id="prompt-edit">Edit</button>
+        <button class="btn secondary" id="prompt-save" style="display:none;">Save</button>
         <button class="btn" id="prompt-close">Close</button>
       </div>
     </div>`;
   document.body.appendChild(backdrop);
+  const textarea = document.getElementById('prompt-text');
   const resultBox = document.getElementById('prompt-result');
+  const editBtn = document.getElementById('prompt-edit');
+  const saveBtn = document.getElementById('prompt-save');
+
+  function setEditing(on) {
+    textarea.readOnly = !on;
+    editBtn.style.display = on ? 'none' : '';
+    saveBtn.style.display = on ? '' : 'none';
+  }
+
   document.getElementById('prompt-close').addEventListener('click', () => backdrop.remove());
+  editBtn.addEventListener('click', () => { setEditing(true); resultBox.textContent = ''; });
+
   document.getElementById('prompt-copy').addEventListener('click', async () => {
-    const text = document.getElementById('prompt-text').value;
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(textarea.value);
     } catch {
-      const ta = document.getElementById('prompt-text');
-      ta.select();
+      textarea.select();
       document.execCommand('copy');
     }
     resultBox.style.color = 'var(--accent)';
     resultBox.textContent = 'Copied to clipboard.';
   });
-  document.getElementById('prompt-save').addEventListener('click', async () => {
-    const value = document.getElementById('prompt-text').value;
-    const { data: { user } } = await sb.auth.getUser();
+
+  // Read-only by default so nobody edits it by accident; "Edit" explicitly unlocks the
+  // textarea and swaps in "Save". Both the initial load and the save itself are fully
+  // wrapped in try/catch (a previous version called sb.auth.getUser() *outside* the save's
+  // try/catch - if that ever failed, the save silently did nothing with no error shown,
+  // which matches a real report of "Save looked like it worked but nothing persisted").
+  try {
+    const { data } = await withStatus(sb.from('app_settings').select('value').eq('key', PROMPT_SETTING_KEY));
+    textarea.value = (data && data[0] && data[0].value) || '';
+  } catch (err) {
+    textarea.value = '';
+    resultBox.style.color = 'var(--danger)';
+    resultBox.textContent = `Could not load the saved prompt: ${err.message}`;
+  }
+
+  saveBtn.addEventListener('click', async () => {
+    saveBtn.disabled = true;
     try {
+      const value = textarea.value;
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) throw new Error('no active session - please sign in again');
       await withStatus(sb.from('app_settings').upsert({ key: PROMPT_SETTING_KEY, value, updated_at: new Date().toISOString(), updated_by_email: user.email }), 'Saving...');
       resultBox.style.color = 'var(--accent)';
       resultBox.textContent = '✓ Saved for everyone.';
+      setEditing(false);
     } catch (err) {
       resultBox.style.color = 'var(--danger)';
       resultBox.textContent = `Save failed: ${err.message}`;
+    } finally {
+      saveBtn.disabled = false;
     }
   });
 }
