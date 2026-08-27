@@ -6,8 +6,8 @@
 // the meantime), per the project's "don't pollute a fixed vocabulary with unreviewed values"
 // rule that also applies to Bulk Import and the rest of this session's schema changes.
 
-import { sb, State, esc, today, canWrite, withStatus, withStatusCount, labelOf, extractHayatRowToDocument, SessionCache } from './core.js?v=20260827180000';
-import { comboboxHtml, wireCombobox } from './combobox.js?v=20260827180000';
+import { sb, State, esc, today, canWrite, withStatus, withStatusCount, labelOf, extractHayatRowToDocument, SessionCache } from './core.js?v=20260827190000';
+import { comboboxHtml, wireCombobox } from './combobox.js?v=20260827190000';
 
 let currentRows = [];
 
@@ -28,7 +28,8 @@ export async function renderHayatEditorView(main) {
         <button class="btn danger" id="he-delete">Delete selected</button>
         <button class="btn secondary" id="he-duplicate">Duplicate selected</button>
         <button class="btn secondary" id="he-import">Import CSV</button>
-        <button class="btn secondary" id="he-paste-import">Paste CSV</button>` : ''}
+        <button class="btn secondary" id="he-paste-import">Paste CSV</button>
+        <button class="btn secondary" id="he-prompt">Gemini Prompt</button>` : ''}
         <button class="btn secondary" id="he-export">Export CSV</button>
       </div>
       <div class="grid-wrap" style="max-height:65vh;overflow:auto;"><table class="grid" id="he-grid"></table></div>
@@ -46,6 +47,7 @@ export async function renderHayatEditorView(main) {
     document.getElementById('he-duplicate').addEventListener('click', duplicateSelected);
     document.getElementById('he-import').addEventListener('click', () => showCsvImportModal('file'));
     document.getElementById('he-paste-import').addEventListener('click', () => showCsvImportModal('paste'));
+    document.getElementById('he-prompt').addEventListener('click', showPromptModal);
   }
   document.getElementById('he-export').addEventListener('click', exportCsv);
 
@@ -361,4 +363,55 @@ async function runCsvImport(rows, edition) {
   }
   State.hayatEditorEdition = edition;
   return actuallyAdded;
+}
+
+// ---------- Gemini Prompt (shared, editable text for the PDF -> CSV extraction workflow) ----------
+// Stored in the generic app_settings key/value table rather than anywhere Hayat-specific,
+// so the same table can hold any future single shared setting without a new migration.
+
+const PROMPT_SETTING_KEY = 'hayat_csv_gemini_prompt';
+
+async function showPromptModal() {
+  const { data } = await withStatus(sb.from('app_settings').select('value').eq('key', PROMPT_SETTING_KEY));
+  const current = (data && data[0] && data[0].value) || '';
+  const backdrop = document.createElement('div');
+  backdrop.className = 'overlay-backdrop';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel" style="max-width:700px;">
+      <h2>Gemini Prompt <span class="hint">— shared with the team, used to extract a Hayat edition's CSV from its PDF</span></h2>
+      <div class="field"><textarea id="prompt-text" rows="16" style="font-family:monospace;font-size:12.5px;">${esc(current)}</textarea></div>
+      <div id="prompt-result" class="hint" style="min-height:1.4em;"></div>
+      <div class="btn-row" style="justify-content:flex-end;">
+        <button class="btn secondary" id="prompt-copy">Copy to clipboard</button>
+        <button class="btn secondary" id="prompt-save">Save</button>
+        <button class="btn" id="prompt-close">Close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  const resultBox = document.getElementById('prompt-result');
+  document.getElementById('prompt-close').addEventListener('click', () => backdrop.remove());
+  document.getElementById('prompt-copy').addEventListener('click', async () => {
+    const text = document.getElementById('prompt-text').value;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.getElementById('prompt-text');
+      ta.select();
+      document.execCommand('copy');
+    }
+    resultBox.style.color = 'var(--accent)';
+    resultBox.textContent = 'Copied to clipboard.';
+  });
+  document.getElementById('prompt-save').addEventListener('click', async () => {
+    const value = document.getElementById('prompt-text').value;
+    const { data: { user } } = await sb.auth.getUser();
+    try {
+      await withStatus(sb.from('app_settings').upsert({ key: PROMPT_SETTING_KEY, value, updated_at: new Date().toISOString(), updated_by_email: user.email }), 'Saving...');
+      resultBox.style.color = 'var(--accent)';
+      resultBox.textContent = '✓ Saved for everyone.';
+    } catch (err) {
+      resultBox.style.color = 'var(--danger)';
+      resultBox.textContent = `Save failed: ${err.message}`;
+    }
+  });
 }
