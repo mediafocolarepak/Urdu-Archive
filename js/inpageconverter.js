@@ -8,7 +8,7 @@
 // raw .inp binary directly (locates the content block via fixed byte markers, then maps
 // each InPage glyph code to its Unicode Arabic/Urdu codepoint), so no InPage clipboard
 // step is needed. Rewritten here as a pure function instead of relying on globals.
-import { canWrite, esc, getDriveAccessToken, driveUploadOrReplace } from './core.js?v=20260828220000';
+import { canWrite, esc, getDriveAccessToken, driveUploadOrReplace } from './core.js?v=20260828230000';
 
 const DEFAULT_OPTIONS = {
   urdu: true,          // Urdu glyph variants (ک ی ہ ھ ں...) vs. plain Arabic ones
@@ -247,9 +247,18 @@ export function inPageBytesToUnicode(bytes, opts) {
   // findStartPosition/findEndPosition skip straight past all of this. On some older
   // multi-story files, though, the content markers land at a *second* story whose own
   // preamble ends up included - real Urdu body text will never contain these literal
-  // English words back-to-back, so if the colour-table signature turns up, cut there.
-  const junkTable = out.match(/None[\s\S]{0,40}White[\s\S]{0,40}Black/);
-  if (junkTable) out = out.slice(0, junkTable.index);
+  // English strings. Cut at whichever piece of leaked metadata turns up earliest (the
+  // colour table and the font names don't always both survive far enough into the
+  // decoded output to appear together, so each is checked independently).
+  const junkMarkers = ['InPage Arabic Document', 'Simplified Arabic', 'ZoharSindhi', 'Noori Nastaliq', 'oori Character'];
+  let junkAt = -1;
+  const colourTable = out.match(/None[\s\S]{0,80}White[\s\S]{0,80}Black/);
+  if (colourTable) junkAt = colourTable.index;
+  for (const marker of junkMarkers) {
+    const idx = out.indexOf(marker);
+    if (idx !== -1 && (junkAt === -1 || idx < junkAt)) junkAt = idx;
+  }
+  if (junkAt !== -1) out = out.slice(0, junkAt);
   // Safety net #2: by this point every valid InPage byte has been replaced by a real
   // character. A run of 3+ still-literal "-XX" hex pairs can only be un-decodable binary
   // that slipped past the marker search (e.g. leftover layout records) - strip it rather
