@@ -242,7 +242,11 @@ function loadDocxLib() {
   if (!docxLibPromise) {
     docxLibPromise = new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/docx@9.7.1/dist/index.umd.cjs';
+      // .iife.js, not .umd.cjs: jsDelivr serves .cjs as MIME type application/node, which
+      // browsers with strict MIME checking refuse to execute as a <script> (found by testing
+      // in a real browser - Node's `require()` doesn't care about MIME types, so this only
+      // shows up once the library actually has to load in a page).
+      s.src = 'https://cdn.jsdelivr.net/npm/docx@9.7.1/dist/index.iife.js';
       s.onload = () => resolve(window.docx);
       s.onerror = () => reject(new Error('Could not load the Word-generation library.'));
       document.head.appendChild(s);
