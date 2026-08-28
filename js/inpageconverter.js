@@ -8,7 +8,7 @@
 // raw .inp binary directly (locates the content block via fixed byte markers, then maps
 // each InPage glyph code to its Unicode Arabic/Urdu codepoint), so no InPage clipboard
 // step is needed. Rewritten here as a pure function instead of relying on globals.
-import { canWrite, esc, getDriveAccessToken, driveUploadOrReplace } from './core.js?v=20260828120000';
+import { canWrite, esc, getDriveAccessToken, driveUploadOrReplace } from './core.js?v=20260828210000';
 
 const DEFAULT_OPTIONS = {
   urdu: true,          // Urdu glyph variants (ک ی ہ ھ ں...) vs. plain Arabic ones
@@ -24,25 +24,40 @@ const DEFAULT_OPTIONS = {
   correctYearSign: true,
 };
 
-function findStartPosition(b) {
-  for (let i = 0; i <= b.length - 1; i++) {
+// Returns the raw offset of the marker itself (not +14) so it can also be used to look
+// for a SECOND occurrence later in the file — see findEndPosition below.
+function findStartMarker(b, from) {
+  for (let i = from; i <= b.length - 1; i++) {
     if (b[i] === 1 && b[i + 4] === 13) {
       let marker = '';
       for (let t = 0; t <= 9; t++) marker += b[i + t];
-      if (marker === '10001300000') return i + 14;
+      if (marker === '10001300000') return i;
     }
   }
   return -1;
 }
+function findStartPosition(b) {
+  const i = findStartMarker(b, 0);
+  return i === -1 ? -1 : i + 14;
+}
 function findEndPosition(b, startP) {
+  let normalEnd = -1;
   for (let i = startP; i <= b.length - 1; i++) {
     if (b[i + 6] === 255) {
       let marker = '';
       for (let t = 0; t <= 9; t++) marker += b[i + t];
-      if (marker === '1300000255255255255') return i;
+      if (marker === '1300000255255255255') { normalEnd = i; break; }
     }
   }
-  return b.length;
+  // Some older .inp files (seen on a 1992-era document) store the document's content
+  // TWICE between a single pair of start/end markers, with a chunk of un-decodable
+  // binary padding in between. Concretely: a second start-of-content marker turns up
+  // *before* the real end marker. When that happens, stop there instead - otherwise the
+  // decoded output ends up with a garbage tail (unmapped binary rendered as literal
+  // "-XX" hex) followed by the entire document a second time.
+  const secondStart = findStartMarker(b, startP + 1);
+  if (secondStart !== -1 && (normalEnd === -1 || secondStart < normalEnd)) return secondStart;
+  return normalEnd !== -1 ? normalEnd : b.length;
 }
 function toHexPairs(bytes, start, length) {
   const hex = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'];
@@ -225,6 +240,13 @@ export function inPageBytesToUnicode(bytes, opts) {
     out = out.replace(/(ھ)(؁)/g, '$2$1');
     out = out.replace(/(ء)(؁)/g, '$2$1');
   }
+  // Safety net: by this point every valid InPage byte has been replaced by a real
+  // character. A run of 3+ still-literal "-XX" hex pairs can only be un-decodable binary
+  // that slipped past findStartPosition/findEndPosition (e.g. font/layout records) - strip
+  // it rather than let it leak into the Word/PDF output. A lone "-XX" is left alone since
+  // a genuine "-" (from -04-F5) followed by ordinary characters that happen to look like
+  // hex digits is possible; three in a row from real text is not.
+  out = out.replace(/(-[0-9A-F]{2}){3,}/g, '');
   return out;
 }
 
