@@ -5,7 +5,7 @@
 // the UI) - only Admin can set 'approved', paired with the actual role promotion in
 // user_roles (already an admin-only action, see 05_roles_and_permissions.sql).
 
-import { sb, State, esc, canReviewApplications, isAdmin, withStatus } from './core.js?v=20260828230712';
+import { sb, State, esc, canReviewApplications, isAdmin, withStatus } from './core.js?v=20260828235923';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],

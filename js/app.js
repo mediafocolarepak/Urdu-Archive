@@ -1,18 +1,19 @@
-import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260828230712';
-import { renderDashboardView } from './dashboard.js?v=20260828230712';
-import { renderReportsView } from './reports.js?v=20260828230712';
-import { renderHayatView } from './hayatindex.js?v=20260828230712';
-import { renderMatchReviewView } from './matchreview.js?v=20260828230712';
-import { renderBulkImportView } from './bulkimport.js?v=20260828230712';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260828230712';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260828230712';
-import { renderAdminEditView } from './adminedit.js?v=20260828230712';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260828230712';
-import { renderHayatEditorView } from './hayateditor.js?v=20260828230712';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260828230712';
-import { renderUserGuideView } from './userguide.js?v=20260828230712';
-import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260828230712';
-import { registerServiceWorker } from './pwa-register.js?v=20260828230712';
+import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260828235923';
+import { renderDashboardView } from './dashboard.js?v=20260828235923';
+import { renderReportsView } from './reports.js?v=20260828235923';
+import { renderHayatView } from './hayatindex.js?v=20260828235923';
+import { renderMatchReviewView } from './matchreview.js?v=20260828235923';
+import { renderBulkImportView } from './bulkimport.js?v=20260828235923';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260828235923';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260828235923';
+import { renderAdminEditView } from './adminedit.js?v=20260828235923';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260828235923';
+import { renderHayatEditorView } from './hayateditor.js?v=20260828235923';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260828235923';
+import { renderUserGuideView } from './userguide.js?v=20260828235923';
+import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260828235923';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260828235923';
+import { registerServiceWorker } from './pwa-register.js?v=20260828235923';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -30,6 +31,7 @@ function getTabs() {
     tabs.push({ id: 'inpageconverter', label: 'InPage Converter' });
   }
   if (canReviewApplications()) { tabs.push({ id: 'applications', label: 'Team Applications' }); }
+  if (canWrite()) { tabs.push({ id: 'tasks', label: 'Tasks' }); }
   if (isAdmin()) { tabs.push({ id: 'users', label: 'Users' }); tabs.push({ id: 'options', label: 'Options' }); tabs.push({ id: 'adminedit', label: 'Edit Records' }); tabs.push({ id: 'announcements', label: 'Announcements' }); }
   tabs.push({ id: 'chat', label: isAdmin() ? 'Messages' : 'Chat' });
   // Persistently visible invitation for read-only accounts - collaborators (Operator+)
@@ -64,6 +66,7 @@ function renderTab(id) {
   else if (id === 'announcements') renderAnnouncementsView(main);
   else if (id === 'chat') { isAdmin() ? renderAdminMessagesView(main) : renderChatView(main); }
   else if (id === 'applications') renderApplicationsView(main);
+  else if (id === 'tasks') renderTasksView(main);
   else if (id === 'jointeam') renderJoinTeamView(main);
   else if (id === 'help') renderUserGuideView(main);
 }
@@ -73,5 +76,5 @@ function renderTab(id) {
 window.__renderTab = renderTab;
 
 wireAuthButtons();
-boot(() => { initTopbar(); renderTab('dashboard'); initChatNotifications(() => renderTab('chat')); });
+boot(() => { initTopbar(); renderTab('dashboard'); initChatNotifications(() => renderTab('chat')); initTaskNotifications(() => renderTab('tasks')); });
 registerServiceWorker();
