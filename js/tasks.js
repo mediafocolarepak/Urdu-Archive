@@ -5,14 +5,26 @@
 // da qualcun altro (vedi 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel
 // vincolo, non lo sostituiscono.
 
-import { sb, esc, today, canWrite, canReviewApplications, withStatus } from './core.js?v=20260828235923';
+import { sb, esc, today, canWrite, canReviewApplications, withStatus, getDisplayNameByEmail } from './core.js?v=20260829001156';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
 
+// Resolves a set of emails to display names in one batch, for the "Team overview"/"Completed"
+// lists (Coordinator/Admin only - getDisplayNameByEmail needs 35_task_names.sql's RLS to read
+// another user's profile). Falls back to the email itself wherever no full_name is on file.
+async function nameMapForEmails(emails) {
+  const unique = [...new Set(emails.filter(Boolean))];
+  const names = await Promise.all(unique.map(e => getDisplayNameByEmail(e)));
+  const map = {};
+  unique.forEach((e, i) => { map[e] = names[i]; });
+  return map;
+}
+
 async function fetchOperators() {
   const rows = await withStatus(sb.from('user_roles').select('user_id,email').in('role', ['operator', 'coordinator']).order('email'));
-  return rows;
+  const names = await Promise.all(rows.map(r => getDisplayNameByEmail(r.email)));
+  return rows.map((r, i) => ({ ...r, displayName: names[i] }));
 }
 
 export async function renderTasksView(main) {
@@ -47,7 +59,7 @@ function renderNewTaskForm(operators) {
       <div class="field"><label>Description</label><textarea id="task-new-desc" rows="2"></textarea></div>
       <div class="field"><label>Document ID <span class="hint">(optional)</span></label><input id="task-new-docid" type="number" min="1"></div>
       <div class="field"><label>Assign directly to <span class="hint">(optional — otherwise left open to claim)</span></label>
-        <select id="task-new-assignee"><option value="">— leave open —</option>${operators.map(o => `<option value="${o.user_id}" data-email="${esc(o.email)}">${esc(o.email)}</option>`).join('')}</select>
+        <select id="task-new-assignee"><option value="">— leave open —</option>${operators.map(o => `<option value="${o.user_id}" data-email="${esc(o.email)}">${esc(o.displayName)}</option>`).join('')}</select>
       </div>
       <div class="field" id="task-new-due-field" style="display:none;"><label>Due date</label><input id="task-new-due" type="date"></div>
     </div>
@@ -81,11 +93,12 @@ function renderNewTaskForm(operators) {
 
 async function refreshTasks(user, manage, operators) {
   const rows = await withStatus(sb.from('tasks').select('*').order('created_at', { ascending: false }));
+  const nameMap = manage ? await nameMapForEmails(rows.flatMap(t => [t.claimed_by_email, t.created_by_email])) : {};
 
   renderOpenList(rows.filter(t => t.status === 'open'));
   renderMineList(rows.filter(t => t.status === 'claimed' && t.claimed_by === user.id));
-  if (manage) renderTeamList(rows.filter(t => t.status === 'claimed' && t.claimed_by !== user.id), operators);
-  renderDoneList(rows.filter(t => t.status === 'done'), manage);
+  if (manage) renderTeamList(rows.filter(t => t.status === 'claimed' && t.claimed_by !== user.id), operators, nameMap);
+  renderDoneList(rows.filter(t => t.status === 'done'), manage, nameMap);
 }
 
 function docLine(t) { return t.document_id ? `<p class="hint">Document #${esc(t.document_id)}</p>` : ''; }
@@ -148,17 +161,17 @@ function renderMineList(rows) {
   });
 }
 
-function renderTeamList(rows, operators) {
+function renderTeamList(rows, operators, nameMap) {
   const box = document.getElementById('tasks-team-list');
   if (!rows.length) { box.innerHTML = '<div class="empty-msg">No one else has a claimed task right now.</div>'; return; }
   box.innerHTML = rows.map(t => `
     <div class="panel" data-id="${t.id}" style="margin-bottom:12px;${isOverdue(t) ? 'border-color:var(--danger);' : ''}">
-      <div class="chat-meta"><b>${esc(t.title)}</b> · ${esc(t.claimed_by_email)} · due ${formatDate(t.due_date)} ${isOverdue(t) ? '<span class="chat-tag" style="color:var(--danger);">Overdue</span>' : ''}</div>
+      <div class="chat-meta"><b>${esc(t.title)}</b> · ${esc(nameMap[t.claimed_by_email] || t.claimed_by_email)} · due ${formatDate(t.due_date)} ${isOverdue(t) ? '<span class="chat-tag" style="color:var(--danger);">Overdue</span>' : ''}</div>
       ${docLine(t)}
       ${t.description ? `<p>${esc(t.description)}</p>` : ''}
       <div class="field-grid" style="max-width:320px;">
         <div class="field"><label>Reassign to</label>
-          <select class="task-team-reassign"><option value="">— choose —</option>${operators.filter(o => o.user_id !== t.claimed_by).map(o => `<option value="${o.user_id}" data-email="${esc(o.email)}">${esc(o.email)}</option>`).join('')}</select>
+          <select class="task-team-reassign"><option value="">— choose —</option>${operators.filter(o => o.user_id !== t.claimed_by).map(o => `<option value="${o.user_id}" data-email="${esc(o.email)}">${esc(o.displayName)}</option>`).join('')}</select>
         </div>
       </div>
       <div class="btn-row">
@@ -192,12 +205,12 @@ function renderTeamList(rows, operators) {
   });
 }
 
-function renderDoneList(rows, manage) {
+function renderDoneList(rows, manage, nameMap) {
   const box = document.getElementById('tasks-done-list');
   if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing completed yet.</div>'; return; }
   box.innerHTML = rows.slice(0, 30).map(t => `
     <div class="panel" data-id="${t.id}" style="margin-bottom:12px;">
-      <div class="chat-meta">${esc(t.title)} · ${esc(t.claimed_by_email)} · completed ${formatDate((t.completed_at || '').slice(0, 10))}</div>
+      <div class="chat-meta">${esc(t.title)} · ${esc(nameMap[t.claimed_by_email] || t.claimed_by_email)} · completed ${formatDate((t.completed_at || '').slice(0, 10))}</div>
       ${manage ? '<div class="btn-row"><button class="btn danger task-done-delete">Delete</button></div>' : ''}
     </div>`).join('');
   if (manage) {

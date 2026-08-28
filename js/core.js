@@ -511,9 +511,8 @@ async function showSplashHistory() {
 }
 
 // Resolves an email to its user_profiles.full_name, falling back to the email itself if no
-// profile/name is on file. RLS only lets this succeed for admins' profiles when the caller
-// isn't that same user or another admin (see sql/18) - fine here since every caller is an
-// admin's own email (splash authors, chat repliers).
+// profile/name is on file (or if RLS blocks the read - anyone can read their own profile;
+// reading another user's needs Coordinator/Admin, see 35_task_names.sql).
 export async function getDisplayNameByEmail(email) {
   if (!email) return '';
   const { data } = await sb.from('user_profiles').select('full_name').eq('email', email).limit(1);
