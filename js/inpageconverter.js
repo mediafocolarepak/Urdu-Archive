@@ -8,7 +8,7 @@
 // raw .inp binary directly (locates the content block via fixed byte markers, then maps
 // each InPage glyph code to its Unicode Arabic/Urdu codepoint), so no InPage clipboard
 // step is needed. Rewritten here as a pure function instead of relying on globals.
-import { canWrite, esc, getDriveAccessToken, driveUploadOrReplace } from './core.js?v=20260828210000';
+import { canWrite, esc, getDriveAccessToken, driveUploadOrReplace } from './core.js?v=20260828220000';
 
 const DEFAULT_OPTIONS = {
   urdu: true,          // Urdu glyph variants (ک ی ہ ھ ں...) vs. plain Arabic ones
@@ -240,13 +240,43 @@ export function inPageBytesToUnicode(bytes, opts) {
     out = out.replace(/(ھ)(؁)/g, '$2$1');
     out = out.replace(/(ء)(؁)/g, '$2$1');
   }
-  // Safety net: by this point every valid InPage byte has been replaced by a real
+  // Safety net #1: every .inp file carries a per-"story" preamble of English metadata
+  // (InPage's fixed 10-entry colour table - None/White/Black/Gray/Red/Yellow/Green/
+  // Cyan/Blue/Magenta - followed by font names like "Noori Nastaliq"/"ZoharSindhi"/
+  // "Simplified Arabic" and the literal signature "InPage Arabic Document"). Normally
+  // findStartPosition/findEndPosition skip straight past all of this. On some older
+  // multi-story files, though, the content markers land at a *second* story whose own
+  // preamble ends up included - real Urdu body text will never contain these literal
+  // English words back-to-back, so if the colour-table signature turns up, cut there.
+  const junkTable = out.match(/None[\s\S]{0,40}White[\s\S]{0,40}Black/);
+  if (junkTable) out = out.slice(0, junkTable.index);
+  // Safety net #2: by this point every valid InPage byte has been replaced by a real
   // character. A run of 3+ still-literal "-XX" hex pairs can only be un-decodable binary
-  // that slipped past findStartPosition/findEndPosition (e.g. font/layout records) - strip
-  // it rather than let it leak into the Word/PDF output. A lone "-XX" is left alone since
-  // a genuine "-" (from -04-F5) followed by ordinary characters that happen to look like
-  // hex digits is possible; three in a row from real text is not.
+  // that slipped past the marker search (e.g. leftover layout records) - strip it rather
+  // than let it leak into the Word/PDF output. A lone "-XX" is left alone since a genuine
+  // "-" (from -04-F5) followed by ordinary characters that happen to look like hex digits
+  // is possible; three in a row from real text is not.
   out = out.replace(/(-[0-9A-F]{2}){3,}/g, '');
+  // Safety net #3: per-line plausibility filter, ported from the companion desktop
+  // converter's TextCleaner.cs (validated on ~1200 real archive files). Binary noise that
+  // survives nets #1/#2 by coincidentally mapping through the same character table as
+  // real content (odd punctuation/control-character fragments, a few bytes wide) still
+  // won't look like a real sentence: a genuine Urdu/Arabic line is overwhelmingly Arabic-
+  // block characters, plain Latin letters/digits, or ordinary punctuation. Blank lines are
+  // kept as-is (they're intentional spacing, not garbage - see splitIntoLines below).
+  const EXTRA_PUNCT = new Set([0x2C, 0x3B, 0x3A, 0x21, 0x3F, 0x28, 0x29, 0x2D, 0x27, 0x22, 0x060C, 0x061F, 0x06D4, 0x40, 0x2F, 0x5F, 0x25, 0x2E]);
+  function isPlausibleLine(line) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) return true;
+    let plausible = 0;
+    for (const ch of trimmed) {
+      const c = ch.codePointAt(0);
+      if ((c >= 0x0600 && c <= 0x06FF) || (c >= 0x41 && c <= 0x5A) || (c >= 0x61 && c <= 0x7A) ||
+          (c >= 0x30 && c <= 0x39) || c === 0x20 || EXTRA_PUNCT.has(c)) plausible++;
+    }
+    return (plausible / trimmed.length) >= 0.85;
+  }
+  out = out.split('\r\n').filter(isPlausibleLine).join('\r\n');
   return out;
 }
 
