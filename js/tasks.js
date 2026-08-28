@@ -5,21 +5,10 @@
 // da qualcun altro (vedi 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel
 // vincolo, non lo sostituiscono.
 
-import { sb, esc, today, canWrite, canReviewApplications, withStatus, getDisplayNameByEmail } from './core.js?v=20260829001156';
+import { sb, esc, today, canWrite, canReviewApplications, withStatus, getDisplayNameByEmail, nameMapForEmails } from './core.js?v=20260829001401';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
-
-// Resolves a set of emails to display names in one batch, for the "Team overview"/"Completed"
-// lists (Coordinator/Admin only - getDisplayNameByEmail needs 35_task_names.sql's RLS to read
-// another user's profile). Falls back to the email itself wherever no full_name is on file.
-async function nameMapForEmails(emails) {
-  const unique = [...new Set(emails.filter(Boolean))];
-  const names = await Promise.all(unique.map(e => getDisplayNameByEmail(e)));
-  const map = {};
-  unique.forEach((e, i) => { map[e] = names[i]; });
-  return map;
-}
 
 async function fetchOperators() {
   const rows = await withStatus(sb.from('user_roles').select('user_id,email').in('role', ['operator', 'coordinator']).order('email'));

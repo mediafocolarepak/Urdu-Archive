@@ -519,6 +519,17 @@ export async function getDisplayNameByEmail(email) {
   return (data && data[0] && data[0].full_name) || email;
 }
 
+// Batch version for a list view showing several different people at once (Team Applications,
+// admin Messages inbox, Tasks board) - one round trip per distinct email instead of resolving
+// each row's name in isolation.
+export async function nameMapForEmails(emails) {
+  const unique = [...new Set(emails.filter(Boolean))];
+  const names = await Promise.all(unique.map(e => getDisplayNameByEmail(e)));
+  const map = {};
+  unique.forEach((e, i) => { map[e] = names[i]; });
+  return map;
+}
+
 // Populates the signup form's membership-type dropdown before login (anon-readable list).
 export async function loadMembershipOptionsForSignup() {
   const { data, error } = await sb.from('option_lists').select('code,label').eq('list_name', 'membership_type').order('sort_order');

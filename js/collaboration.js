@@ -5,7 +5,7 @@
 // the UI) - only Admin can set 'approved', paired with the actual role promotion in
 // user_roles (already an admin-only action, see 05_roles_and_permissions.sql).
 
-import { sb, State, esc, canReviewApplications, isAdmin, withStatus } from './core.js?v=20260829001156';
+import { sb, State, esc, canReviewApplications, isAdmin, withStatus, nameMapForEmails } from './core.js?v=20260829001401';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -142,10 +142,11 @@ async function refreshApplications() {
 
   const list = document.getElementById('apps-list');
   if (!rows.length) { list.innerHTML = '<div class="empty-msg">No applications match this filter.</div>'; return; }
+  const nameMap = await nameMapForEmails(rows.map(r => r.user_email));
 
   list.innerHTML = rows.map(r => `
     <div class="panel" data-id="${r.id}" style="margin-bottom:12px;">
-      <div class="chat-meta"><b>${esc(r.user_email)}</b> · ${formatDate(r.created_at)} · <span class="chat-tag">${esc(STATUS_LABEL[r.status] || r.status)}</span></div>
+      <div class="chat-meta"><b>${esc(nameMap[r.user_email] || r.user_email)}</b> · ${formatDate(r.created_at)} · <span class="chat-tag">${esc(STATUS_LABEL[r.status] || r.status)}</span></div>
       <p><b>Academic level:</b> ${esc(ACADEMIC_LEVELS.find(([c]) => c === r.academic_level)?.[1] || r.academic_level || '—')}</p>
       ${r.experience ? `<p><b>Experience:</b> ${esc(r.experience)}</p>` : ''}
       ${r.skills ? `<p><b>Skills:</b> ${esc(r.skills)}</p>` : ''}

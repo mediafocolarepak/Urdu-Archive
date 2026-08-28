@@ -3,7 +3,7 @@
 // admins see every message and can reply + dismiss. Everything stays in chat_messages
 // forever - "dismiss" is a soft flag hiding a row from the admin's default list, not a delete.
 
-import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20260829001156';
+import { sb, State, esc, isAdmin, withStatus, nameMapForEmails } from './core.js?v=20260829001401';
 
 const REPORT_TYPES = [
   ['REVISION', 'Revision'],
@@ -115,12 +115,13 @@ async function refreshAdminMessages() {
   if (docIdFilter) query = query.eq('document_id', parseInt(docIdFilter, 10));
   const rows = await withStatus(query);
   const filtered = emailFilter ? rows.filter(r => (r.user_email || '').toLowerCase().includes(emailFilter)) : rows;
+  const nameMap = await nameMapForEmails(filtered.map(r => r.user_email));
 
   const body = document.getElementById('msg-grid-body');
   body.innerHTML = filtered.map(r => `
     <tr data-id="${r.id}" class="${r.dismissed ? 'dismissed-row' : ''}">
       <td>${formatDateTime(r.created_at)}</td>
-      <td>${esc(r.user_email)}</td>
+      <td>${esc(nameMap[r.user_email] || r.user_email)}</td>
       <td>${esc(REPORT_TYPE_LABEL[r.report_type] || r.report_type)}</td>
       <td>${r.document_id ? esc(r.document_id) : '—'}</td>
       <td style="white-space:normal;max-width:260px;">${esc(r.message_text)}</td>
