@@ -136,7 +136,7 @@ export const State = {
   dashSort: { col: 'document_id', asc: false },
   adminEditFilters: { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', collection: '', recipient: '', source: '', language: '', legacyOnly: false, pendingOnly: false },
   reportFilters: { category: '', main_topic: '', author: '', recipient: '', workflow_status: '', from: '', to: '' },
-  matchFilters: { search: '', idSearch: '', category: '', author: '', workflow_status: '', recipient: '', collection: '', language: '' },
+  matchFilters: { search: '', idSearch: '', category: '', author: '', workflow_status: '', recipient: '', collection: '', language: '', source: '', orphansOnly: false },
   matchSort: { col: 'document_id', asc: false },
   matchSelectedId: null,
   optionsSelectedList: 'category',

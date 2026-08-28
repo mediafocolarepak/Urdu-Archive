@@ -9,7 +9,7 @@
 // management lives on the document detail page (Other Versions table) rather than duplicated
 // here.
 
-import { sb, esc, withStatus, labelOf, State, downloadFromGDrive, mergeWorks, titleOverlapScore } from './core.js?v=20260827230000';
+import { sb, esc, withStatus, labelOf, State, downloadFromGDrive, mergeWorks, titleOverlapScore } from './core.js?v=20260828120000';
 
 const SIMILARITY_THRESHOLD = 0.6;
 const MAX_FOR_SUGGESTIONS = 1500; // guard against an O(n^2) scan over a very large catalogue
@@ -52,7 +52,8 @@ function renderSingleDocGrid(singleDocs) {
     </tr></thead>
     <tbody>${singleDocs.map(d => `<tr data-id="${esc(d.document_id)}">
       ${docRowCells(d)}
-      <td><button class="btn secondary wc-open" style="padding:3px 8px;">Open</button></td>
+      <td><button class="btn secondary wc-open" style="padding:3px 8px;">Open</button>
+          <button class="btn secondary wc-matchreview" style="padding:3px 8px;">Match Review</button></td>
       <td><input class="wc-target" placeholder="ID" style="width:70px;display:inline-block;">
           <button class="btn wc-merge" style="padding:3px 8px;">Merge</button></td>
     </tr>`).join('')}</tbody>`;
@@ -60,6 +61,15 @@ function renderSingleDocGrid(singleDocs) {
   grid.querySelectorAll('tbody tr').forEach(tr => {
     const doc = singleDocs.find(d => String(d.document_id) === tr.dataset.id);
     tr.querySelector('.wc-open').addEventListener('click', () => downloadFromGDrive(doc.file_name));
+    // Jumps into Match Review pre-selected on this orphan and pre-filtered to other orphans
+    // of the same source, instead of forcing the reviewer to remember/look up its ID there -
+    // Match Review's candidate list itself already covers the whole catalogue unfiltered.
+    tr.querySelector('.wc-matchreview').addEventListener('click', () => {
+      State.matchFilters.source = doc.source || '';
+      State.matchFilters.orphansOnly = true;
+      State.matchSelectedId = String(doc.document_id);
+      window.__renderTab('matchreview');
+    });
     tr.querySelector('.wc-merge').addEventListener('click', async () => {
       const targetId = tr.querySelector('.wc-target').value.trim();
       if (!targetId) { alert('Enter the target document ID first.'); return; }

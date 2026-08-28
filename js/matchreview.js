@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, withStatus, mergeWorks, likeSafe, DASH_ROW_LIMIT, downloadFromGDrive, BUCKET } from './core.js?v=20260827230000';
-import { renderDocDetail } from './docdetail.js?v=20260827230000';
+import { sb, State, esc, labelOf, optionsHtml, withStatus, mergeWorks, likeSafe, DASH_ROW_LIMIT, downloadFromGDrive, BUCKET } from './core.js?v=20260828120000';
+import { renderDocDetail } from './docdetail.js?v=20260828120000';
 
 export function rankByDateProximity(refDate, refs, dateField) {
   // Ranks by closeness to refDate, but never drops a candidate just because it (or
@@ -39,6 +39,10 @@ export async function renderMatchReviewView(main) {
         <div class="field"><label>Recipient</label><select id="mr-f-recipient">${optionsHtml(State.recipients, f.recipient, true)}</select></div>
         <div class="field"><label>Collection</label><select id="mr-f-collection">${optionsHtml(State.collections, f.collection, true)}</select></div>
         <div class="field"><label>Language</label><select id="mr-f-language">${optionsHtml(State.langs, f.language, true)}</select></div>
+        <div class="field"><label>Source</label><select id="mr-f-source">${optionsHtml(State.sources, f.source, true)}</select></div>
+      </div>
+      <div class="field" style="margin-bottom:10px;">
+        <label><input type="checkbox" id="mr-f-orphans" ${f.orphansOnly ? 'checked' : ''}> Show only orphans (Work never merged with another)</label>
       </div>
       <div class="grid-wrap" style="max-height:34vh;"><table class="grid" id="mr-grid"></table></div>
       <div id="match-body" style="margin-top:14px;"></div>
@@ -52,13 +56,15 @@ export async function renderMatchReviewView(main) {
   document.getElementById('mr-f-recipient').addEventListener('change', e => { f.recipient = e.target.value; refreshMatchGrid(); });
   document.getElementById('mr-f-collection').addEventListener('change', e => { f.collection = e.target.value; refreshMatchGrid(); });
   document.getElementById('mr-f-language').addEventListener('change', e => { f.language = e.target.value; refreshMatchGrid(); });
+  document.getElementById('mr-f-source').addEventListener('change', e => { f.source = e.target.value; refreshMatchGrid(); });
+  document.getElementById('mr-f-orphans').addEventListener('change', e => { f.orphansOnly = e.target.checked; refreshMatchGrid(); });
 
   await refreshMatchGrid();
   await renderMatchBody();
 }
 
 function buildMatchQuery() {
-  let q = sb.from('documents').select('document_id,category,author,title,original_title,ref_date,recipient,workflow_status,pending_deletion');
+  let q = sb.from('documents').select('document_id,category,author,title,original_title,ref_date,recipient,workflow_status,pending_deletion,work_id');
   const f = State.matchFilters;
   if (f.search && f.search.trim()) {
     const like = likeSafe(f.search.trim());
@@ -73,7 +79,19 @@ function buildMatchQuery() {
   if (f.workflow_status) q = q.eq('workflow_status', f.workflow_status);
   if (f.recipient) q = q.overlaps('recipient', [f.recipient]);
   if (f.language) q = q.eq('language', f.language);
+  if (f.source) q = q.eq('source', f.source);
   return q;
+}
+
+// "Orphan" = a document whose Work has never been merged with another (still a single-item
+// Work) - same definition Work Consolidation uses. Needs a full work_id -> count map since
+// that can't be expressed as a single-row .eq() filter on the documents query above.
+async function filterByOrphans(rows) {
+  if (!State.matchFilters.orphansOnly) return rows;
+  const all = await withStatus(sb.from('documents').select('document_id,work_id').limit(DASH_ROW_LIMIT));
+  const countByWork = {};
+  for (const d of all) if (d.work_id) countByWork[d.work_id] = (countByWork[d.work_id] || 0) + 1;
+  return rows.filter(r => r.work_id && countByWork[r.work_id] === 1);
 }
 
 // Collections are many-to-many (document_collections), so filtering by them is a post-fetch
@@ -109,6 +127,7 @@ async function refreshMatchGrid() {
   let rows = await withStatus(buildMatchQuery().order(State.matchSort.col, { ascending: State.matchSort.asc }).limit(DASH_ROW_LIMIT), 'Searching...');
   rows = rows.filter(r => !r.pending_deletion);
   rows = await filterByCollection(rows);
+  rows = await filterByOrphans(rows);
   const collectionsMap = await fetchCollectionsMap(rows.map(r => r.document_id));
   const arrow = (col) => col !== State.matchSort.col ? '' : (State.matchSort.asc ? ' &uarr;' : ' &darr;');
   grid.innerHTML = `<thead><tr>${MATCH_COLUMNS.map(([col, label, sortable]) =>
