@@ -1,4 +1,4 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260828230000';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260828230712';
 
 // ---------- Users ----------
 
@@ -10,12 +10,12 @@ export async function renderUsersView(main) {
   main.innerHTML = `
     <div class="panel">
       <h2>Users <span class="count-badge">${rows.length}</span></h2>
-      <p class="hint">User = read/search only. Operator = can create and edit, and mark documents for deletion. Admin = can also delete permanently and manage roles.</p>
+      <p class="hint">User = read/search only. Operator = can create and edit, and mark documents for deletion. Coordinator = Operator powers, plus reviews "Join the Team" applications. Admin = can also delete permanently and manage roles.</p>
       <div class="grid-wrap"><table class="grid" id="users-grid">
         <thead><tr><th>Email</th><th>Role</th><th>Full name</th><th>City</th><th>Membership</th><th>Phone</th><th>Since</th><th></th></tr></thead>
         <tbody>${rows.map(r => { const p = profileByUid[r.user_id] || {}; return `<tr data-uid="${esc(r.user_id)}">
           <td>${esc(r.email)}</td>
-          <td><select class="role-select" data-uid="${esc(r.user_id)}">${optionsHtml([['user', 'User'], ['operator', 'Operator'], ['admin', 'Admin']], r.role, false)}</select></td>
+          <td><select class="role-select" data-uid="${esc(r.user_id)}">${optionsHtml([['user', 'User'], ['operator', 'Operator'], ['coordinator', 'Coordinator'], ['admin', 'Admin']], r.role, false)}</select></td>
           <td>${esc(p.full_name)}</td>
           <td>${esc(p.city)}</td>
           <td>${esc(labelOf(State.optionListsByName.membership_type || [], p.membership_type))}</td>

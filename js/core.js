@@ -233,9 +233,12 @@ export function optionsHtml(list, value, allowEmpty) {
     list.map(([c, l]) => `<option value="${c}" ${c === value ? 'selected' : ''}>${l}</option>`).join('');
 }
 
-export function canWrite() { return State.currentRole === 'operator' || State.currentRole === 'admin'; }
+export function canWrite() { return State.currentRole === 'operator' || State.currentRole === 'coordinator' || State.currentRole === 'admin'; }
 export function canDelete() { return State.currentRole === 'admin'; }
 export function isAdmin() { return State.currentRole === 'admin'; }
+export function isCoordinator() { return State.currentRole === 'coordinator'; }
+// Can review "Join the Team" applications - Coordinator (own queue) or Admin (everything).
+export function canReviewApplications() { return State.currentRole === 'coordinator' || State.currentRole === 'admin'; }
 
 // ---------- Generic helpers ----------
 
