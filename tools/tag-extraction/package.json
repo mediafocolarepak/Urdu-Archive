@@ -1,0 +1,25 @@
+{
+  "name": "focolare-tag-extraction",
+  "version": "0.1.0",
+  "description": "Estrazione di tag da documenti Focolare (InPage, docx) su vocabolario controllato trilingue",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "node test/collaudo.js",
+    "estrai": "node bin/estrai-tag.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.4",
+    "adm-zip": "^0.6.0",
+    "cfb": "^1.2.2",
+    "js-yaml": "^5.4.1"
+  },
+  "bin": {
+    "estrai-tag": "bin/estrai-tag.js"
+  }
+}

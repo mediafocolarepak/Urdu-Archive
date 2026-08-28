@@ -1,0 +1,1451 @@
+# ============================================================================
+# TASSONOMIA STANDARD — Corpus testi Movimento dei Focolari
+# Vocabolario controllato multilingue (it / en / ur) per il tagging automatico
+# Versione 0.2 — nucleo iniziale arricchito con lo spoglio del catalogo "Discorsi"
+# (1089 record: AUTORE, LUOGO, TIPO, A_CHI, TITOLO) e con la terminologia canonica
+# del Manuale di stile urdu v2.0.
+#
+# REGOLA PERMANENTE DELLA GRAFIA
+#   I testi Focolare scrivono tuttora la vocale accentata come vocale +
+#   apostrofo: UNITA'  SPIRITUALITA'  GESU'ABBANDONATO  CITTA'NUOVA  E'  PERCHE'
+#   La normalizzazione (normalizza.py) la converte sempre, in indicizzazione
+#   e in ricerca. Negli alias qui sotto si scrive quindi la forma piana
+#   ("unita", "Gesu Abbandonato"): copre da sola accentata, apostrofata e nuda.
+#
+# Struttura di ogni tag:
+#   id       identificatore stabile e immutabile (MAI cambiarlo: e' la chiave nel DB)
+#   facet    faccetta di appartenenza (vedi elenco facets)
+#   pref     etichetta preferita per lingua (cio' che si mostra all'utente)
+#   alt      alias FORTI: se compaiono, il tag e' assegnato
+#   weak     alias DEBOLI/ambigui: contano solo se nel documento c'e' gia' un match forte
+#            dello stesso tag, altrimenti finiscono nel report "da rivedere"
+#   broader  id del tag padre (gerarchia per la ricerca allargata)
+#   note     nota di ambito per il redattore (scope note)
+# ============================================================================
+
+version: "0.2"
+lingue: [it, en, ur]
+
+facets:
+  PER: {label_it: Persone,               note: "Persone storiche e figure citate"}
+  BRA: {label_it: Branche e diramazioni, note: "Vocazioni, sezioni, movimenti ad ampio raggio"}
+  ORG: {label_it: Strutture e organi,    note: "Governo, articolazione territoriale, istituzioni"}
+  SPI: {label_it: Punti della spiritualita, note: "I 12 punti cardine dell'Ideale"}
+  TEM: {label_it: Temi spirituali,       note: "Temi teologici e ascetici ricorrenti non coincidenti con i 12 punti"}
+  STR: {label_it: Strumenti di comunione, note: "I 5 strumenti della spiritualita collettiva"}
+  COL: {label_it: Sette colori,          note: "Aspetti concreti della vita, per colore"}
+  ADA: {label_it: Arte di amare,         note: "I punti dell'arte di amare"}
+  EVE: {label_it: Eventi e appuntamenti, note: "Congressi, scuole, appuntamenti ricorrenti"}
+  LUO: {label_it: Luoghi,                note: "Cittadelle, sedi, toponimi rilevanti"}
+  PUB: {label_it: Fonti e pubblicazioni, note: "Riviste, editrici, documenti normativi"}
+  GEN: {label_it: Genere testuale,       note: "Tipologia del documento (assegnata a mano o da metadato)"}
+  DES: {label_it: Destinatario,          note: "Pubblico a cui il testo si rivolge"}
+
+tags:
+
+# ---------------------------------------------------------------- PERSONE ---
+- id: PER.lubich-chiara
+  facet: PER
+  pref: {it: Chiara Lubich, en: Chiara Lubich, ur: کیارا لوبیک}
+  alt:
+    it: [Chiara Lubich, Silvia Lubich]
+    en: [Chiara Lubich, Silvia Lubich]
+    ur: [کیارا لوبیک, کیارا]
+  weak:
+    it: [Chiara, la fondatrice, Fondatrice]
+    en: [Chiara, the foundress]
+  note: "Alias 'Chiara' e' debole: ricorre anche come nome comune di altre persone."
+
+- id: PER.giordani-igino
+  facet: PER
+  pref: {it: Igino Giordani (Foco), en: Igino Giordani (Foco), ur: فوکو}
+  alt:
+    it: [Igino Giordani, Giordani]
+    en: [Igino Giordani, Giordani]
+    ur: [ایجینو جورڈانی, فوکو]
+  weak: {it: [Foco], en: [Foco]}
+
+- id: PER.foresi-pasquale
+  facet: PER
+  pref: {it: Pasquale Foresi (Chiaretto), en: Pasquale Foresi, ur: پاسکوالے فورےسی}
+  alt:
+    it: [Pasquale Foresi, Foresi]
+    en: [Pasquale Foresi, Foresi]
+  weak: {it: [Chiaretto]}
+
+- id: PER.hemmerle-klaus
+  facet: PER
+  pref: {it: Klaus Hemmerle, en: Klaus Hemmerle, ur: کلاؤس ہیمرلے}
+  alt:
+    it: [Klaus Hemmerle, Hemmerle]
+    en: [Klaus Hemmerle, Hemmerle]
+    ur: [کلاؤس ہیمرلے]
+
+- id: PER.voce-maria
+  facet: PER
+  pref: {it: Maria Voce (Emmaus), en: Maria Voce (Emmaus), ur: ماریا ووچے}
+  alt:
+    it: [Maria Voce, Emmaus Voce]
+    en: [Maria Voce]
+  weak: {it: [Emmaus], en: [Emmaus]}
+  note: "'Emmaus' e' debole: e' anche toponimo evangelico."
+
+- id: PER.moran-margaret
+  facet: PER
+  pref: {it: Margaret Karram, en: Margaret Karram, ur: مارگریٹ کرام}
+  alt:
+    it: [Margaret Karram, Karram]
+    en: [Margaret Karram, Karram]
+
+- id: PER.gesu-cristo
+  facet: PER
+  pref: {it: Gesu Cristo, en: Jesus Christ, ur: یسوع مسیح}
+  alt:
+    it: [Gesu Cristo, Gesu' Cristo, Cristo, Signore Gesu, il Verbo]
+    en: [Jesus Christ, Christ, the Word]
+    ur: [یسوع مسیح, یسوع, مسیح]
+  note: "Non usare per 'Gesu abbandonato' e 'Gesu in mezzo': quelli hanno tag propri (SPI)."
+
+- id: PER.maria-vergine
+  facet: PER
+  pref: {it: Maria Santissima, en: Mary, ur: مقدسہ مریم}
+  alt:
+    it: [Maria Santissima, Vergine Maria, Madonna, Madre di Dio, Maria Desolata,
+         Maria modello di perfezione, influsso spirituale di Maria]
+    en: [Virgin Mary, Our Lady, Mother of God, Mary Desolate]
+    ur: [مقدسہ مریم, کنواری مریم, مریم]
+  note: "In prosa urdu l'onorifico مقدسہ مریم e' canonico; مریم da solo solo in liste/glossario."
+  broader: SPI.maria
+
+- id: PER.papa-giovanni-paolo-ii
+  facet: PER
+  pref: {it: Giovanni Paolo II, en: John Paul II, ur: پوپ جان پال دوم}
+  alt:
+    it: [Giovanni Paolo II, Papa Giovanni Paolo II, Karol Wojtyla]
+    en: [John Paul II, Pope John Paul II]
+    ur: [پوپ جان پال دوم]
+
+- id: PER.papa-paolo-vi
+  facet: PER
+  pref: {it: Paolo VI, en: Paul VI, ur: پوپ پال ششم}
+  alt: {it: [Paolo VI, Papa Paolo VI], en: [Paul VI, Pope Paul VI]}
+
+- id: PER.papa-francesco
+  facet: PER
+  pref: {it: Francesco (papa), en: Pope Francis, ur: پوپ فرانسس}
+  alt: {it: [Papa Francesco], en: [Pope Francis]}
+  weak: {it: [Francesco], en: [Francis]}
+  note: "'Francesco' debole: confondibile con Francesco d'Assisi e con nomi di persona."
+
+- id: PER.papa-benedetto-xvi
+  facet: PER
+  pref: {it: Benedetto XVI, en: Benedict XVI, ur: پوپ بینیڈکٹ شانزدہم}
+  alt: {it: [Benedetto XVI, Joseph Ratzinger], en: [Benedict XVI, Joseph Ratzinger]}
+
+- id: PER.francesco-assisi
+  facet: PER
+  pref: {it: Francesco d'Assisi, en: Francis of Assisi, ur: مقدس فرانسس}
+  alt:
+    it: [Francesco d'Assisi, San Francesco]
+    en: [Francis of Assisi, Saint Francis, St. Francis]
+    ur: [مقدس فرانسس]
+
+- id: PER.caterina-siena
+  facet: PER
+  pref: {it: Caterina da Siena, en: Catherine of Siena, ur: سیانا کی کیتھرین}
+  alt:
+    it: [Caterina da Siena, Santa Caterina]
+    en: [Catherine of Siena, Saint Catherine]
+
+- id: PER.paolo-apostolo
+  facet: PER
+  pref: {it: San Paolo, en: Saint Paul, ur: مقدس پولس}
+  alt:
+    it: [San Paolo, Paolo apostolo, Apostolo Paolo]
+    en: [Saint Paul, St. Paul, the Apostle Paul]
+    ur: [مقدس پولس, پولس رسول]
+
+# --------------------------------------------------- BRANCHE E DIRAMAZIONI ---
+- id: BRA.focolarini
+  facet: BRA
+  pref: {it: Focolarini, en: Focolarini, ur: فوکالرینو}
+  alt:
+    it: [focolarino, focolarini, sezione dei focolarini, foc.ni, foc.no]
+    en: [focolarino, focolarini]
+    ur: [فوکالرینو, فوکالرینو کا حصہ]
+
+- id: BRA.focolarine
+  facet: BRA
+  pref: {it: Focolarine, en: Focolarine, ur: فوکالرینا}
+  alt:
+    it: [focolarina, focolarine, sezione delle focolarine, foc.ne]
+    en: [focolarina, focolarine]
+    ur: [فوکالرینا, فوکالرینا کا حصہ]
+
+- id: BRA.focolarini-sposati
+  facet: BRA
+  pref: {it: Focolarini sposati, en: Married focolarini, ur: شادی شدہ فوکالرینو}
+  alt: {it: [focolarini sposati, focolarine sposate], en: [married focolarini]}
+
+- id: BRA.sacerdoti
+  facet: BRA
+  pref: {it: Sacerdoti e diaconi focolarini, en: Priests and deacons, ur: فوکالرینو پادری اور ڈیکن}
+  alt:
+    it: [sacerdoti focolarini, diaconi diocesani, sacerdoti e diaconi]
+    en: [priest focolarini, diocesan deacons]
+    ur: [فوکالرینو پادری اور ڈیکن, فوکالرینو پادری]
+
+- id: BRA.volontari
+  facet: BRA
+  pref: {it: Volontari di Dio, en: Volunteers of God, ur: خُدا کے رضاکار}
+  alt:
+    it: [Volontari di Dio, Volontarie di Dio, volontari, volontarie, vol.ri, vol.rie]
+    en: [Volunteers of God, Women Volunteers of God]
+    ur: [خُدا کے رضاکار, خُدا کی رضاکار خواتین]
+
+- id: BRA.gen
+  facet: BRA
+  pref: {it: Gen, en: Gen, ur: جین}
+  alt:
+    it: [Gen 2, Gen2, Gen 3, Gen3, Gen 4, Gen4, generazione nuova]
+    en: [Gen 2, Gen2, Gen 3, Gen3, Gen 4, Gen4, new generation]
+    ur: [جین]
+  weak: {it: [Gen], en: [Gen]}
+  note: "'Gen' isolato e' debole: coincide con abbreviazioni (Genesi, generale)."
+
+- id: BRA.gens
+  facet: BRA
+  pref: {it: Gens, en: Gens, ur: جینز}
+  alt: {it: ["Gens'", Gens], en: ["Gens'", Gens], ur: [جینز]}
+
+- id: BRA.religiosi
+  facet: BRA
+  pref: {it: Religiosi e religiose, en: Men and women religious, ur: راہب اور راہبات}
+  alt:
+    it: [religiosi e religiose, religiose del Movimento]
+    en: [religious of the Movement]
+    ur: [راہب اور راہبات]
+
+- id: BRA.vescovi-amici
+  facet: BRA
+  pref: {it: Vescovi amici del Movimento, en: Bishop friends of the Movement, ur: تحریک کے دوست بشپ}
+  alt:
+    it: [vescovi amici, vescovi amici del Movimento]
+    en: [bishop friends]
+    ur: [تحریک کے دوست بشپ]
+
+- id: BRA.famiglie-nuove
+  facet: BRA
+  pref: {it: Famiglie Nuove, en: New Families, ur: نئے خاندان}
+  alt:
+    it: [Famiglie Nuove, Movimento Famiglie Nuove]
+    en: [New Families, New Families Movement]
+    ur: [نئے خاندان]
+
+- id: BRA.umanita-nuova
+  facet: BRA
+  pref: {it: Umanita Nuova, en: New Humanity, ur: نئی انسانیت}
+  alt:
+    it: [Umanita Nuova, Umanita' Nuova, Movimento Umanita Nuova]
+    en: [New Humanity, New Humanity Movement]
+    ur: [نئی انسانیت]
+
+- id: BRA.giovani-mondo-unito
+  facet: BRA
+  pref: {it: Giovani per un mondo unito, en: Youth for a United World, ur: متحد دنیا کے حامی نوجوان}
+  alt:
+    it: [Giovani per un mondo unito, GMU]
+    en: [Youth for a United World, Y4UW]
+    ur: [متحد دنیا کے حامی نوجوان]
+
+- id: BRA.ragazzi-unita
+  facet: BRA
+  pref: {it: Ragazzi per l'unita, en: Teens for Unity, ur: اتحاد کے حامی بچے}
+  alt:
+    it: [Ragazzi per l'unita, Ragazzi per l'unita']
+    en: [Teens for Unity, Kids for Unity]
+    ur: [اتحاد کے حامی بچے]
+
+- id: BRA.movimento-parrocchiale
+  facet: BRA
+  pref: {it: Movimento Parrocchiale, en: Parish Movement, ur: پیرشل تحریک}
+  alt: {it: [Movimento Parrocchiale], en: [Parish Movement], ur: [پیرشل تحریک]}
+
+- id: BRA.movimento-diocesano
+  facet: BRA
+  pref: {it: Movimento Diocesano, en: Diocesan Movement, ur: ڈائیوسیسن تحریک}
+  alt: {it: [Movimento Diocesano], en: [Diocesan Movement], ur: [ڈائیوسیسن تحریک]}
+
+# ------------------------------------------------- STRUTTURE E ISTITUZIONI ---
+- id: ORG.opera-di-maria
+  facet: ORG
+  pref: {it: Opera di Maria, en: Work of Mary, ur: کارِ مریم}
+  alt:
+    it: [Opera di Maria, Movimento dei Focolari]
+    en: [Work of Mary, Focolare Movement]
+    ur: [کارِ مریم, کا رِ مریم, فوکولاری تحریک]
+
+- id: ORG.centro
+  facet: ORG
+  pref: {it: Centro dell'Opera, en: Centre of the Work, ur: کارِ مریم کا مرکز}
+  alt:
+    it: [Centro dell'Opera, Centro internazionale]
+    en: [Centre of the Work, International Centre]
+    ur: [کارِ مریم کا مرکز]
+  weak: {it: [Centro], en: [Centre, Center], ur: [مرکز]}
+
+- id: ORG.zona
+  facet: ORG
+  pref: {it: Zona, en: Zone, ur: زون}
+  alt: {it: [capozona, zona focolarina], en: [zone leader], ur: [زون]}
+  weak: {it: [zona, zone], en: [zone]}
+
+- id: ORG.presidenza
+  facet: ORG
+  pref: {it: Presidenza e Consiglio generale, en: Presidency and General Council, ur: صدارت اور عمومی کونسل}
+  alt:
+    it: [Presidente dell'Opera, Copresidente, Consiglio generale, Consiglio Generale]
+    en: [President of the Work, Co-President, General Council]
+    ur: [صدر, شریک صدر, عمومی کونسل]
+
+- id: ORG.scuola-abba
+  facet: ORG
+  pref: {it: Scuola Abba, en: Abba School, ur: اسکول ابّا}
+  alt: {it: [Scuola Abba, Scuola Abba'], en: [Abba School], ur: [اسکول ابّا]}
+
+- id: ORG.istituto-mystici-corporis
+  facet: ORG
+  pref: {it: Istituto Mystici Corporis, en: Mystici Corporis Institute, ur: Istituto Mystici Corporis}
+  alt: {it: [Istituto Mystici Corporis, Mystici Corporis], en: [Mystici Corporis Institute]}
+
+- id: ORG.chiesa-cattolica
+  facet: ORG
+  pref: {it: Chiesa, en: Church, ur: کلیسیا}
+  alt:
+    it: [Chiesa cattolica, Santa Sede, Magistero, Santo Padre, S. Padre, Sommo Pontefice]
+    en: [Catholic Church, Holy See, Magisterium]
+    ur: [کیتھولک کلیسیا, مقدس تخت]
+  broader: SPI.chiesa
+
+# -------------------------------- 12 PUNTI CARDINE DELLA SPIRITUALITA ------
+- id: SPI.dio-amore
+  facet: SPI
+  pref: {it: Dio Amore, en: God is Love, ur: خُدا محبت}
+  alt:
+    it: [Dio Amore, Dio e Amore, Dio e' Amore, Dio che ci ama immensamente]
+    en: [God is Love, God Love]
+    ur: [خُدا محبت]
+
+- id: SPI.volonta-di-dio
+  facet: SPI
+  pref: {it: Volonta di Dio, en: The Will of God, ur: خُدا کی مرضی}
+  alt:
+    it: [volonta di Dio, volonta' di Dio, santa volonta di Dio, fare la volonta di Dio]
+    en: [will of God, God's will]
+    ur: [خُدا کی مرضی]
+
+- id: SPI.parola-di-vita
+  facet: SPI
+  pref: {it: La Parola / Parola di vita, en: The Word / Word of Life, ur: خُدا کا کلام}
+  alt:
+    it: [Parola di vita, Parola di Dio, il Vangelo, vivere la Parola]
+    en: [Word of Life, Word of God, the Gospel, living the Word]
+    ur: [خُدا کا کلام, کلامِ حیات, انجیل]
+
+- id: SPI.prossimo
+  facet: SPI
+  pref: {it: Il prossimo, en: The neighbour, ur: پڑوسی}
+  alt:
+    it: [il prossimo, amore al prossimo, servizio al prossimo]
+    en: [the neighbour, the neighbor, love of neighbour]
+    ur: [پڑوسی]
+
+- id: SPI.amore-reciproco
+  facet: SPI
+  pref: {it: Amore reciproco, en: Mutual love, ur: باہمی محبت}
+  alt:
+    it: [amore reciproco, amore scambievole, amarci a vicenda]
+    en: [mutual love, reciprocal love]
+    ur: [باہمی محبت]
+
+- id: SPI.eucaristia
+  facet: SPI
+  pref: {it: Gesu Eucaristia, en: Jesus in the Eucharist, ur: یسوع پاک یوخرست}
+  alt:
+    it: [Eucaristia, Gesu Eucaristia, Santissimo Sacramento, comunione eucaristica]
+    en: [Eucharist, Jesus Eucharist, Blessed Sacrament]
+    ur: [یسوع پاک یوخرست, پاک یوخرست]
+
+- id: SPI.unita
+  facet: SPI
+  pref: {it: L'unita, en: Unity, ur: اتحاد}
+  alt:
+    it: [unita, unita', "che tutti siano uno", ut omnes]
+    en: [unity, "that all may be one", ut omnes]
+    ur: [اتحاد]
+
+- id: SPI.gesu-abbandonato
+  facet: SPI
+  pref: {it: Gesu Abbandonato, en: Jesus Forsaken, ur: یسوع متروک}
+  alt:
+    it: [Gesu Abbandonato, Gesu crocifisso e abbandonato, il grido dell'abbandono,
+         vestiti di Gesu Abbandonato, amare Gesu Abbandonato]
+    en: [Jesus Forsaken, Jesus Crucified and Forsaken, the cry of abandonment]
+    ur: [یسوع متروک]
+  weak:
+    it: [G.A., G.A, abbandonato]
+
+- id: SPI.maria
+  facet: SPI
+  pref: {it: Maria, en: Mary, ur: مریم}
+  alt:
+    it: [Maria, la Madonna, Maria Desolata]
+    en: [Mary, Our Lady, Mary Desolate]
+    ur: [مریم]
+
+- id: SPI.chiesa
+  facet: SPI
+  pref: {it: La Chiesa, en: The Church, ur: کلیسیا}
+  alt:
+    it: [la Chiesa, comunione ecclesiale, Chiesa-comunione]
+    en: [the Church, ecclesial communion]
+    ur: [کلیسیا]
+
+- id: SPI.spirito-santo
+  facet: SPI
+  pref: {it: Lo Spirito Santo, en: The Holy Spirit, ur: روح القدس}
+  alt:
+    it: [Spirito Santo, S. Santo, Paraclito, doni dello Spirito]
+    en: [Holy Spirit, Paraclete]
+    ur: [روح القدس]
+
+- id: SPI.gesu-in-mezzo
+  facet: SPI
+  pref: {it: Gesu in mezzo, en: Jesus in our midst, ur: یسوع ہمارے درمیان}
+  alt:
+    it: [Gesu in mezzo, Gesu' in mezzo, Gesu in mezzo a noi, presenza di Gesu tra noi]
+    en: [Jesus in our midst, Jesus in the midst]
+    ur: [یسوع ہمارے درمیان]
+
+# ---------------------------------------- STRUMENTI DELLA VITA COMUNITARIA ---
+- id: STR.patto-amore-scambievole
+  facet: STR
+  pref: {it: Patto dell'amore scambievole, en: Pact of mutual love, ur: عہدِ باہمی محبت}
+  alt:
+    it: [patto dell'amore scambievole, patto di amore reciproco, patto di misericordia]
+    en: [pact of mutual love, pact of mercy]
+    ur: [عہدِ باہمی محبت, عہد]
+
+- id: STR.comunione-anima
+  facet: STR
+  pref: {it: Comunione d'anima, en: Communion of souls, ur: روحانی شراکت}
+  alt:
+    it: [comunione d'anima, comunione delle anime]
+    en: [communion of souls]
+    ur: [روحانی شراکت]
+
+- id: STR.comunione-esperienze
+  facet: STR
+  pref: {it: Comunione delle esperienze della Parola, en: Sharing experiences of the Word, ur: کلامِ حیات کے تجربات کی شراکت}
+  alt:
+    it: [comunione delle esperienze, esperienze della Parola, comunicare le esperienze]
+    en: [sharing of experiences, experiences of the Word]
+    ur: [کلامِ حیات کے تجربات کی شراکت, تجربات کی شراکت]
+
+- id: STR.colloquio
+  facet: STR
+  pref: {it: Colloquio, en: Colloquy, ur: گفتگو}
+  alt: {it: [il colloquio, fare il colloquio], en: [the colloquy], ur: [گفتگو]}
+
+- id: STR.ora-della-verita
+  facet: STR
+  pref: {it: Ora della verita, en: Hour of truth, ur: سچائی کا لمحہ}
+  alt:
+    it: [ora della verita, ora della verita', correzione fraterna]
+    en: [hour of truth, fraternal correction]
+    ur: [سچائی کا لمحہ]
+
+- id: STR.comunione-dei-beni
+  facet: STR
+  pref: {it: Comunione dei beni, en: Communion of goods, ur: اشتراکِ اموال}
+  alt:
+    it: [comunione dei beni, mettere in comune i beni]
+    en: [communion of goods, sharing of goods]
+    ur: [اشتراکِ اموال]
+  broader: COL.red
+
+# --------------------------------------------------------- SETTE COLORI -----
+# Nomi italiani e motti ricavati dal catalogo Discorsi ("LE ORIGINI DEL ROSSO",
+# "VIII TEMA DELLA SPIRITUALITA' COLLETTIVA: VI ASPETTO: L'AMORE GENERA SAPIENZA").
+# Il nome del colore da solo e' alias debole: in narrativa indica un colore vero.
+
+- id: COL.red
+  facet: COL
+  pref: {it: "Rosso (Red) — comunione dei beni, economia, lavoro", en: "Red — economy and work", ur: "سرخ (Red)"}
+  alt:
+    it: [aspetto Red, colore Red, aspetto rosso, origini del rosso, "l'amore e comunione", "l'amore e' comunione"]
+    en: [Red aspect]
+    ur: [سرخ (Red), سرخ رنگ]
+  weak: {it: [rosso]}
+
+- id: COL.orange
+  facet: COL
+  pref: {it: "Arancio (Orange) — testimonianza e irradiazione", en: "Orange — witness and outreach", ur: "نارنجی (Orange)"}
+  alt:
+    it: [aspetto Orange, colore Orange, aspetto arancio, origini dell'arancio, "l'amore si diffonde", irradiazione]
+    en: [Orange aspect, outreach]
+    ur: [نارنجی (Orange), نارنجی رنگ]
+  weak: {it: [arancio]}
+
+- id: COL.yellow
+  facet: COL
+  pref: {it: "Giallo (Yellow) — vita di preghiera e formazione", en: "Yellow — prayer life and formation", ur: "پیلا (Yellow)"}
+  alt:
+    it: [aspetto Yellow, colore Yellow, aspetto giallo, origini del giallo, "l'amore eleva"]
+    en: [Yellow aspect]
+    ur: [پیلا (Yellow), پیلا رنگ]
+  weak: {it: [giallo]}
+
+- id: COL.green
+  facet: COL
+  pref: {it: "Verde (Green) — vita fisica, natura, salute", en: "Green — health and nature", ur: "سبز (Green)"}
+  alt:
+    it: [aspetto Green, colore Green, aspetto verde, origini del verde, "l'amore risana"]
+    en: [Green aspect]
+    ur: [سبز (Green), سبز رنگ]
+  weak: {it: [verde]}
+
+- id: COL.blue
+  facet: COL
+  pref: {it: "Azzurro (Blue) — armonia, ambiente, arte", en: "Blue — harmony and art", ur: "نیلا (Blue)"}
+  alt:
+    it: [aspetto Blue, colore Blue, aspetto azzurro, origini dell'azzurro, "l'amore fa casa"]
+    en: [Blue aspect]
+    ur: [نیلا (Blue), نیلا رنگ]
+  weak: {it: [azzurro]}
+
+- id: COL.indigo
+  facet: COL
+  pref: {it: "Indaco (Indigo) — sapienza, studio, ricerca", en: "Indigo — wisdom and study", ur: "نیلم (Indigo)"}
+  alt:
+    it: [aspetto Indigo, colore Indigo, aspetto indaco, origini dell'indaco, "l'amore genera sapienza"]
+    en: [Indigo aspect]
+    ur: [نیلم (Indigo)]
+  weak: {it: [indaco]}
+
+- id: COL.violet
+  facet: COL
+  pref: {it: "Violetto (Violet) — unita, comunicazione, media", en: "Violet — unity and communication", ur: "بنفشی (Violet)"}
+  alt:
+    it: [aspetto Violet, colore Violet, aspetto violetto, origini del violetto, "l'amore unisce", "l'amore che unisce"]
+    en: [Violet aspect, communications]
+    ur: [بنفشی (Violet)]
+  weak: {it: [violetto]}
+
+# ------------------------------------------------------- ARTE DI AMARE ------
+- id: ADA.arte-di-amare
+  facet: ADA
+  pref: {it: Arte di amare, en: Art of loving, ur: محبت کا فن}
+  alt: {it: [arte di amare], en: [art of loving], ur: [محبت کا فن]}
+
+- id: ADA.amare-per-primi
+  facet: ADA
+  pref: {it: Amare per primi, en: Love first, ur: پیار میں پہل کرنا}
+  alt: {it: [amare per primi, prendere l'iniziativa nell'amore], en: [to love first, take the initiative], ur: [پیار میں پہل کرنا]}
+  broader: ADA.arte-di-amare
+
+- id: ADA.amare-tutti
+  facet: ADA
+  pref: {it: Amare tutti, en: Love everyone, ur: سب کو پیار کرنا}
+  alt: {it: [amare tutti, amare ognuno], en: [love everyone, love all], ur: [سب کو پیار کرنا]}
+  broader: ADA.arte-di-amare
+
+- id: ADA.farsi-uno
+  facet: ADA
+  pref: {it: Farsi uno, en: Making oneself one, ur: دوسروں کے ساتھ ایک ہونا}
+  alt: {it: [farsi uno, farsi uno con, "farsi uno con l'altro"], en: [making ourselves one, make oneself one], ur: [دوسروں کے ساتھ ایک ہونا]}
+  broader: ADA.arte-di-amare
+
+- id: ADA.amare-nemico
+  facet: ADA
+  pref: {it: Amare il nemico, en: Love the enemy, ur: اپنے دشمن کو پیار کرنا}
+  alt: {it: [amare il nemico, amare i nemici], en: [love the enemy, love your enemies], ur: [اپنے دشمن کو پیار کرنا]}
+  broader: ADA.arte-di-amare
+
+- id: ADA.vedere-gesu-nel-prossimo
+  facet: ADA
+  pref: {it: Amare Gesu nel prossimo, en: Love Jesus in the neighbour, ur: ہر ایک میں یسوع کو دیکھنا}
+  alt: {it: [amare Gesu nel prossimo, vedere Gesu in ognuno], en: [see Jesus in everyone], ur: [ہر ایک میں یسوع کو دیکھنا]}
+  broader: ADA.arte-di-amare
+
+# ----------------------------------------------------- TEMI SPIRITUALI ------
+- id: TEM.santita
+  facet: TEM
+  pref: {it: Santita, en: Holiness, ur: تقدیس}
+  alt: {it: [santita, santita', chiamata alla santita, santita di popolo], en: [holiness, call to holiness]}
+
+- id: TEM.vita-presente
+  facet: TEM
+  pref: {it: Vivere il presente, en: Living the present moment, ur: موجودہ لمحے میں جینا}
+  alt: {it: [vivere il presente, attimo presente, il momento presente], en: [present moment, live the present], ur: [موجودہ لمحے میں جینا]}
+
+- id: TEM.dolore-croce
+  facet: TEM
+  pref: {it: Dolore e croce, en: Suffering and the Cross, ur: دکھ اور صلیب}
+  alt: {it: [la croce, il dolore, sofferenza redentiva, "al di la della piaga"], en: [the Cross, suffering, beyond the wound], ur: [صلیب, زخم سے آگے]}
+
+- id: TEM.misericordia
+  facet: TEM
+  pref: {it: Misericordia e perdono, en: Mercy and forgiveness, ur: رحم اور معافی}
+  alt: {it: [misericordia, perdono, perdonare], en: [mercy, forgiveness, to forgive], ur: [رحم, معافی]}
+
+- id: TEM.preghiera
+  facet: TEM
+  pref: {it: Preghiera, en: Prayer, ur: دعا}
+  alt: {it: [preghiera, pregare, vita di preghiera, meditazione], en: [prayer, to pray, meditation], ur: [دعا, دعا کی زندگی]}
+
+- id: TEM.vocazione
+  facet: TEM
+  pref: {it: Vocazione e chiamata, en: Vocation, ur: بلاہٹ}
+  alt: {it: [vocazione, la chiamata di Dio, discernimento vocazionale], en: [vocation, God's call]}
+
+- id: TEM.dialogo-interreligioso
+  facet: TEM
+  pref: {it: Dialogo interreligioso, en: Interreligious dialogue, ur: بین المذاہب مکالمہ}
+  alt:
+    it: [dialogo interreligioso, dialogo con i musulmani, dialogo islamo-cristiano]
+    en: [interreligious dialogue, dialogue with Muslims, Christian-Muslim dialogue]
+    ur: [بین المذاہب مکالمہ, مسلمانوں کے ساتھ مکالمہ]
+
+- id: TEM.dialogo-ecumenico
+  facet: TEM
+  pref: {it: Dialogo ecumenico, en: Ecumenical dialogue, ur: مسیحی وحدت کا مکالمہ}
+  alt: {it: [ecumenismo, dialogo ecumenico, unita dei cristiani], en: [ecumenism, ecumenical dialogue, Christian unity]}
+
+- id: TEM.pace-fraternita
+  facet: TEM
+  pref: {it: Pace e fraternita universale, en: Peace and universal fraternity, ur: امن اور عالمی بھائی چارہ}
+  alt: {it: [pace, fraternita universale, fraternita', mondo unito], en: [peace, universal fraternity, united world], ur: [امن, عالمی بھائی چارہ]}
+
+- id: TEM.formazione
+  facet: TEM
+  pref: {it: Formazione, en: Formation, ur: تربیت}
+  alt: {it: [formazione, itinerario formativo, corso di formazione], en: [formation, formation course], ur: [تربیت]}
+
+- id: TEM.famiglia
+  facet: TEM
+  pref: {it: Famiglia e matrimonio, en: Family and marriage, ur: خاندان اور شادی}
+  alt: {it: [la famiglia, matrimonio, vita coniugale, sposi], en: [the family, marriage, married couples], ur: [خاندان, شادی]}
+
+- id: TEM.giovani
+  facet: TEM
+  pref: {it: Giovani, en: Young people, ur: نوجوان}
+  alt: {it: [i giovani, gioventu, pastorale giovanile], en: [young people, youth], ur: [نوجوان]}
+
+- id: TEM.poverta-carita
+  facet: TEM
+  pref: {it: Poverta e carita sociale, en: Poverty and social charity, ur: غربت اور سماجی محبت}
+  alt: {it: [poverta, poverta', i poveri, carita sociale, solidarieta], en: [poverty, the poor, social charity, solidarity], ur: [غربت, غریب]}
+
+- id: TEM.testimonianza
+  facet: TEM
+  pref: {it: Testimonianza, en: Witness, ur: گواہی}
+  alt: {it: [testimonianza, dare testimonianza, esperienza di vita], en: [witness, testimony], ur: [گواہی]}
+
+- id: TEM.evangelizzazione
+  facet: TEM
+  pref: {it: Evangelizzazione e missione, en: Evangelisation and mission, ur: منادی اور مشن}
+  alt: {it: [evangelizzazione, missione, annuncio del Vangelo, missionari], en: [evangelisation, evangelization, mission, missionaries]}
+
+- id: TEM.ideale
+  facet: TEM
+  pref: {it: L'Ideale, en: The Ideal, ur: آیڈیل}
+  alt: {it: ["l'Ideale", "vivere l'Ideale", Ideale dell'unita], en: [the Ideal], ur: [آیڈیل]}
+
+- id: TEM.carisma-unita
+  facet: TEM
+  pref: {it: Carisma dell'unita, en: Charism of unity, ur: اتحاد کا کرشمہ}
+  alt: {it: [carisma dell'unita, carisma dell'unita', spiritualita dell'unita, spiritualita collettiva], en: [charism of unity, spirituality of unity, collective spirituality]}
+
+- id: TEM.santo-viaggio
+  facet: TEM
+  pref: {it: Santo Viaggio, en: Holy Journey, ur: پاک سفر}
+  alt: {it: [Santo Viaggio, S. Viaggio], en: [Holy Journey], ur: [پاک سفر]}
+  note: "Passaggio alla vita eterna dei membri del Movimento."
+
+# ------------------------------------------------------------- EVENTI -------
+- id: EVE.mariapoli
+  facet: EVE
+  pref: {it: Mariapoli, en: Mariapolis, ur: ماریا پولی}
+  alt: {it: [Mariapoli, Mariapoli estiva], en: [Mariapolis], ur: [ماریا پولی]}
+
+- id: EVE.genfest
+  facet: EVE
+  pref: {it: Genfest, en: Genfest, ur: جین فیسٹ}
+  alt: {it: [Genfest], en: [Genfest], ur: [جین فیسٹ]}
+
+- id: EVE.collegamento
+  facet: EVE
+  pref: {it: Collegamento CH, en: Collegamento CH, ur: رابطہ}
+  alt: {it: [Collegamento CH, collegamento telefonico], en: [Collegamento CH, conference call link-up], ur: [رابطہ]}
+  weak: {it: [Collegamento], en: [link-up]}
+
+- id: EVE.assemblea-generale
+  facet: EVE
+  pref: {it: Assemblea generale, en: General Assembly, ur: عمومی اسمبلی}
+  alt: {it: [Assemblea generale, Assemblea dell'Opera], en: [General Assembly], ur: [عمومی اسمبلی, اسمبلی]}
+
+- id: EVE.scuola-formazione
+  facet: EVE
+  pref: {it: Scuole di formazione, en: Formation schools, ur: تربیتی اسکول}
+  alt: {it: [scuola di formazione, scuola gen, scuola dei volontari, congresso], en: [formation school, gen school, congress]}
+
+- id: EVE.time-out
+  facet: EVE
+  pref: {it: Time-Out, en: Time-Out, ur: Time-Out}
+  alt: {it: [Time-Out, Time Out per la pace], en: [Time-Out]}
+
+- id: EVE.settimana-mondo-unito
+  facet: EVE
+  pref: {it: Settimana Mondo Unito, en: United World Week, ur: متحد دنیا کا ہفتہ}
+  alt: {it: [Settimana Mondo Unito, Settimana per un mondo unito], en: [United World Week]}
+
+# -------------------------------------------------------------- LUOGHI ------
+- id: LUO.rocca-di-papa
+  facet: LUO
+  pref: {it: Rocca di Papa, en: Rocca di Papa, ur: روکا دی پاپا}
+  alt: {it: [Rocca di Papa], en: [Rocca di Papa], ur: [روکا دی پاپا]}
+
+- id: LUO.castel-gandolfo
+  facet: LUO
+  pref: {it: Castel Gandolfo, en: Castel Gandolfo, ur: کاسٹل گندولفو}
+  alt: {it: [Castel Gandolfo, Centro Mariapoli di Castel Gandolfo], en: [Castel Gandolfo], ur: [کاسٹل گندولفو]}
+
+- id: LUO.loppiano
+  facet: LUO
+  pref: {it: Loppiano, en: Loppiano, ur: لاپیانو}
+  alt: {it: [Loppiano, Cittadella di Loppiano], en: [Loppiano], ur: [لاپیانو]}
+
+- id: LUO.trento
+  facet: LUO
+  pref: {it: Trento, en: Trent, ur: ترینتو}
+  alt: {it: [Trento], en: [Trent], ur: [ترینتو]}
+
+- id: LUO.montet
+  facet: LUO
+  pref: {it: Montet, en: Montet, ur: مونٹے}
+  alt: {it: [Montet], en: [Montet], ur: [مونٹے]}
+
+- id: LUO.cittadella
+  facet: LUO
+  pref: {it: Cittadella, en: Little town, ur: گواہی کے چھوٹے شہر}
+  alt: {it: [cittadella, cittadelle], en: [little town, little towns], ur: [گواہی کے چھوٹے شہر]}
+  weak: {it: [cittad.]}
+
+- id: LUO.pakistan
+  facet: LUO
+  pref: {it: Pakistan, en: Pakistan, ur: پاکستان}
+  alt: {it: [Pakistan, Lahore, Karachi, Rawalpindi, Islamabad, Faisalabad, Quetta], en: [Pakistan, Lahore, Karachi, Rawalpindi, Islamabad, Faisalabad, Quetta], ur: [پاکستان, لاہور, کراچی, اسلام آباد]}
+
+# ------------------------------------------------ FONTI E PUBBLICAZIONI -----
+- id: PUB.citta-nuova
+  facet: PUB
+  pref: {it: Citta Nuova, en: Citta Nuova / New City, ur: نیا شہر}
+  alt: {it: [Citta Nuova, Citta' Nuova], en: [New City, Citta Nuova], ur: [نیا شہر]}
+
+- id: PUB.passaparola
+  facet: PUB
+  pref: {it: Passaparola, en: Passaparola, ur: Passaparola}
+  alt: {it: [Passaparola], en: [Passaparola]}
+
+- id: PUB.statuti
+  facet: PUB
+  pref: {it: Statuti e Regolamenti generali, en: General Statutes and Regulations, ur: عمومی قواعد و ضوابط}
+  alt: {it: [Statuti generali, Regolamenti generali, Statuto dell'Opera], en: [General Statutes, General Regulations]}
+
+- id: PUB.bibbia
+  facet: PUB
+  pref: {it: Sacra Scrittura, en: Sacred Scripture, ur: پاک کلام}
+  alt: {it: [Sacra Scrittura, Vangelo di Giovanni, Vangelo di Matteo, Lettera ai Corinzi, Salmi], en: [Sacred Scripture, Gospel of John, Gospel of Matthew, Psalms], ur: [پاک کلام, یوحنا, متی]}
+
+# ------------------------------------------- GENERE TESTUALE (metadato) -----
+# Valori ricavati dalla colonna TIPO del catalogo Discorsi (14 valori grezzi,
+# normalizzati in 12 classi) piu' tre generi presenti negli altri fondi.
+# Si assegnano da metadato, non dal testo: gli alias servono solo alla mappatura.
+
+- id: GEN.discorso
+  facet: GEN
+  pref: {it: Discorso, en: Talk, ur: تقریر}
+  alt: {it: [], en: [], ur: []}
+
+- id: GEN.risposte
+  facet: GEN
+  pref: {it: Risposte alle domande, en: Answers to questions, ur: سوالوں کے جواب}
+  alt: {it: [], en: [], ur: []}
+  note: "Genere piu' frequente dopo il discorso: 298 record su 1089."
+
+- id: GEN.collegamento
+  facet: GEN
+  pref: {it: Collegamento CH, en: Link-up (Collegamento CH), ur: رابطہ}
+  alt: {it: [], en: [], ur: []}
+
+- id: GEN.saluto
+  facet: GEN
+  pref: {it: Saluto, en: Greeting, ur: سلام}
+  alt: {it: [], en: [], ur: []}
+
+- id: GEN.intervista
+  facet: GEN
+  pref: {it: Intervista, en: Interview, ur: انٹرویو}
+  alt: {it: [], en: [], ur: []}
+
+- id: GEN.aggiornamento
+  facet: GEN
+  pref: {it: Aggiornamento, en: Update, ur: تازہ کاری}
+  alt: {it: [], en: [], ur: []}
+
+- id: GEN.telefonata
+  facet: GEN
+  pref: {it: Telefonata, en: Phone message, ur: ٹیلی فون پیغام}
+  alt: {it: [], en: [], ur: []}
+
+- id: GEN.tema
+  facet: GEN
+  pref: {it: Tema, en: Thematic talk, ur: موضوعاتی تقریر}
+  alt: {it: [], en: [], ur: []}
+
+- id: GEN.documento
+  facet: GEN
+  pref: {it: Documento, en: Document, ur: دستاویز}
+  alt: {it: [], en: [], ur: []}
+
+- id: GEN.appunti
+  facet: GEN
+  pref: {it: Appunti, en: Notes, ur: نوٹس}
+  alt: {it: [], en: [], ur: []}
+
+- id: GEN.preghiera
+  facet: GEN
+  pref: {it: Preghiera, en: Prayer text, ur: دعا}
+  alt: {it: [], en: [], ur: []}
+
+- id: GEN.sintesi
+  facet: GEN
+  pref: {it: Sintesi, en: Summary, ur: خلاصہ}
+  alt: {it: [], en: [], ur: []}
+
+- id: GEN.meditazione
+  facet: GEN
+  pref: {it: Meditazione, en: Meditation, ur: دھیان و گیان}
+  alt: {it: [], en: [], ur: []}
+  note: "Resa urdu canonica per i titoli di meditazione (Manuale di stile v2.0)."
+
+- id: GEN.esperienza
+  facet: GEN
+  pref: {it: Esperienza / racconto, en: Experience, ur: تجربہ}
+  alt: {it: [], en: [], ur: []}
+
+- id: GEN.catechesi
+  facet: GEN
+  pref: {it: Catechesi / sussidio formativo, en: Catechesis, ur: تعلیمِ ایمان}
+  alt: {it: [], en: [], ur: []}
+
+# ------------------------------------------- DESTINATARIO (metadato) --------
+# Le 299 stringhe grezze della colonna A_CHI si riducono a 17 classi.
+# La mappatura completa e' in normalizzazione_catalogo.yaml.
+
+- id: DES.interni
+  facet: DES
+  pref: {it: Interni dell'Opera, en: Internal members, ur: کارِ مریم کے اندرونی افراد}
+  alt: {it: [], en: [], ur: []}
+  note: "Classe piu' frequente del catalogo: oltre 300 record."
+
+- id: DES.responsabili
+  facet: DES
+  pref: {it: "Responsabili (capizona, capifocolare, Centro)", en: Leaders, ur: ذمہ داران}
+  alt: {it: [], en: [], ur: []}
+
+- id: DES.focolarini
+  facet: DES
+  pref: {it: Focolarini e focolarine, en: Focolarini and focolarine, ur: فوکالرینو اور فوکالرینا}
+  alt: {it: [], en: [], ur: []}
+
+- id: DES.focolarini-sposati
+  facet: DES
+  pref: {it: Focolarini e focolarine sposati, en: Married focolarini, ur: شادی شدہ فوکالرینو}
+  alt: {it: [], en: [], ur: []}
+  broader: DES.focolarini
+
+- id: DES.scuole
+  facet: DES
+  pref: {it: Scuole di formazione, en: Formation schools, ur: تربیتی اسکول}
+  alt: {it: [], en: [], ur: []}
+
+- id: DES.giovani
+  facet: DES
+  pref: {it: "Giovani (Gen, Gens, Gioventu Nuova)", en: Youth, ur: نوجوان}
+  alt: {it: [], en: [], ur: []}
+
+- id: DES.volontari
+  facet: DES
+  pref: {it: Volontari e volontarie, en: Volunteers, ur: رضاکار}
+  alt: {it: [], en: [], ur: []}
+
+- id: DES.sacerdoti
+  facet: DES
+  pref: {it: Sacerdoti e seminaristi, en: Priests and seminarians, ur: پادری اور طالبانِ علم}
+  alt: {it: [], en: [], ur: []}
+
+- id: DES.religiosi
+  facet: DES
+  pref: {it: Religiosi e religiose, en: Men and women religious, ur: راہب اور راہبات}
+  alt: {it: [], en: [], ur: []}
+
+- id: DES.vescovi
+  facet: DES
+  pref: {it: Vescovi, en: Bishops, ur: بشپ}
+  alt: {it: [], en: [], ur: []}
+
+- id: DES.famiglie
+  facet: DES
+  pref: {it: Famiglie, en: Families, ur: خاندان}
+  alt: {it: [], en: [], ur: []}
+
+- id: DES.comunita
+  facet: DES
+  pref: {it: "Comunita, Mariapoli, cittadelle", en: Communities and little towns, ur: جماعتیں}
+  alt: {it: [], en: [], ur: []}
+
+- id: DES.ecumenico
+  facet: DES
+  pref: {it: Interlocutori ecumenici, en: Ecumenical audience, ur: مسیحی وحدت کے سامعین}
+  alt: {it: [], en: [], ur: []}
+
+- id: DES.altre-fedi
+  facet: DES
+  pref: {it: Fedeli di altre religioni, en: People of other faiths, ur: دیگر مذاہب کے لوگ}
+  alt: {it: [], en: [], ur: []}
+  note: "Nel catalogo: musulmani, buddisti, indu, 'altre convinzioni'."
+
+- id: DES.movimenti-ecclesiali
+  facet: DES
+  pref: {it: Movimenti ecclesiali, en: Ecclesial movements, ur: کلیسیائی تحریکیں}
+  alt: {it: [], en: [], ur: []}
+
+- id: DES.media
+  facet: DES
+  pref: {it: Stampa e mezzi di comunicazione, en: Press and media, ur: ذرائع ابلاغ}
+  alt: {it: [], en: [], ur: []}
+
+- id: DES.pubblico-generale
+  facet: DES
+  pref: {it: Pubblico generale, en: General public, ur: عام لوگ}
+  alt: {it: [], en: [], ur: []}
+
+# ===========================================================================
+# AGGIUNTE v0.2 — ricavate dallo spoglio del catalogo Discorsi (1089 record)
+# ===========================================================================
+
+# --------- PERSONE: autori del catalogo (lista d'autorita', non tematica) ---
+# Questi tag derivano dalla colonna AUTORE: essendo un campo strutturato non
+# richiedono garanzia letteraria (bastano anche una o due occorrenze).
+
+- id: PER.ciardi-fabio
+  facet: PER
+  pref: {it: Fabio Ciardi, en: Fabio Ciardi, ur: فابیو چیاردی}
+  alt: {it: [Fabio Ciardi, P. Fabio Ciardi], en: [Fabio Ciardi]}
+
+- id: PER.zanghi-giuseppe
+  facet: PER
+  pref: {it: Giuseppe Maria Zanghi (Peppuccio), en: Giuseppe Maria Zanghi, ur: جوزپے زانگی}
+  alt: {it: [Giuseppe Zanghi, Giuseppe Maria Zanghi, Peppuccio Zanghi], en: [Giuseppe Zanghi]}
+  weak: {it: [Peppuccio]}
+
+- id: PER.araujo-vera
+  facet: PER
+  pref: {it: Vera Araujo, en: Vera Araujo, ur: ویرا اراؤخو}
+  alt: {it: [Vera Araujo], en: [Vera Araujo]}
+
+- id: PER.coda-piero
+  facet: PER
+  pref: {it: Piero Coda, en: Piero Coda, ur: پیرو کودا}
+  alt: {it: [Piero Coda], en: [Piero Coda]}
+
+- id: PER.cerini-marisa
+  facet: PER
+  pref: {it: Marisa Cerini, en: Marisa Cerini, ur: ماریزا چیرینی}
+  alt: {it: [Marisa Cerini], en: [Marisa Cerini]}
+
+- id: PER.povilus-judi
+  facet: PER
+  pref: {it: Judith Povilus, en: Judith Povilus, ur: جوڈی پوویلس}
+  alt: {it: [Judi Povilus, Judith Povilus], en: [Judith Povilus]}
+
+- id: PER.blaumeiser-hubertus
+  facet: PER
+  pref: {it: Hubertus Blaumeiser, en: Hubertus Blaumeiser, ur: ہوبرٹس بلاؤمائزر}
+  alt: {it: [Hubertus Blaumeiser, Blaumeiser], en: [Hubertus Blaumeiser]}
+
+- id: PER.rosse-gerard
+  facet: PER
+  pref: {it: Gerard Rosse, en: Gerard Rosse, ur: جیرار روسے}
+  alt: {it: [Gerard Rosse], en: [Gerard Rosse]}
+
+- id: PER.castellano-jesus
+  facet: PER
+  pref: {it: Jesus Castellano, en: Jesus Castellano, ur: ہیسوس کاستیانو}
+  alt: {it: [Jesus Castellano, P. Jesus Castellano], en: [Jesus Castellano]}
+
+- id: PER.rondinara-sergio
+  facet: PER
+  pref: {it: Sergio Rondinara, en: Sergio Rondinara, ur: سرجیو رونڈینارا}
+  alt: {it: [Sergio Rondinara], en: [Sergio Rondinara]}
+
+- id: PER.fondi-enzo-maria
+  facet: PER
+  pref: {it: Enzo Maria Fondi, en: Enzo Maria Fondi, ur: اینزو ماریا فونڈی}
+  alt: {it: [Enzo Maria Fondi], en: [Enzo Maria Fondi]}
+
+- id: PER.sorgi-tommaso
+  facet: PER
+  pref: {it: Tommaso Sorgi, en: Tommaso Sorgi, ur: توماسو سورجی}
+  alt: {it: [Tommaso Sorgi], en: [Tommaso Sorgi]}
+
+- id: PER.de-luca-graziella
+  facet: PER
+  pref: {it: Graziella De Luca, en: Graziella De Luca, ur: گراتسیلا دے لوکا}
+  alt: {it: [Graziella De Luca], en: [Graziella De Luca]}
+  note: "Una delle prime focolarine di Trento."
+
+- id: PER.dallapiccola-natalia
+  facet: PER
+  pref: {it: Natalia Dallapiccola, en: Natalia Dallapiccola, ur: ناتالیا دالاپیکولا}
+  alt: {it: [Natalia Dallapiccola, Natalia Dallapiccol], en: [Natalia Dallapiccola]}
+
+- id: PER.tomasi-bruna
+  facet: PER
+  pref: {it: Bruna Tomasi, en: Bruna Tomasi, ur: برونا توماسی}
+  alt: {it: [Bruna Tomasi], en: [Bruna Tomasi]}
+
+- id: PER.folonari-eli
+  facet: PER
+  pref: {it: Eli Folonari, en: Eli Folonari, ur: ایلی فولوناری}
+  alt: {it: [Eli Folonari], en: [Eli Folonari]}
+
+- id: PER.salizzoni-aletta
+  facet: PER
+  pref: {it: Aletta Salizzoni, en: Aletta Salizzoni, ur: الیتا سالیتسونی}
+  alt: {it: [Aletta Salizzoni], en: [Aletta Salizzoni]}
+
+- id: PER.cilento-nunziatina
+  facet: PER
+  pref: {it: Nunziatina Cilento, en: Nunziatina Cilento, ur: نونتسیاتینا چیلینتو}
+  alt: {it: [Nunziatina Cilento], en: [Nunziatina Cilento]}
+
+- id: PER.sgariglia-alba
+  facet: PER
+  pref: {it: Alba Sgariglia, en: Alba Sgariglia, ur: البا سگاریلیا}
+  alt: {it: [Alba Sgariglia], en: [Alba Sgariglia]}
+
+- id: PER.calliari-gis
+  facet: PER
+  pref: {it: Gis Calliari, en: Gis Calliari, ur: جس کالیاری}
+  alt: {it: [Gis Calliari], en: [Gis Calliari]}
+
+- id: PER.fratta-doni
+  facet: PER
+  pref: {it: Doni Fratta, en: Doni Fratta, ur: دونی فراتا}
+  alt: {it: [Doni Fratta], en: [Doni Fratta]}
+
+- id: PER.back-pavi
+  facet: PER
+  pref: {it: Pavi Back, en: Pavi Back, ur: پاوی بیک}
+  alt: {it: [Pavi Back], en: [Pavi Back]}
+
+- id: PER.venturini-bruno
+  facet: PER
+  pref: {it: Bruno Venturini, en: Bruno Venturini, ur: برونو وینتورینی}
+  alt: {it: [Bruno Venturini], en: [Bruno Venturini]}
+
+- id: PER.rylko-stanislaw
+  facet: PER
+  pref: {it: Stanislaw Rylko, en: Stanislaw Rylko, ur: سٹانِسواف ریوکو}
+  alt: {it: [Stanislaw Rylko, Stanislaw Rilko], en: [Stanislaw Rylko]}
+
+- id: PER.hoggett-sandra
+  facet: PER
+  pref: {it: Sandra Hoggett, en: Sandra Hoggett, ur: سینڈرا ہوگیٹ}
+  alt: {it: [Sandra Hoggett], en: [Sandra Hoggett]}
+  note: "Intervistatrice della serie 'Faccia a faccia' con Chiara Lubich."
+
+- id: PER.riccardi-andrea
+  facet: PER
+  pref: {it: Andrea Riccardi, en: Andrea Riccardi, ur: آندریا ریکاردی}
+  alt: {it: [Andrea Riccardi], en: [Andrea Riccardi]}
+
+# --------- LUOGHI ricorrenti del catalogo -----------------------------------
+
+- id: LUO.mollens
+  facet: LUO
+  pref: {it: Mollens (Svizzera), en: Mollens, ur: مولینس}
+  alt: {it: [Mollens], en: [Mollens], ur: [مولینس]}
+  note: "69 record: sede estiva ricorrente dei Collegamenti."
+
+- id: LUO.grottaferrata
+  facet: LUO
+  pref: {it: Grottaferrata, en: Grottaferrata, ur: گروتافراتا}
+  alt: {it: [Grottaferrata], en: [Grottaferrata]}
+
+- id: LUO.ottmaring
+  facet: LUO
+  pref: {it: Ottmaring, en: Ottmaring, ur: اوتمارنگ}
+  alt: {it: [Ottmaring, Centro ecumenico di Ottmaring], en: [Ottmaring]}
+  broader: LUO.cittadella
+
+- id: LUO.mariapoli-luminosa
+  facet: LUO
+  pref: {it: Mariapoli Luminosa (New York), en: Mariapolis Luminosa, ur: ماریا پولی لومینوزا}
+  alt: {it: [Mariapoli Luminosa], en: [Mariapolis Luminosa]}
+  broader: LUO.cittadella
+
+- id: LUO.mariapoli-araceli
+  facet: LUO
+  pref: {it: Mariapoli Araceli (Spagna), en: Mariapolis Araceli, ur: ماریا پولی اراچیلی}
+  alt: {it: [Mariapoli Araceli], en: [Mariapolis Araceli]}
+  broader: LUO.cittadella
+
+- id: LUO.fontem
+  facet: LUO
+  pref: {it: Fontem (Camerun), en: Fontem, ur: فونتیم}
+  alt: {it: [Fontem, Fonjumetaw], en: [Fontem]}
+  broader: LUO.cittadella
+
+- id: LUO.tagaytay
+  facet: LUO
+  pref: {it: Tagaytay (Filippine), en: Tagaytay, ur: تاگایتائے}
+  alt: {it: [Tagaytay], en: [Tagaytay]}
+  broader: LUO.cittadella
+
+- id: LUO.roma
+  facet: LUO
+  pref: {it: Roma, en: Rome, ur: روم}
+  alt: {it: [Roma, Palaeur], en: [Rome], ur: [روم]}
+
+- id: LUO.vaticano
+  facet: LUO
+  pref: {it: Vaticano, en: Vatican, ur: ویٹیکن}
+  alt: {it: [Vaticano, Santa Sede], en: [Vatican, Holy See], ur: [ویٹیکن]}
+
+# --------- NUOVI TEMI ------------------------------------------------------
+
+- id: TEM.spiritualita-collettiva
+  facet: TEM
+  pref: {it: Spiritualita collettiva, en: Collective spirituality, ur: اجتماعی روحانیت}
+  alt:
+    it: [spiritualita collettiva, sp. collettiva, tema della spiritualita collettiva]
+    en: [collective spirituality]
+  broader: TEM.carisma-unita
+  note: "Serie di 'Temi' tenuti da Chiara: 29 record nel catalogo."
+
+- id: TEM.economia-comunione
+  facet: TEM
+  pref: {it: Economia di Comunione, en: Economy of Communion, ur: اشتراکی معیشت}
+  alt:
+    it: [Economia di Comunione, economia di comun, econ. di com, economia e lavoro, agire economico]
+    en: [Economy of Communion]
+  broader: COL.red
+
+- id: TEM.politica-fraternita
+  facet: TEM
+  pref: {it: Fraternita in politica, en: Fraternity in politics, ur: سیاست میں بھائی چارہ}
+  alt:
+    it: [fraternita in politica, fraternita politica, politica di comunione, Movimento politico per l'unita, politica autentica]
+    en: [fraternity in politics, politics of communion]
+
+- id: TEM.europa
+  facet: TEM
+  pref: {it: Europa unita, en: United Europe, ur: متحدہ یورپ}
+  alt:
+    it: [Europa unita, unita dell'Europa, futuro dell'Europa, carisma d'Europa]
+    en: [united Europe, unity of Europe]
+
+- id: TEM.storia-movimento
+  facet: TEM
+  pref: {it: Storia e origini del Movimento, en: History and origins of the Movement, ur: تحریک کی تاریخ}
+  alt:
+    it: [storia del Movimento, storia dell'Ideale, le origini, origini del Movimento, ventennio]
+    en: [history of the Movement, origins of the Movement]
+
+- id: TEM.via-mariae
+  facet: TEM
+  pref: {it: Via Mariae, en: Via Mariae, ur: راہِ مریم}
+  alt: {it: [Via Mariae], en: [Via Mariae]}
+  broader: SPI.maria
+
+- id: TEM.voti-consacrazione
+  facet: TEM
+  pref: {it: Voti e consacrazione, en: Vows and consecration, ur: نذریں اور تقدیس}
+  alt:
+    it: [messa dei voti, i nostri voti, i voti, consacrazione, castita poverta obbedienza]
+    en: [Mass of the vows, the vows, consecration]
+  broader: TEM.vocazione
+
+- id: TEM.anno-liturgico
+  facet: TEM
+  pref: {it: Anno liturgico e feste, en: Liturgical year and feasts, ur: عبادتی سال}
+  alt:
+    it: [Natale, Pasqua, Avvento, Quaresima, Pentecoste, Settimana Santa]
+    en: [Christmas, Easter, Advent, Lent, Pentecost, Holy Week]
+    ur: [کرسمس, ایسٹر]
+
+- id: TEM.gioia
+  facet: TEM
+  pref: {it: Gioia, en: Joy, ur: خوشی}
+  alt: {it: [la gioia], en: [joy], ur: [خوشی]}
+  weak: {it: [gioia]}
+
+- id: TEM.movimenti-ecclesiali
+  facet: TEM
+  pref: {it: Movimenti ecclesiali, en: Ecclesial movements, ur: کلیسیائی تحریکیں}
+  alt:
+    it: [movimenti ecclesiali, nuovi movimenti, aspetto carismatico della Chiesa]
+    en: [ecclesial movements, new movements]
+
+# --------- NUOVE BRANCHE / STRUTTURE / EVENTI / FONTI -----------------------
+
+- id: BRA.movimento-politico
+  facet: BRA
+  pref: {it: Movimento politico per l'unita, en: Political Movement for Unity, ur: اتحاد کے لیے سیاسی تحریک}
+  alt: {it: [Movimento politico per l'unita, Movimento dell'unita], en: [Political Movement for Unity]}
+
+- id: BRA.gioventu-nuova
+  facet: BRA
+  pref: {it: Gioventu Nuova, en: New Youth, ur: نئی جوانی}
+  alt: {it: [Gioventu Nuova, Movimento Gioventu Nuova], en: [New Youth]}
+
+- id: ORG.centro-mariapoli
+  facet: ORG
+  pref: {it: Centri Mariapoli, en: Mariapolis Centres, ur: ماریا پولی مراکز}
+  alt: {it: [Centro Mariapoli, Centri Mariapoli, C. Mariapoli], en: [Mariapolis Centre]}
+
+- id: EVE.riconoscimenti
+  facet: EVE
+  pref: {it: "Premi, lauree honoris causa, cittadinanze onorarie", en: Awards and honorary degrees, ur: اعزازات}
+  alt:
+    it: [honoris causa, laurea honoris causa, dottorato honoris causa, cittadinanza onoraria,
+         conferimento del premio, premio della pace, premio UNESCO, premio UELCI, premio Casentino]
+    en: [honoris causa, honorary doctorate, honorary citizenship, peace prize]
+  note: "25 record nel catalogo: e' un genere di evento ricorrente, non un tema."
+
+- id: EVE.inaugurazione
+  facet: EVE
+  pref: {it: Inaugurazioni e fondazioni, en: Inaugurations and foundations, ur: افتتاحات}
+  alt: {it: [inaugurazione, fondazione della cittadella, prima visita], en: [inauguration]}
+
+- id: PUB.temi-spiritualita-collettiva
+  facet: PUB
+  pref: {it: Serie - Temi della spiritualita collettiva, en: "Series: Themes on collective spirituality", ur: اجتماعی روحانیت کے موضوعات}
+  alt: {it: [tema della spiritualita collettiva, temi sulla spiritualita collettiva], en: []}
+  broader: TEM.spiritualita-collettiva
+
+- id: PER.chiara-assisi
+  facet: PER
+  pref: {it: Chiara d'Assisi, en: Clare of Assisi, ur: مقدسہ کلارا}
+  alt: {it: [Chiara d'Assisi, Santa Chiara, S. Chiara], en: [Clare of Assisi, Saint Clare]}
+  note: "Distinta da Chiara Lubich: attenzione agli alias, 'Chiara' da solo resta debole."
+
+# ===========================================================================
+# AGGIUNTE v0.3 — dallo spoglio del Focolare Urdu Archive (1803 record)
+# Fondo pakistano: generi editoriali propri, riviste locali, temi catechistici,
+# eventi del Movimento in Pakistan.
+# ===========================================================================
+
+# --------- GENERI EDITORIALI DEL FONDO URDU --------------------------------
+
+- id: GEN.parola-di-vita
+  facet: GEN
+  pref: {it: Commento alla Parola di vita, en: Word of Life commentary, ur: کلامِ حیات کی تشریح}
+  alt: {it: [], en: [], ur: []}
+  note: "Genere mensile ricorrente: 129 record nel fondo urdu."
+
+- id: GEN.messaggio
+  facet: GEN
+  pref: {it: Messaggio, en: Message, ur: پیغام}
+  alt: {it: [], en: [], ur: []}
+
+- id: GEN.lettera
+  facet: GEN
+  pref: {it: Lettera, en: Letter, ur: خط}
+  alt: {it: [], en: [], ur: []}
+
+- id: GEN.canto
+  facet: GEN
+  pref: {it: Canto, en: Song, ur: گیت}
+  alt: {it: [], en: [], ur: []}
+
+- id: GEN.articolo
+  facet: GEN
+  pref: {it: Articolo, en: Article, ur: مضمون}
+  alt: {it: [], en: [], ur: []}
+
+- id: GEN.presentazione
+  facet: GEN
+  pref: {it: Presentazione a diapositive, en: Slide presentation, ur: سلائیڈ پیشکش}
+  alt: {it: [], en: [], ur: []}
+
+# --------- PERSONE del fondo urdu ------------------------------------------
+
+- id: PER.santo-padre
+  facet: PER
+  pref: {it: Santo Padre (Pontefice), en: The Holy Father, ur: پاپائے اعظم}
+  alt: {it: [Santo Padre, Sommo Pontefice, il Papa], en: [the Holy Father, the Pope], ur: [پاپائے اعظم]}
+  note: "Da usare quando il pontefice non e' nominato; i singoli papi hanno tag propri."
+
+- id: PER.zanzucchi
+  facet: PER
+  pref: {it: Anna Maria e Danilo Zanzucchi, en: Anna Maria and Danilo Zanzucchi, ur: زانزوکی}
+  alt: {it: [Zanzucchi, Anna Maria Zanzucchi, Danilo Zanzucchi, A.M. Zanzucchi], en: [Zanzucchi]}
+  note: "Coppia responsabile delle Famiglie Nuove."
+
+- id: PER.veronesi-silvana
+  facet: PER
+  pref: {it: Silvana Veronesi, en: Silvana Veronesi, ur: سلوانا ویرونیزی}
+  alt: {it: [Silvana Veronesi], en: [Silvana Veronesi]}
+
+- id: PER.zamboni-dori
+  facet: PER
+  pref: {it: Dori Zamboni, en: Dori Zamboni, ur: دوری زامبونی}
+  alt: {it: [Dori Zamboni], en: [Dori Zamboni]}
+  weak: {it: [Dori]}
+
+- id: PER.frizzera-palmira
+  facet: PER
+  pref: {it: Palmira Frizzera, en: Palmira Frizzera, ur: پالمیرا فریتسیرا}
+  alt: {it: [Palmira Frizzera], en: [Palmira Frizzera]}
+  weak: {it: [Palmira]}
+
+- id: PER.ghislandi-maria
+  facet: PER
+  pref: {it: Maria Ghislandi, en: Maria Ghislandi, ur: ماریا گِسلانڈی}
+  alt: {it: [Maria Ghislandi], en: [Maria Ghislandi]}
+
+- id: PER.bruni-luigino
+  facet: PER
+  pref: {it: Luigino Bruni, en: Luigino Bruni, ur: لوئیجینو برونی}
+  alt: {it: [Luigino Bruni], en: [Luigino Bruni]}
+
+- id: PER.teresa-calcutta
+  facet: PER
+  pref: {it: Madre Teresa di Calcutta, en: Mother Teresa of Calcutta, ur: مدر ٹریسا}
+  alt: {it: [Madre Teresa], en: [Mother Teresa], ur: [مدر ٹریسا]}
+
+# --------- FONTI E COLLANE del fondo urdu ----------------------------------
+
+- id: PUB.hayat
+  facet: PUB
+  pref: {it: Hayat (rivista urdu), en: Hayat magazine, ur: حیات}
+  alt: {it: [Hayat], en: [Hayat], ur: [حیات]}
+  note: "Periodico del Movimento in Pakistan: fonte di molti articoli del fondo."
+
+- id: PUB.temi-di-chiara
+  facet: PUB
+  pref: {it: Serie - Temi di Chiara, en: "Series: Chiara's themes", ur: کیارا کے موضوعات}
+  alt: {it: [], en: [], ur: []}
+  broader: PUB.temi-spiritualita-collettiva
+
+- id: PUB.gocce-di-sapienza
+  facet: PUB
+  pref: {it: Serie - Gocce di sapienza, en: "Series: Drops of wisdom", ur: حکمت کے قطرے}
+  alt: {it: [Gocce di sapienza, Goccie di sapienza], en: [Drops of wisdom]}
+
+- id: PUB.protagonisti
+  facet: PUB
+  pref: {it: Serie - Protagonisti, en: "Series: Protagonists", ur: کردار}
+  alt: {it: [Protagonisti], en: [Protagonists]}
+  note: "Profili biografici, fra cui Chiara Luce Badano."
+
+- id: PUB.faccia-a-faccia
+  facet: PUB
+  pref: {it: Serie - Faccia a faccia con Chiara, en: "Series: Face to face with Chiara", ur: کیارا کے ساتھ رُو بہ رُو}
+  alt: {it: [Faccia a faccia], en: [Face to face with Chiara]}
+
+- id: PUB.libri-formazione
+  facet: PUB
+  pref: {it: Libri di formazione, en: Formation books, ur: تربیتی کتب}
+  alt:
+    it: [Era Bellissima, La casa sulla roccia, La Fiammella, Vizi e virtu, libri gen 3]
+    en: [It was beautiful, The house on the rock]
+
+# --------- TEMI del fondo urdu ---------------------------------------------
+
+- id: TEM.partenza-di-chiara
+  facet: TEM
+  pref: {it: Partenza di Chiara (2008), en: Chiara's passing (2008), ur: کیارا کی رحلت}
+  alt: {it: [partenza di Chiara, Chiara e arrivata], en: [Chiara's passing]}
+  broader: TEM.santo-viaggio
+
+- id: TEM.rosario
+  facet: TEM
+  pref: {it: Rosario e misteri, en: Rosary, ur: تسبیح مریم}
+  alt: {it: [Rosario, misteri della luce, mistero della luce], en: [Rosary, luminous mysteries]}
+  broader: SPI.maria
+
+- id: TEM.sacra-scrittura
+  facet: TEM
+  pref: {it: Antico e Nuovo Testamento, en: Old and New Testament, ur: عہد نامہ}
+  alt:
+    it: [Antico Testamento, Nuovo Testamento, la creazione, i patriarchi]
+    en: [Old Testament, New Testament, the creation]
+  broader: PUB.bibbia
+
+- id: TEM.dieci-comandamenti
+  facet: TEM
+  pref: {it: Dieci Comandamenti, en: Ten Commandments, ur: دس احکام}
+  alt: {it: [10 Comandamenti, dieci comandamenti], en: [Ten Commandments]}
+
+- id: TEM.vizi-e-virtu
+  facet: TEM
+  pref: {it: Vizi e virtu, en: Vices and virtues, ur: خوبیاں اور خامیاں}
+  alt: {it: [vizi e virtu], en: [vices and virtues]}
+
+- id: TEM.paradiso
+  facet: TEM
+  pref: {it: Paradiso e vita eterna, en: Heaven and eternal life, ur: بہشت}
+  alt: {it: [Paradiso, vita eterna, Paradiso '49], en: [Heaven, eternal life]}
+
+- id: TEM.liturgia-sacramenti
+  facet: TEM
+  pref: {it: Liturgia e sacramenti, en: Liturgy and sacraments, ur: عبادت اور اسرار}
+  alt:
+    it: [liturgia, sacramento, Via Crucis, esame di coscienza, confessione, digiuno]
+    en: [liturgy, sacrament, Way of the Cross, examination of conscience, fasting]
+
+- id: TEM.unione-con-dio
+  facet: TEM
+  pref: {it: Unione con Dio, en: Union with God, ur: خُدا کے ساتھ اتحاد}
+  alt: {it: [unione con Dio], en: [union with God], ur: [خُدا کے ساتھ اتحاد]}
+  broader: COL.yellow
+
+- id: TEM.emergenze-solidarieta
+  facet: TEM
+  pref: {it: Emergenze e solidarieta, en: Emergencies and solidarity, ur: آفات اور یکجہتی}
+  alt: {it: [inondazioni, alluvione, terremoto, emergenza], en: [floods, earthquake, emergency], ur: [سیلاب, زلزلہ]}
+
+# --------- EVENTI E LUOGHI del fondo urdu ----------------------------------
+
+- id: EVE.congresso-mariano
+  facet: EVE
+  pref: {it: Congresso Mariano, en: Marian Congress, ur: مریمی کانگریس}
+  alt: {it: [Congresso Mariano], en: [Marian Congress]}
+
+- id: LUO.murree
+  facet: LUO
+  pref: {it: Murree (Pakistan), en: Murree, ur: مری}
+  alt: {it: [Murree], en: [Murree], ur: [مری]}
+  broader: LUO.pakistan
+
+- id: LUO.dalwal
+  facet: LUO
+  pref: {it: Dalwal (Pakistan), en: Dalwal, ur: ڈلوال}
+  alt: {it: [Dalwal], en: [Dalwal], ur: [ڈلوال]}
+  broader: LUO.pakistan
