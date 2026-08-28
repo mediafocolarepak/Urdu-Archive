@@ -257,9 +257,18 @@ function loadDocxLib() {
 
 const URDU_FONT = 'Jameel Noori Nastaleeq';
 
+// Converted InPage text uses \r\n (or, once round-tripped through an HTML <textarea>, plain
+// \n) as the separator between what were distinct lines/paragraphs in the original document
+// (title, verse reference, each body paragraph, blank spacer lines...) - there's no reliable
+// double-line-break to split on, so every line becomes its own paragraph instead. A
+// whitespace-only line still becomes an (empty) paragraph, to preserve the original spacing.
+function splitIntoLines(text) {
+  return text.replace(/\r\n/g, '\n').split('\n').map(l => l.trim());
+}
+
 // header: { documentId, englishRef } - both optional, shown as plain left-aligned lines
-// before the Urdu body. urduText is split into paragraphs on blank lines, each rendered
-// right-aligned/RTL, matching the layout already used for Word of Life bulletins.
+// before the Urdu body, each rendered right-aligned/RTL to match the layout already used
+// for Word of Life bulletins.
 export async function buildDocxBlob(urduText, header) {
   const docx = await loadDocxLib();
   const { Document, Packer, Paragraph, TextRun, AlignmentType } = docx;
@@ -268,10 +277,10 @@ export async function buildDocxBlob(urduText, header) {
   if (header?.englishRef) headerParas.push(new Paragraph({ children: [new TextRun({ text: header.englishRef, bold: true })] }));
   headerParas.push(new Paragraph({ text: '' }));
 
-  const bodyParas = urduText.split(/\n{2,}/).map(para => new Paragraph({
+  const bodyParas = splitIntoLines(urduText).map(line => new Paragraph({
     alignment: AlignmentType.RIGHT,
     bidirectional: true,
-    children: [new TextRun({ text: para.trim(), font: URDU_FONT, rightToLeft: true })],
+    children: line ? [new TextRun({ text: line, font: URDU_FONT, rightToLeft: true })] : [],
   }));
 
   const doc = new Document({ sections: [{ children: [...headerParas, ...bodyParas] }] });
@@ -294,7 +303,7 @@ export function downloadBlob(blob, fileName) {
 export function openPrintPreview(urduText, header) {
   const w = window.open('', '_blank');
   if (!w) { alert('Please allow pop-ups to generate the PDF preview.'); return; }
-  const paras = urduText.split(/\n{2,}/).map(p => `<p>${esc(p.trim()).replace(/\n/g, '<br>')}</p>`).join('\n');
+  const paras = splitIntoLines(urduText).map(l => `<p>${esc(l) || '&nbsp;'}</p>`).join('\n');
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(header?.documentId ? `Document ${header.documentId}` : 'InPage Conversion')}</title>
   <style>
     @page { margin: 2cm; }
