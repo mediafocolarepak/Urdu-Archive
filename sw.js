@@ -2,7 +2,7 @@
 // Cache name is keyed to the same ?v= deploy version already used across the app's own
 // script/style tags (see index.html), so a new deploy gets a fresh cache automatically -
 // old caches are dropped in 'activate' below.
-const CACHE_VERSION = '20260827220000';
+const CACHE_VERSION = '20260827230000';
 const CACHE_NAME = 'urdu-archive-' + CACHE_VERSION;
 
 // Only same-origin static assets are ever cached. Supabase (API/Auth/Storage) and Google

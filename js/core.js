@@ -36,6 +36,88 @@ export async function downloadFromGDrive(fileName) {
   }
 }
 
+// ---------- Google Drive write access (OAuth) ----------
+// The legacy read lookup above only ever needs a public-folder API key. Writing/overwriting
+// files needs a real user consent token instead - obtained via Google Identity Services (GIS),
+// scoped to the InPage Converter tab only (that's the only feature that ever writes to Drive).
+// OAuth 2.0 Client ID created in the same Google Cloud project as GDRIVE_API_KEY above,
+// authorized for the https://mediafocolarepak.github.io origin.
+const GOOGLE_OAUTH_CLIENT_ID = '67936040816-n0rq4f5eul93bk3cc7bauei7b3108g0j.apps.googleusercontent.com';
+const GOOGLE_DRIVE_WRITE_SCOPE = 'https://www.googleapis.com/auth/drive';
+
+let gisTokenClient = null;
+let gisLoadPromise = null;
+function loadGis() {
+  if (window.google?.accounts?.oauth2) return Promise.resolve();
+  if (!gisLoadPromise) {
+    gisLoadPromise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://accounts.google.com/gsi/client';
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('Could not load Google Sign-In.'));
+      document.head.appendChild(s);
+    });
+  }
+  return gisLoadPromise;
+}
+
+// Resolves to a short-lived OAuth access token with Drive write scope. Shows Google's
+// account/consent prompt the first time in a page session; the app is in "Testing" mode in
+// Google Cloud, so only the emails added as test users there can grant this.
+export async function getDriveAccessToken() {
+  await loadGis();
+  if (!gisTokenClient) {
+    gisTokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_OAUTH_CLIENT_ID,
+      scope: GOOGLE_DRIVE_WRITE_SCOPE,
+      callback: () => {}, // overridden per-call below
+    });
+  }
+  return new Promise((resolve, reject) => {
+    gisTokenClient.callback = (resp) => {
+      if (resp.error) reject(new Error(resp.error)); else resolve(resp.access_token);
+    };
+    gisTokenClient.requestAccessToken({ prompt: '' });
+  });
+}
+
+async function driveFindFileId(folderId, fileName, accessToken) {
+  const q = `name='${fileName.replace(/'/g, "\\'")}' and '${folderId}' in parents and trashed=false`;
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.files && data.files[0] ? data.files[0].id : null;
+}
+
+// Uploads `blob` as `fileName` into Drive folder `folderId`, overwriting an existing file of
+// the same name in that folder if one exists, or creating it otherwise. Returns the file ID.
+export async function driveUploadOrReplace(folderId, fileName, blob, accessToken) {
+  const existingId = await driveFindFileId(folderId, fileName, accessToken);
+  if (existingId) {
+    const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=media`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': blob.type || 'application/octet-stream' },
+      body: blob,
+    });
+    if (!res.ok) throw new Error('Drive update failed: ' + (await res.text()));
+    return existingId;
+  }
+  const metadata = { name: fileName, parents: [folderId] };
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+  form.append('file', blob);
+  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.id;
+}
+
 // ---------- Shared mutable state ----------
 // ES module `let` bindings can be read live from other modules but not reassigned from
 // outside the module that declared them. Everything mutable lives as properties on this
