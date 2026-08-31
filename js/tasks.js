@@ -5,7 +5,7 @@
 // da qualcun altro (vedi 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel
 // vincolo, non lo sostituiscono.
 
-import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive } from './core.js?v=20260831145812';
+import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName } from './core.js?v=20260831161247';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -42,6 +42,7 @@ export async function renderTasksView(main) {
     <div class="panel" id="tasks-new-panel" style="display:none;"></div>
     <div class="panel" id="tasks-review-panel" style="display:none;"><h2>Review queue <span class="hint">— we review only the task, so who did the work isn't shown here</span></h2><div id="tasks-review-list"></div></div>
     <div class="panel" id="tasks-publish-panel" style="display:none;"><h2>Publish queue <span class="hint">— approved by a Revisor, ready to go live</span></h2><div id="tasks-publish-list"></div></div>
+    <div class="panel" id="tasks-finalize-panel" style="display:none;"><h2>Documents ready to publish <span class="hint">— task already closed; upload the final PDF and InPage file, then publish</span></h2><div id="tasks-finalize-list"></div></div>
     <div class="panel"><h2>Open tasks <span class="hint">— free to claim</span></h2><div id="tasks-open-list"></div></div>
     <div class="panel"><h2>My tasks</h2><div id="tasks-mine-list"></div></div>
     <div class="panel" id="tasks-team-panel" style="display:none;"><h2>Team overview <span class="hint">— everyone's claimed tasks</span></h2><div id="tasks-team-list"></div></div>
@@ -61,9 +62,64 @@ export async function renderTasksView(main) {
   if (isAdmin()) {
     document.getElementById('tasks-publish-panel').style.display = 'block';
     await refreshPublishQueue();
+    document.getElementById('tasks-finalize-panel').style.display = 'block';
+    await refreshFinalizeQueue();
   }
 
   await refreshTasks(user, manage, operators);
+}
+
+// Second, separate Admin step (after admin_decide_task('publish') already closed the task and
+// awarded credits): documents sitting at 'pending_publish' still need the final PDF - and
+// ideally the final InPage file, uploaded to Drive - before finalize_document_publish() makes
+// them live. Deliberately decoupled from the Publish queue above (2026-08-31 session decision):
+// closing the task shouldn't be blocked on the PDF being ready yet.
+async function refreshFinalizeQueue() {
+  const rows = await withStatus(sb.from('documents').select('*').eq('workflow_status', 'pending_publish').order('document_id'));
+  const box = document.getElementById('tasks-finalize-list');
+  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing waiting to be finalized right now.</div>'; return; }
+  box.innerHTML = rows.map(d => `
+    <div class="panel" data-id="${d.document_id}" style="margin-bottom:12px;">
+      <b>${esc(d.title)}</b> <span class="hint">Document #${esc(d.document_id)}</span>
+      <div class="btn-row"><button class="btn secondary finalize-download-draft">Download draft file</button></div>
+      <div class="field-grid" style="max-width:520px;">
+        <div class="field"><label>Final PDF ${d.storage_path ? '(uploaded)' : ''}</label><input type="file" class="finalize-pdf-input" accept=".pdf"></div>
+        <div class="field"><label>Final .INP for Drive ${d.renamed_inp_file_name ? '(uploaded)' : ''}</label><input type="file" class="finalize-inp-input" accept=".inp,.doc,.docx"></div>
+      </div>
+      <div class="btn-row"><button class="btn finalize-publish-btn">Publish</button></div>
+    </div>`).join('');
+  box.querySelectorAll('[data-id]').forEach(card => {
+    const id = parseInt(card.dataset.id, 10);
+    const d = rows.find(r => r.document_id === id);
+    card.querySelector('.finalize-download-draft').addEventListener('click', () => downloadDraftFile(id));
+    card.querySelector('.finalize-pdf-input').addEventListener('change', async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const baseName = computeFileName({ document_id: id, title: d.title });
+      const finalName = await uniqueFileName(baseName, id);
+      await withStatus(sb.storage.from(BUCKET).upload(finalName, file, { upsert: true }), 'Uploading PDF...');
+      await withStatus(sb.from('documents').update({ storage_path: finalName, file_name: finalName }).eq('document_id', id), 'Saving...');
+      await renderTasksView(document.getElementById('main'));
+    });
+    card.querySelector('.finalize-inp-input').addEventListener('change', async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const token = await getDriveAccessToken();
+        const driveFileName = `${id}-${file.name}`;
+        await uploadInpToGDrive(driveFileName, file, token);
+        await withStatus(sb.from('documents').update({ renamed_inp_file_name: driveFileName }).eq('document_id', id), 'Saving...');
+        await renderTasksView(document.getElementById('main'));
+      } catch (err) {
+        alert('Could not upload to Google Drive: ' + err.message);
+      }
+    });
+    card.querySelector('.finalize-publish-btn').addEventListener('click', async () => {
+      if (!d.storage_path) { if (!confirm('No final PDF uploaded yet - publish anyway?')) return; }
+      await withStatus(sb.rpc('finalize_document_publish', { p_document_id: id }), 'Publishing document...');
+      await renderTasksView(document.getElementById('main'));
+    });
+  });
 }
 
 async function refreshPublishQueue() {
@@ -89,10 +145,10 @@ async function refreshPublishQueue() {
     </div>`).join('');
   box.querySelectorAll('[data-id]').forEach(card => {
     const id = parseInt(card.dataset.id, 10);
-    card.querySelector('.task-publish-open-file')?.addEventListener('click', () => downloadDocumentFile(candidateByTaskId[id]));
+    card.querySelector('.task-publish-open-file')?.addEventListener('click', () => downloadDraftFile(candidateByTaskId[id]));
     card.querySelector('.task-publish-btn').addEventListener('click', async () => {
-      if (!confirm('Publish this? It goes live and the operator gets the credits/reputation the Revisor\'s verdict implied.')) return;
-      await withStatus(sb.rpc('admin_decide_task', { p_task_id: id, p_decision: 'publish', p_note: null }), 'Publishing...');
+      if (!confirm('Close this task? The operator gets the credits/reputation the Revisor\'s verdict implied. The document itself isn\'t live yet - you\'ll prepare the final PDF and publish it separately, from "Documents ready to publish" below.')) return;
+      await withStatus(sb.rpc('admin_decide_task', { p_task_id: id, p_decision: 'publish', p_note: null }), 'Closing task...');
       await renderTasksView(document.getElementById('main'));
     });
     card.querySelector('.task-reject-btn').addEventListener('click', async () => {
@@ -128,9 +184,9 @@ async function refreshReviewQueue() {
     const notes = () => card.querySelector('.review-notes').value.trim() || null;
     card.querySelector('.review-open-file')?.addEventListener('click', async () => {
       const docRows = await withStatus(sb.rpc('get_review_document', { p_document_id: t.candidate_document_id }));
-      const storagePath = docRows[0]?.storage_path;
-      if (!storagePath) { alert('No file found for this revision.'); return; }
-      const { data } = await sb.storage.from(BUCKET).createSignedUrl(storagePath, 60);
+      const draftPath = docRows[0]?.draft_inp_path;
+      if (!draftPath) { alert('No file found for this revision.'); return; }
+      const { data } = await sb.storage.from(BUCKET).createSignedUrl(draftPath, 60);
       if (data?.signedUrl) window.open(data.signedUrl, '_blank');
     });
     const submitVerdict = async (verdict, confirmMsg) => {
@@ -279,14 +335,16 @@ function renderOpenList(rows) {
   });
 }
 
-// Opens the on-file document for the given document_id (signed URL, same pattern docdetail.js
-// uses) - used for an operator double-checking their own uploaded revision candidate, and for
-// a Revisor/Admin opening it for review (those always live in Supabase Storage, never Drive).
-async function downloadDocumentFile(documentId) {
-  const rows = await withStatus(sb.from('documents').select('storage_path').eq('document_id', documentId));
-  const storagePath = rows[0]?.storage_path;
-  if (!storagePath) { alert('No file on record for this document yet.'); return; }
-  const { data } = await sb.storage.from(BUCKET).createSignedUrl(storagePath, 60);
+// Opens the DRAFT correction (an operator's raw upload, still in Supabase Storage) for the
+// given document_id - used for an operator double-checking their own upload, and for
+// Admin/Revisor opening it while it's still a 'revision'/'pending_publish' candidate.
+// storage_path/file_name are reserved for the FINAL PDF once published (see
+// 50_two_step_publish_and_versioning.sql) - this never reads those.
+async function downloadDraftFile(documentId) {
+  const rows = await withStatus(sb.from('documents').select('draft_inp_path').eq('document_id', documentId));
+  const draftPath = rows[0]?.draft_inp_path;
+  if (!draftPath) { alert('No draft file on record for this document yet.'); return; }
+  const { data } = await sb.storage.from(BUCKET).createSignedUrl(draftPath, 60);
   if (data?.signedUrl) window.open(data.signedUrl, '_blank');
 }
 
@@ -316,21 +374,21 @@ async function uploadCorrectedFile(task, file) {
   const orig = origRows[0];
   if (!orig) { alert('Original document not found.'); return; }
   const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
-  const storagePath = `revision-${task.document_id}-${task.id}-${Date.now()}.${ext}`;
-  await withStatus(sb.storage.from(BUCKET).upload(storagePath, file, { upsert: true }), 'Uploading corrected file...');
+  const draftPath = `draft-${task.document_id}-${task.id}-${Date.now()}.${ext}`;
+  await withStatus(sb.storage.from(BUCKET).upload(draftPath, file, { upsert: true }), 'Uploading corrected file...');
 
-  const existing = await withStatus(sb.from('documents').select('document_id,storage_path').eq('source_task_id', task.id));
+  const existing = await withStatus(sb.from('documents').select('document_id,draft_inp_path').eq('source_task_id', task.id));
   if (existing.length) {
     const old = existing[0];
-    if (old.storage_path && old.storage_path !== storagePath) await sb.storage.from(BUCKET).remove([old.storage_path]);
-    await withStatus(sb.from('documents').update({ storage_path: storagePath, file_name: storagePath }).eq('document_id', old.document_id), 'Replacing corrected file...');
+    if (old.draft_inp_path && old.draft_inp_path !== draftPath) await sb.storage.from(BUCKET).remove([old.draft_inp_path]);
+    await withStatus(sb.from('documents').update({ draft_inp_path: draftPath }).eq('document_id', old.document_id), 'Replacing corrected file...');
   } else {
     const maxRows = await withStatus(sb.from('documents').select('document_id').order('document_id', { ascending: false }).limit(1));
     const newId = (maxRows[0]?.document_id || 0) + 1;
     await withStatus(sb.from('documents').insert({
       document_id: newId, work_id: orig.work_id, title: orig.title, original_title: orig.original_title,
       ur_title: orig.ur_title, category: orig.category, author: orig.author, language: orig.language,
-      workflow_status: 'revision', source_task_id: task.id, storage_path: storagePath, file_name: storagePath,
+      workflow_status: 'revision', source_task_id: task.id, draft_inp_path: draftPath,
       is_preferred: false, legacy_migrated: false,
     }), 'Creating revision record...');
   }
@@ -367,7 +425,7 @@ function renderMineList(rows, candidateByTaskId) {
     const id = card.dataset.id;
     const t = rows.find(r => String(r.id) === id);
     card.querySelector('.task-mine-download')?.addEventListener('click', () => downloadOriginalForTask(t.document_id));
-    card.querySelector('.task-mine-download-mine')?.addEventListener('click', () => downloadDocumentFile(candidateByTaskId[t.id]));
+    card.querySelector('.task-mine-download-mine')?.addEventListener('click', () => downloadDraftFile(candidateByTaskId[t.id]));
     card.querySelector('.task-mine-upload-input')?.addEventListener('change', async e => {
       const file = e.target.files[0];
       if (!file) return;

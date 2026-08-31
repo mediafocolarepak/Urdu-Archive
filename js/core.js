@@ -51,6 +51,14 @@ export async function downloadInpFromGDrive(fileName) {
   await findAndOpenInGDrive(GDRIVE_INP_FOLDER_ID, fileName, 'the Google Drive "INPAGE Original Document" folder');
 }
 
+// Uploads the finalized .inp for a newly-published document into the same "INPAGE Original
+// Document" Drive folder as every other original - so a future correction task on this
+// document can download it the same way (see downloadInpFromGDrive above). Returns the Drive
+// file id; the caller is responsible for recording `fileName` in documents.renamed_inp_file_name.
+export async function uploadInpToGDrive(fileName, blob, accessToken) {
+  return await driveUploadOrReplace(GDRIVE_INP_FOLDER_ID, fileName, blob, accessToken);
+}
+
 // ---------- Google Drive write access (OAuth) ----------
 // The legacy read lookup above only ever needs a public-folder API key. Writing/overwriting
 // files needs a real user consent token instead - obtained via Google Identity Services (GIS),
