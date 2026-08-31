@@ -5,7 +5,7 @@
 // Collections are shown as a plain multiselect here (no per-collection page number, unlike the
 // document detail page) - editing page numbers still needs the full document detail page.
 
-import { sb, State, esc, isAdmin, withStatus, optionsHtml, BUCKET, DASH_ROW_LIMIT, likeSafe, saveDocumentCollections } from './core.js?v=20260831141834';
+import { sb, State, esc, isAdmin, withStatus, optionsHtml, BUCKET, DASH_ROW_LIMIT, likeSafe, saveDocumentCollections } from './core.js?v=20260831145812';
 
 const EDIT_COLUMNS = [
   ['title', 'Title (EN)', 'text'],
@@ -35,6 +35,7 @@ const EDIT_COLUMNS = [
   ['pending_deletion', 'Pending deletion', 'checkbox'],
   ['pending_deletion_note', 'Deletion note', 'text'],
   ['original_inp_file_name', 'Original .INP file', 'text'],
+  ['renamed_inp_file_name', 'Renamed .INP file (Drive)', 'text'],
   ['original_doc_file_name', 'Original .DOCX file', 'text'],
   ['is_preferred', 'Preferred', 'checkbox'],
 ];
