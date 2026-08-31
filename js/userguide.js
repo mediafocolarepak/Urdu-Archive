@@ -1,63 +1,51 @@
-// Static, self-contained user guide shown in the "Help" tab. Plain content, no data fetching -
-// written for the plain User role's read-only workflow (search, browse, download); Operators/
-// Admins have extra tabs (Match Review, Bulk Import, Edit Records, etc.) not covered here.
-// The Italian guides (below, "Guide in italiano") are separate, editable-in-place documents
-// (published Claude Artifacts, one per role + one philosophy overview + one technical
-// reference) - this in-app tab stays the quick English reference, those are the fuller read.
+// "Help" tab: a quick static English walkthrough (below), plus the fuller reference guides
+// (Book of Roles, one operational guide per role, technical DB schema - in Italian and English),
+// which now live in the `help_pages` table (51_help_pages.sql) instead of external Claude
+// Artifacts. Admin can edit/save them in place (raw HTML source) from this same view.
 
-import { State } from './core.js?v=20260831190739';
+import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20260831195353';
 
-const IT_GUIDES = [
-  { role: null, title: 'Il Libro dei Ruoli', desc: 'filosofia, ruoli, ciclo dei task, crediti e reputazione', url: 'https://claude.ai/code/artifact/91ff6ec9-60ef-4e45-baa1-d5ab2dc8a308' },
-  { role: 'user', title: 'Guida Operativa — User', desc: 'consultare l\'archivio, segnalazioni, candidarsi al team', url: 'https://claude.ai/code/artifact/0d8b970a-3dd8-4012-913b-8194db7ab993' },
-  { role: 'operator', title: 'Guida Operativa — Operator', desc: 'prendere un task, correggere un documento, qualifiche, punteggio', url: 'https://claude.ai/code/artifact/401867d1-4482-4e46-8f74-2a2550ab02de' },
-  { role: 'coordinator', title: 'Guida Operativa — Coordinator', desc: 'creare task, gestire la squadra, messaggi, candidature', url: 'https://claude.ai/code/artifact/4fcb12ae-79fd-4e48-ab34-f6c6c54e0b5e' },
-  { role: 'admin', title: 'Guida Operativa — Admin', desc: 'utenti, opzioni, decisione finale sui task, pubblicazione documenti', url: 'https://claude.ai/code/artifact/74c43b41-c3d6-49aa-90ff-fe2fa98295da' },
-  { role: null, title: 'Schema e Meccanismi del Database', desc: 'riferimento tecnico: tabelle, RLS, funzioni RPC (per chi sviluppa/mantiene l\'app)', url: 'https://claude.ai/code/artifact/e5b1a9a8-35ee-42ee-bb5e-4e3161c4bb7c' },
-];
+let helpPagesCache = null;
+const helpView = { slug: null, editing: false };
 
-const EN_GUIDES = [
-  { role: null, title: 'Book of Roles', desc: 'philosophy, roles, task lifecycle, credits and reputation', url: 'https://claude.ai/code/artifact/e957106c-78fb-4aed-bfd2-5e919bedf58f' },
-  { role: 'user', title: 'User Guide', desc: 'browsing the archive, reporting issues, applying to join the team', url: 'https://claude.ai/code/artifact/5f303bb2-4a24-4dd6-b5ee-8ebfec5e654b' },
-  { role: 'operator', title: 'Operator Guide', desc: 'claiming a task, correcting a document, qualifications, scoring', url: 'https://claude.ai/code/artifact/2c55d6a4-3fb4-413d-bf9d-62cdc861f5a6' },
-  { role: 'coordinator', title: 'Coordinator Guide', desc: 'creating tasks, managing the team, messages, applications', url: 'https://claude.ai/code/artifact/3ea9599e-203f-4a84-8085-95a484641e98' },
-  { role: 'admin', title: 'Admin Guide', desc: 'users, options, final say on tasks, document publishing', url: 'https://claude.ai/code/artifact/47ccf94d-f115-4b9f-8630-49fca70d48ee' },
-  { role: null, title: 'Database Schema and Mechanisms', desc: 'technical reference: tables, RLS, RPC functions (for whoever develops/maintains the app)', url: 'https://claude.ai/code/artifact/f377a120-4144-43d6-8ab5-c00fcb15aa0e' },
-];
+async function loadHelpPages() {
+  if (helpPagesCache) return helpPagesCache;
+  const { data, error } = await sb.from('help_pages').select('*').order('sort_order');
+  helpPagesCache = error ? [] : (data || []);
+  return helpPagesCache;
+}
 
-function guidesSection(guides, heading, intro, mineLabel) {
+function guideListSection(pages, language, heading, intro, mineLabel) {
   const myRole = State.currentRole;
-  const items = guides.map(g => {
-    const mine = g.role === myRole;
+  const items = pages.filter(p => p.language === language).map(p => {
+    const mine = p.role === myRole;
     return `<li style="margin-bottom:8px;${mine ? 'font-weight:600;' : ''}">
-      <a href="${g.url}" target="_blank" rel="noopener">${g.title}</a>${mine ? ` <span class="hint">(${mineLabel})</span>` : ''}
-      <div class="hint" style="margin-top:2px;">${g.desc}</div>
+      <a href="#" data-help-slug="${esc(p.slug)}" class="help-link">${esc(p.title)}</a>${mine ? ` <span class="hint">(${mineLabel})</span>` : ''}
     </li>`;
   }).join('');
   return `
     <div class="panel report-view" style="max-width:820px;margin:0 auto 16px;">
       <h2>${heading}</h2>
       <p class="hint">${intro}</p>
-      <ul style="padding-left:20px;">${items}</ul>
+      <ul style="padding-left:20px;">${items || '<li class="hint">(none yet)</li>'}</ul>
     </div>`;
 }
 
-function italianGuidesSection() {
-  return guidesSection(IT_GUIDES, 'Guide in italiano',
-    'Documenti di riferimento più completi, in italiano - una guida per ogni ruolo, più la filosofia generale e lo schema tecnico del database. Si aprono in una nuova scheda.',
-    'il tuo ruolo');
+export async function renderUserGuideView(main) {
+  main.innerHTML = '<div class="empty-msg">Loading...</div>';
+  const pages = await loadHelpPages();
+  if (helpView.slug) renderHelpDetail(main, pages);
+  else renderHelpList(main, pages);
 }
 
-function englishGuidesSection() {
-  return guidesSection(EN_GUIDES, 'Guides in English',
-    'The same fuller reference documents, in English - one guide per role, plus the general philosophy and the technical database schema. They open in a new tab.',
-    'your role');
-}
-
-export function renderUserGuideView(main) {
+function renderHelpList(main, pages) {
   main.innerHTML = `
-    ${italianGuidesSection()}
-    ${englishGuidesSection()}
+    ${guideListSection(pages, 'it', 'Guide in italiano',
+      'Documenti di riferimento più completi, in italiano - una guida per ogni ruolo, più la filosofia generale e lo schema tecnico del database. Clic per aprire.',
+      'il tuo ruolo')}
+    ${guideListSection(pages, 'en', 'Guides in English',
+      'The same fuller reference documents, in English - one guide per role, plus the general philosophy and the technical database schema. Click to open.',
+      'your role')}
     <div class="panel report-view" style="max-width:820px;margin:0 auto;">
       <h2>User Guide</h2>
       <p class="hint">A short guide to finding and downloading documents in the Focolare Urdu Archive.</p>
@@ -131,6 +119,66 @@ export function renderUserGuideView(main) {
         <li>Everything in this app is read-only for your account - if something looks wrong (a wrong title, a missing file), let an Operator or Admin know.</li>
       </ul>
     </div>`;
+
+  main.querySelectorAll('.help-link').forEach(a => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      helpView.slug = a.dataset.helpSlug;
+      helpView.editing = false;
+      renderUserGuideView(main);
+    });
+  });
+}
+
+function renderHelpDetail(main, pages) {
+  const page = pages.find(p => p.slug === helpView.slug);
+  if (!page) { helpView.slug = null; renderUserGuideView(main); return; }
+  const editable = isAdmin();
+  const updated = page.updated_at ? new Date(page.updated_at).toLocaleString() : '—';
+
+  main.innerHTML = `
+    <div class="panel report-view" style="max-width:1000px;margin:0 auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+        <button class="btn" id="help-back" type="button">&larr; Back to guides</button>
+        ${editable ? `<div style="display:flex;gap:8px;">
+          <button class="btn secondary" id="help-edit-toggle" type="button">${helpView.editing ? 'Cancel' : 'Edit'}</button>
+          ${helpView.editing ? '<button class="btn" id="help-save" type="button">Save</button>' : ''}
+        </div>` : ''}
+      </div>
+      ${helpView.editing
+        ? `<textarea id="help-editor" spellcheck="false" style="width:100%;height:70vh;font-family:'IBM Plex Mono',monospace;font-size:12px;box-sizing:border-box;">${esc(page.html_content)}</textarea>`
+        : `<iframe id="help-frame" title="${esc(page.title)}" style="width:100%;height:78vh;border:1px solid #ccc;border-radius:8px;background:#fff;" sandbox="allow-same-origin"></iframe>`
+      }
+      <p class="hint" style="margin-top:8px;">Last updated: ${esc(updated)}${page.updated_by_email ? ' by ' + esc(page.updated_by_email) : ''}</p>
+    </div>`;
+
+  if (!helpView.editing) {
+    document.getElementById('help-frame').srcdoc = page.html_content;
+  }
+
+  document.getElementById('help-back').addEventListener('click', () => {
+    helpView.slug = null; helpView.editing = false; renderUserGuideView(main);
+  });
+
+  if (editable) {
+    document.getElementById('help-edit-toggle').addEventListener('click', () => {
+      helpView.editing = !helpView.editing; renderUserGuideView(main);
+    });
+    const saveBtn = document.getElementById('help-save');
+    if (saveBtn) saveBtn.addEventListener('click', async () => {
+      const newHtml = document.getElementById('help-editor').value;
+      const { data: { user } } = await sb.auth.getUser();
+      const nowIso = new Date().toISOString();
+      try {
+        await withStatus(sb.from('help_pages').update({
+          html_content: newHtml, updated_at: nowIso, updated_by_email: user.email,
+        }).eq('slug', page.slug), 'Saving...');
+      } catch (err) { alert('Save failed: ' + err.message); return; }
+      page.html_content = newHtml; page.updated_at = nowIso; page.updated_by_email = user.email;
+      helpView.editing = false;
+      renderUserGuideView(main);
+    });
+  }
 }
 
 function example(title, bodyHtml) {
