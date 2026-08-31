@@ -5,7 +5,7 @@
 // (published Claude Artifacts, one per role + one philosophy overview + one technical
 // reference) - this in-app tab stays the quick English reference, those are the fuller read.
 
-import { State } from './core.js?v=20260831172011';
+import { State } from './core.js?v=20260831190739';
 
 const IT_GUIDES = [
   { role: null, title: 'Il Libro dei Ruoli', desc: 'filosofia, ruoli, ciclo dei task, crediti e reputazione', url: 'https://claude.ai/code/artifact/91ff6ec9-60ef-4e45-baa1-d5ab2dc8a308' },
@@ -16,26 +16,48 @@ const IT_GUIDES = [
   { role: null, title: 'Schema e Meccanismi del Database', desc: 'riferimento tecnico: tabelle, RLS, funzioni RPC (per chi sviluppa/mantiene l\'app)', url: 'https://claude.ai/code/artifact/e5b1a9a8-35ee-42ee-bb5e-4e3161c4bb7c' },
 ];
 
-function italianGuidesSection() {
+const EN_GUIDES = [
+  { role: null, title: 'Book of Roles', desc: 'philosophy, roles, task lifecycle, credits and reputation', url: 'https://claude.ai/code/artifact/e957106c-78fb-4aed-bfd2-5e919bedf58f' },
+  { role: 'user', title: 'User Guide', desc: 'browsing the archive, reporting issues, applying to join the team', url: 'https://claude.ai/code/artifact/5f303bb2-4a24-4dd6-b5ee-8ebfec5e654b' },
+  { role: 'operator', title: 'Operator Guide', desc: 'claiming a task, correcting a document, qualifications, scoring', url: 'https://claude.ai/code/artifact/2c55d6a4-3fb4-413d-bf9d-62cdc861f5a6' },
+  { role: 'coordinator', title: 'Coordinator Guide', desc: 'creating tasks, managing the team, messages, applications', url: 'https://claude.ai/code/artifact/3ea9599e-203f-4a84-8085-95a484641e98' },
+  { role: 'admin', title: 'Admin Guide', desc: 'users, options, final say on tasks, document publishing', url: 'https://claude.ai/code/artifact/47ccf94d-f115-4b9f-8630-49fca70d48ee' },
+  { role: null, title: 'Database Schema and Mechanisms', desc: 'technical reference: tables, RLS, RPC functions (for whoever develops/maintains the app)', url: 'https://claude.ai/code/artifact/f377a120-4144-43d6-8ab5-c00fcb15aa0e' },
+];
+
+function guidesSection(guides, heading, intro, mineLabel) {
   const myRole = State.currentRole;
-  const items = IT_GUIDES.map(g => {
+  const items = guides.map(g => {
     const mine = g.role === myRole;
     return `<li style="margin-bottom:8px;${mine ? 'font-weight:600;' : ''}">
-      <a href="${g.url}" target="_blank" rel="noopener">${g.title}</a>${mine ? ' <span class="hint">(il tuo ruolo)</span>' : ''}
+      <a href="${g.url}" target="_blank" rel="noopener">${g.title}</a>${mine ? ` <span class="hint">(${mineLabel})</span>` : ''}
       <div class="hint" style="margin-top:2px;">${g.desc}</div>
     </li>`;
   }).join('');
   return `
     <div class="panel report-view" style="max-width:820px;margin:0 auto 16px;">
-      <h2>Guide in italiano</h2>
-      <p class="hint">Documenti di riferimento più completi, in italiano - una guida per ogni ruolo, più la filosofia generale e lo schema tecnico del database. Si aprono in una nuova scheda.</p>
+      <h2>${heading}</h2>
+      <p class="hint">${intro}</p>
       <ul style="padding-left:20px;">${items}</ul>
     </div>`;
+}
+
+function italianGuidesSection() {
+  return guidesSection(IT_GUIDES, 'Guide in italiano',
+    'Documenti di riferimento più completi, in italiano - una guida per ogni ruolo, più la filosofia generale e lo schema tecnico del database. Si aprono in una nuova scheda.',
+    'il tuo ruolo');
+}
+
+function englishGuidesSection() {
+  return guidesSection(EN_GUIDES, 'Guides in English',
+    'The same fuller reference documents, in English - one guide per role, plus the general philosophy and the technical database schema. They open in a new tab.',
+    'your role');
 }
 
 export function renderUserGuideView(main) {
   main.innerHTML = `
     ${italianGuidesSection()}
+    ${englishGuidesSection()}
     <div class="panel report-view" style="max-width:820px;margin:0 auto;">
       <h2>User Guide</h2>
       <p class="hint">A short guide to finding and downloading documents in the Focolare Urdu Archive.</p>
