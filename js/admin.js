@@ -1,4 +1,4 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260829001401';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260831103839';
 
 // ---------- Users ----------
 
@@ -7,15 +7,25 @@ export async function renderUsersView(main) {
   const rows = await withStatus(sb.from('user_roles').select('*').order('email'));
   const profileRows = await withStatus(sb.from('user_profiles').select('*'));
   const profileByUid = {}; for (const p of profileRows) profileByUid[p.user_id] = p;
+  const qualList = State.optionListsByName.operator_qualification || [];
+  const qualRows = qualList.length ? await withStatus(sb.from('user_qualifications').select('*')) : [];
+  const qualByUid = {};
+  for (const q of qualRows) (qualByUid[q.user_id] ||= new Set()).add(q.qualification_code);
+
   main.innerHTML = `
     <div class="panel">
       <h2>Users <span class="count-badge">${rows.length}</span></h2>
       <p class="hint">User = read/search only. Operator = can create and edit, and mark documents for deletion. Coordinator = Operator powers, plus reviews "Join the Team" applications. Admin = can also delete permanently and manage roles.</p>
+      <p class="hint">Qualifications are tags on top of the Operator role, not extra roles - a person can hold more than one (e.g. Translator + Revisor). They control which task categories someone can see and claim (Translation -> Translator, Revision -> Revisor); manage the list itself from Options -> Operator qualifications.</p>
       <div class="grid-wrap"><table class="grid" id="users-grid">
-        <thead><tr><th>Email</th><th>Role</th><th>Full name</th><th>City</th><th>Membership</th><th>Phone</th><th>Since</th><th></th></tr></thead>
-        <tbody>${rows.map(r => { const p = profileByUid[r.user_id] || {}; return `<tr data-uid="${esc(r.user_id)}">
+        <thead><tr><th>Email</th><th>Role</th><th>Qualifications</th><th>Full name</th><th>City</th><th>Membership</th><th>Phone</th><th>Since</th><th></th></tr></thead>
+        <tbody>${rows.map(r => { const p = profileByUid[r.user_id] || {}; const uidQuals = qualByUid[r.user_id] || new Set(); return `<tr data-uid="${esc(r.user_id)}">
           <td>${esc(r.email)}</td>
           <td><select class="role-select" data-uid="${esc(r.user_id)}">${optionsHtml([['user', 'User'], ['operator', 'Operator'], ['coordinator', 'Coordinator'], ['admin', 'Admin']], r.role, false)}</select></td>
+          <td style="white-space:normal;min-width:220px;">${r.role !== 'operator' ? '<span class="hint">Operators only</span>' : (qualList.map(([code, label]) => `
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-weight:normal;text-transform:none;font-size:12.5px;">
+              <input type="checkbox" class="qual-check" data-uid="${esc(r.user_id)}" data-code="${esc(code)}" ${uidQuals.has(code) ? 'checked' : ''}> ${esc(label)}
+            </label>`).join('') || '<span class="hint">None defined yet</span>')}</td>
           <td>${esc(p.full_name)}</td>
           <td>${esc(p.city)}</td>
           <td>${esc(labelOf(State.optionListsByName.membership_type || [], p.membership_type))}</td>
@@ -30,6 +40,12 @@ export async function renderUsersView(main) {
     </div>`;
   main.querySelectorAll('.role-select').forEach(sel => sel.addEventListener('change', async () => {
     await withStatus(sb.from('user_roles').update({ role: sel.value }).eq('user_id', sel.dataset.uid), 'Updating role...');
+    await renderUsersView(main); // re-render so the qualifications column shows/hides for the new role
+  }));
+  main.querySelectorAll('.qual-check').forEach(cb => cb.addEventListener('change', async () => {
+    const { uid, code } = cb.dataset;
+    if (cb.checked) await withStatus(sb.from('user_qualifications').insert({ user_id: uid, qualification_code: code }), 'Saving...');
+    else await withStatus(sb.from('user_qualifications').delete().eq('user_id', uid).eq('qualification_code', code), 'Saving...');
   }));
   main.querySelectorAll('.remove-user-btn').forEach(btn => btn.addEventListener('click', async () => {
     if (!confirm(`Remove access for ${btn.dataset.email}? They will lose all access to the app until re-added (their login account itself is not deleted).`)) return;

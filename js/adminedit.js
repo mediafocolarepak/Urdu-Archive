@@ -5,7 +5,7 @@
 // Collections are shown as a plain multiselect here (no per-collection page number, unlike the
 // document detail page) - editing page numbers still needs the full document detail page.
 
-import { sb, State, esc, isAdmin, withStatus, optionsHtml, BUCKET, DASH_ROW_LIMIT, likeSafe, saveDocumentCollections } from './core.js?v=20260829001401';
+import { sb, State, esc, isAdmin, withStatus, optionsHtml, BUCKET, DASH_ROW_LIMIT, likeSafe, saveDocumentCollections } from './core.js?v=20260831103839';
 
 const EDIT_COLUMNS = [
   ['title', 'Title (EN)', 'text'],
@@ -27,6 +27,7 @@ const EDIT_COLUMNS = [
   ['physical_box', 'Physical box', 'text'],
   ['episode_number', 'Episode number', 'text'],
   ['bible_verse', 'Bible verse', 'text'],
+  ['pages', 'Pages', 'number'],
   ['duration', 'Duration', 'text'],
   ['quality', 'Quality', 'select', () => State.qualities],
   ['workflow_status', 'Status', 'select', () => State.statuses],
@@ -144,6 +145,7 @@ function collectRowValues(tr) {
     const el = tr.querySelector(`[data-f="${name}"]`);
     if (type === 'checkbox') { out[name] = el.checked; }
     else if (name === 'recipient') { out[name] = el.value ? [el.value] : null; }
+    else if (type === 'number') { out[name] = el.value === '' ? null : parseInt(el.value, 10); }
     else { out[name] = el.value === '' ? null : el.value; }
   }
   return out;

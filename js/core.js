@@ -143,6 +143,7 @@ export const State = {
   docCollections: [],  // { document_id, collection_code, page_number } for the open document
   optionListsByName: {},  // option_lists rows grouped by list_name, as [code,label] pairs - generic lookup used by SessionCache/combobox
   hayatEditorEdition: '',
+  taskPrefill: null,  // { title, description, document_id, document_pages } - set by chat.js's "Create task" button, consumed once by tasks.js's new-task form
 };
 
 export const DASH_ROW_LIMIT = 5000;
@@ -152,13 +153,14 @@ export const DASH_SORTABLE = { document_id: 'ID', title: 'Title (EN)', original_
 // two keep their fixed, CHECK-constrained vocabularies (see 15_versions_editors_schema.sql),
 // while the Hayat Editor's Autore/Argomento comboboxes are free-typing - a new value there
 // must never risk violating the documents table's constraints on author/main_topic.
-export const OPTION_LIST_NAMES = ['category', 'author', 'main_topic', 'recipient', 'language', 'workflow_status', 'media_type', 'source', 'collection', 'quality', 'operator', 'hayat_author', 'hayat_argomento', 'membership_type'];
+export const OPTION_LIST_NAMES = ['category', 'author', 'main_topic', 'recipient', 'language', 'workflow_status', 'media_type', 'source', 'collection', 'quality', 'operator', 'hayat_author', 'hayat_argomento', 'membership_type', 'task_category', 'operator_qualification'];
 export const OPTION_LIST_LABELS = {
   category: 'Category', author: 'Author', main_topic: 'Main topic', recipient: 'Recipient',
   language: 'Language', workflow_status: 'Workflow status', media_type: 'Media type',
   source: 'Source', collection: 'Collection', quality: 'Quality', operator: 'Operator',
   hayat_author: 'Hayat: Autore', hayat_argomento: 'Hayat: Argomento',
-  membership_type: 'Focolare membership type',
+  membership_type: 'Focolare membership type', task_category: 'Task category',
+  operator_qualification: 'Operator qualifications',
 };
 
 export async function loadOptions() {
@@ -239,6 +241,55 @@ export function isAdmin() { return State.currentRole === 'admin'; }
 export function isCoordinator() { return State.currentRole === 'coordinator'; }
 // Can review "Join the Team" applications - Coordinator (own queue) or Admin (everything).
 export function canReviewApplications() { return State.currentRole === 'coordinator' || State.currentRole === 'admin'; }
+
+// ---------- Standing widget (credits + reputation, shown in the topbar for Operator+) ----------
+
+const GOOD_PRACTICES = [
+  'Claim a task only if you realistically expect to finish it by the due date you set.',
+  'Can\'t make it after all? Use "Give up this task" early and honestly - it\'s not penalized, unlike letting it sit overdue.',
+  'Only submit a task for review when you\'re confident it\'s actually ready.',
+  'As a Revisor, judge the work in front of you, not who you think might have done it.',
+  'Keep review notes specific and constructive - the operator will read them.',
+];
+const AVOID_LIST = [
+  'Claiming several tasks "just in case" and letting most of them go overdue.',
+  'Submitting incomplete or rushed work just to hit a deadline.',
+  'Trying to guess or ask around about who did a task you\'re reviewing.',
+  'Disrespectful or inappropriate behavior toward teammates - the System can reclaim a task for this, with a reputation penalty.',
+];
+
+function repClass(rep) { return rep >= 70 ? 'rep-good' : rep >= 40 ? 'rep-ok' : 'rep-low'; }
+
+function renderStandingWidget(credits, reputation) {
+  const box = document.getElementById('standing-widget');
+  if (!box) return;
+  box.style.display = 'flex';
+  box.innerHTML = `
+    <span class="credits-badge">${esc(credits ?? 0)} credits</span>
+    <span class="rep-label hint">Good practice</span>
+    <span class="rep-track"><span class="rep-fill ${repClass(reputation ?? 70)}" style="width:${Math.max(0, Math.min(100, reputation ?? 70))}%;"></span></span>
+    <span class="rep-val">${esc(reputation ?? 70)}</span>
+    <button class="btn secondary" id="good-practices-btn">Good practices</button>`;
+  document.getElementById('good-practices-btn').addEventListener('click', showGoodPracticesModal);
+}
+
+function showGoodPracticesModal() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'overlay-backdrop';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel">
+      <h2>Good practices</h2>
+      <ul class="good-practices-list">${GOOD_PRACTICES.map(p => `<li>${esc(p)}</li>`).join('')}</ul>
+      <h2>Behaviors to avoid</h2>
+      <ul class="avoid-list">${AVOID_LIST.map(p => `<li>${esc(p)}</li>`).join('')}</ul>
+      <div class="btn-row" style="justify-content:flex-end;">
+        <button class="btn" id="good-practices-close">Close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  document.getElementById('good-practices-close').addEventListener('click', () => backdrop.remove());
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+}
 
 // ---------- Generic helpers ----------
 
@@ -445,9 +496,11 @@ async function showApp(session, renderDashboardTab) {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
 
-  const { data: roleRows } = await sb.from('user_roles').select('role').eq('user_id', session.user.id);
-  State.currentRole = roleRows && roleRows[0] ? roleRows[0].role : 'user';
+  const { data: roleRows } = await sb.from('user_roles').select('role,credits,reputation').eq('user_id', session.user.id);
+  const roleRow = roleRows && roleRows[0];
+  State.currentRole = roleRow ? roleRow.role : 'user';
   document.getElementById('user-email').textContent = `${session.user.email} (${State.currentRole})`;
+  if (canWrite() && roleRow) renderStandingWidget(roleRow.credits, roleRow.reputation);
 
   await loadOptions();
   renderDashboardTab();

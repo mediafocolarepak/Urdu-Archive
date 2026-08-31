@@ -6,7 +6,7 @@ import {
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
-} from './core.js?v=20260829001401';
+} from './core.js?v=20260831103839';
 
 // Builds the "riassunto" text block that replaces the old grid of disabled input fields -
 // one line per group of related info, empty groups dropped entirely so the block stays short.
@@ -207,6 +207,7 @@ export async function renderDocDetail(id) {
       ${textField('Physical box', 'physical_box', doc.physical_box)}
       ${textField('Episode number', 'episode_number', doc.episode_number)}
       ${textField('Bible verse', 'bible_verse', doc.bible_verse)}
+      ${textField('Pages', 'pages', doc.pages, 'number')}
       <div class="field"><label>File name</label><input value="${esc(doc.file_name)}" disabled></div>
       ${textField('Duration (video only)', 'duration', doc.duration)}
       ${selectField('Quality (video only)', 'quality', doc.quality, State.qualities)}
@@ -272,6 +273,7 @@ export async function renderDocDetail(id) {
   function collectFields() {
     const out = {};
     box.querySelectorAll('[data-f]').forEach(el => out[el.dataset.f] = el.value === '' ? null : el.value);
+    if ('pages' in out) out.pages = out.pages === null ? null : parseInt(out.pages, 10);
     const recipientVal = document.getElementById('f-doc-recipient').value;
     out.recipient = recipientVal ? [recipientVal] : null;
     out.pending_deletion = document.getElementById('f-pending-deletion').checked;

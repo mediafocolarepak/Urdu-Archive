@@ -3,7 +3,7 @@
 // admins see every message and can reply + dismiss. Everything stays in chat_messages
 // forever - "dismiss" is a soft flag hiding a row from the admin's default list, not a delete.
 
-import { sb, State, esc, isAdmin, withStatus, nameMapForEmails } from './core.js?v=20260829001401';
+import { sb, State, esc, canReviewApplications, withStatus, nameMapForEmails } from './core.js?v=20260831103839';
 
 const REPORT_TYPES = [
   ['REVISION', 'Revision'],
@@ -76,9 +76,9 @@ async function refreshChatThread() {
 // ---------- Admin inbox ----------
 
 export async function renderAdminMessagesView(main) {
-  if (!isAdmin()) { main.innerHTML = '<div class="empty-msg">Admin access required.</div>'; return; }
+  if (!canReviewApplications()) { main.innerHTML = '<div class="empty-msg">Coordinator or Admin access required.</div>'; return; }
   const { data: { user } } = await sb.auth.getUser();
-  markChatSeen('admin_' + user.id);
+  markChatSeen('reviewer_' + user.id);
   main.innerHTML = `
     <div class="panel">
       <h2>Messages</h2>
@@ -91,7 +91,7 @@ export async function renderAdminMessagesView(main) {
         <div class="field"><label>&nbsp;</label><label style="text-transform:none;font-size:13px;"><input id="msg-filter-dismissed" type="checkbox" style="width:auto;"> Show dismissed</label></div>
       </div>
       <div class="grid-wrap"><table class="grid" id="msg-grid">
-        <thead><tr><th>Date/time</th><th>User</th><th>Type</th><th>Doc ID</th><th>Message</th><th>Reply</th><th></th></tr></thead>
+        <thead><tr><th>Date/time</th><th>User</th><th>Type</th><th>Doc ID</th><th>Message</th><th>Reply</th><th></th><th></th></tr></thead>
         <tbody id="msg-grid-body"></tbody>
       </table></div>
     </div>`;
@@ -130,7 +130,8 @@ async function refreshAdminMessages() {
         <button class="btn secondary msg-reply-btn" style="padding:4px 10px;">Send</button>
         <button class="btn danger msg-dismiss-btn" style="padding:4px 10px;">Dismiss</button>
       </td>
-    </tr>`).join('') || '<tr><td colspan="7">No messages match the current filters.</td></tr>';
+      <td><button class="btn msg-create-task-btn" style="padding:4px 10px;">Create task</button></td>
+    </tr>`).join('') || '<tr><td colspan="8">No messages match the current filters.</td></tr>';
 
   body.querySelectorAll('tr[data-id]').forEach(tr => {
     const id = tr.dataset.id;
@@ -147,7 +148,30 @@ async function refreshAdminMessages() {
       await withStatus(sb.from('chat_messages').update({ dismissed: true }).eq('id', id), 'Dismissing...');
       await refreshAdminMessages();
     });
+    tr.querySelector('.msg-create-task-btn').addEventListener('click', async () => {
+      const r = filtered.find(x => String(x.id) === id);
+      await startTaskFromMessage(r);
+    });
   });
+}
+
+// Prefills the Tasks tab's "New task" form from a chat report: pulls the linked document's
+// page count (if any) so the Coordinator/Admin doesn't have to look it up separately, then
+// hands off via State + the same window.__renderTab escape hatch docdetail.js uses (chat.js
+// and tasks.js never import each other directly - see core.js's star-import convention).
+async function startTaskFromMessage(r) {
+  let document_pages = null;
+  if (r.document_id) {
+    const { data } = await sb.from('documents').select('pages').eq('document_id', r.document_id).maybeSingle();
+    document_pages = data?.pages ?? null;
+  }
+  State.taskPrefill = {
+    title: `Proofreading: ${REPORT_TYPE_LABEL[r.report_type] || r.report_type}${r.document_id ? ` - Doc #${r.document_id}` : ''}`,
+    description: r.message_text,
+    document_id: r.document_id || null,
+    document_pages,
+  };
+  window.__renderTab('tasks');
 }
 
 // ---------- Live "new message" notifications ----------
@@ -187,8 +211,8 @@ export async function initChatNotifications(navigateToChat) {
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return;
 
-  if (isAdmin()) {
-    const who = 'admin_' + user.id;
+  if (canReviewApplications()) {
+    const who = 'reviewer_' + user.id;
     const { data } = await sb.from('chat_messages').select('id').eq('dismissed', false).gt('created_at', getSeenAt(who));
     if (data && data.length) showChatToast('New Messages', `${data.length} report${data.length > 1 ? 's' : ''} waiting for a reply.`, navigateToChat);
 

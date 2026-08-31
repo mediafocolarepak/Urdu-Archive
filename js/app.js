@@ -1,19 +1,19 @@
-import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260829001401';
-import { renderDashboardView } from './dashboard.js?v=20260829001401';
-import { renderReportsView } from './reports.js?v=20260829001401';
-import { renderHayatView } from './hayatindex.js?v=20260829001401';
-import { renderMatchReviewView } from './matchreview.js?v=20260829001401';
-import { renderBulkImportView } from './bulkimport.js?v=20260829001401';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260829001401';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260829001401';
-import { renderAdminEditView } from './adminedit.js?v=20260829001401';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260829001401';
-import { renderHayatEditorView } from './hayateditor.js?v=20260829001401';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260829001401';
-import { renderUserGuideView } from './userguide.js?v=20260829001401';
-import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260829001401';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260829001401';
-import { registerServiceWorker } from './pwa-register.js?v=20260829001401';
+import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260831103839';
+import { renderDashboardView } from './dashboard.js?v=20260831103839';
+import { renderReportsView } from './reports.js?v=20260831103839';
+import { renderHayatView } from './hayatindex.js?v=20260831103839';
+import { renderMatchReviewView } from './matchreview.js?v=20260831103839';
+import { renderBulkImportView } from './bulkimport.js?v=20260831103839';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260831103839';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260831103839';
+import { renderAdminEditView } from './adminedit.js?v=20260831103839';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260831103839';
+import { renderHayatEditorView } from './hayateditor.js?v=20260831103839';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260831103839';
+import { renderUserGuideView } from './userguide.js?v=20260831103839';
+import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260831103839';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260831103839';
+import { registerServiceWorker } from './pwa-register.js?v=20260831103839';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -33,7 +33,7 @@ function getTabs() {
   if (canReviewApplications()) { tabs.push({ id: 'applications', label: 'Team Applications' }); }
   if (canWrite()) { tabs.push({ id: 'tasks', label: 'Tasks' }); }
   if (isAdmin()) { tabs.push({ id: 'users', label: 'Users' }); tabs.push({ id: 'options', label: 'Options' }); tabs.push({ id: 'adminedit', label: 'Edit Records' }); tabs.push({ id: 'announcements', label: 'Announcements' }); }
-  tabs.push({ id: 'chat', label: isAdmin() ? 'Messages' : 'Chat' });
+  tabs.push({ id: 'chat', label: canReviewApplications() ? 'Messages' : 'Chat' });
   // Persistently visible invitation for read-only accounts - collaborators (Operator+)
   // already have other ways to reach out, see the "Join the Team" module for why.
   if (State.currentRole === 'user') { tabs.push({ id: 'jointeam', label: 'Join the Team' }); }
@@ -64,7 +64,7 @@ function renderTab(id) {
   else if (id === 'bulkimport') renderBulkImportView(main);
   else if (id === 'inpageconverter') renderInPageConverterView(main);
   else if (id === 'announcements') renderAnnouncementsView(main);
-  else if (id === 'chat') { isAdmin() ? renderAdminMessagesView(main) : renderChatView(main); }
+  else if (id === 'chat') { canReviewApplications() ? renderAdminMessagesView(main) : renderChatView(main); }
   else if (id === 'applications') renderApplicationsView(main);
   else if (id === 'tasks') renderTasksView(main);
   else if (id === 'jointeam') renderJoinTeamView(main);

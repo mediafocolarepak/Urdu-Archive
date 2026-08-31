@@ -5,24 +5,38 @@
 // da qualcun altro (vedi 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel
 // vincolo, non lo sostituiscono.
 
-import { sb, esc, today, canWrite, canReviewApplications, withStatus, getDisplayNameByEmail, nameMapForEmails } from './core.js?v=20260829001401';
+import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf } from './core.js?v=20260831103839';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
 
+// Categories that gate visibility/assignment to a specific qualification - mirrors the case
+// expression in operator_qualifies_for_category()/user_qualifies_for_category() in
+// 37_task_qualifications_categories.sql. Keep the two in sync if the category list changes.
+const CATEGORY_REQUIRES_QUALIFICATION = { IT_UR: 'TRANSLATOR', EN_UR: 'TRANSLATOR', REVISION: 'REVISOR' };
+
 async function fetchOperators() {
   const rows = await withStatus(sb.from('user_roles').select('user_id,email').in('role', ['operator', 'coordinator']).order('email'));
   const names = await Promise.all(rows.map(r => getDisplayNameByEmail(r.email)));
-  return rows.map((r, i) => ({ ...r, displayName: names[i] }));
+  const qualRows = await withStatus(sb.from('user_qualifications').select('*'));
+  const qualByUid = {};
+  for (const q of qualRows) (qualByUid[q.user_id] ||= new Set()).add(q.qualification_code);
+  return rows.map((r, i) => ({ ...r, displayName: names[i], qualifications: qualByUid[r.user_id] || new Set() }));
 }
 
 export async function renderTasksView(main) {
   if (!canWrite()) { main.innerHTML = '<div class="empty-msg">Operator access required.</div>'; return; }
   const { data: { user } } = await sb.auth.getUser();
   const manage = canReviewApplications(); // same tier as Team Applications review: Coordinator + Admin
+  const myQuals = await withStatus(sb.from('user_qualifications').select('qualification_code').eq('user_id', user.id));
+  // Coordinator/Admin can act as Revisor without the tag (oversight tier - e.g. stepping in if
+  // the queue backs up), same anonymization as an Operator holding the REVISOR qualification.
+  const isRevisor = manage || myQuals.some(q => q.qualification_code === 'REVISOR');
 
   main.innerHTML = `
     <div class="panel" id="tasks-new-panel" style="display:none;"></div>
+    <div class="panel" id="tasks-review-panel" style="display:none;"><h2>Review queue <span class="hint">— we review only the task, so who did the work isn't shown here</span></h2><div id="tasks-review-list"></div></div>
+    <div class="panel" id="tasks-publish-panel" style="display:none;"><h2>Publish queue <span class="hint">— approved by a Revisor, ready to go live</span></h2><div id="tasks-publish-list"></div></div>
     <div class="panel"><h2>Open tasks <span class="hint">— free to claim</span></h2><div id="tasks-open-list"></div></div>
     <div class="panel"><h2>My tasks</h2><div id="tasks-mine-list"></div></div>
     <div class="panel" id="tasks-team-panel" style="display:none;"><h2>Team overview <span class="hint">— everyone's claimed tasks</span></h2><div id="tasks-team-list"></div></div>
@@ -35,31 +49,134 @@ export async function renderTasksView(main) {
     renderNewTaskForm(operators);
     document.getElementById('tasks-team-panel').style.display = 'block';
   }
+  if (isRevisor) {
+    document.getElementById('tasks-review-panel').style.display = 'block';
+    await refreshReviewQueue();
+  }
+  if (isAdmin()) {
+    document.getElementById('tasks-publish-panel').style.display = 'block';
+    await refreshPublishQueue();
+  }
 
   await refreshTasks(user, manage, operators);
 }
 
+async function refreshPublishQueue() {
+  const rows = await withStatus(sb.from('tasks').select('*').eq('status', 'approved').order('reviewed_at'));
+  const box = document.getElementById('tasks-publish-list');
+  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing waiting to be published right now.</div>'; return; }
+  box.innerHTML = rows.map(t => `
+    <div class="panel" data-id="${t.id}" style="margin-bottom:12px;">
+      <b>${esc(t.title)}</b> ${t.review_verdict === 'ok_but' ? '<span class="chat-tag">OK, but...</span>' : ''}
+      ${docLine(t)}
+      ${t.review_notes ? `<p class="hint">Revisor's note: ${esc(t.review_notes)}</p>` : ''}
+      <div class="btn-row">
+        <button class="btn task-publish-btn">Publish</button>
+        <button class="btn danger task-reject-btn">Reject</button>
+      </div>
+    </div>`).join('');
+  box.querySelectorAll('[data-id]').forEach(card => {
+    const id = parseInt(card.dataset.id, 10);
+    card.querySelector('.task-publish-btn').addEventListener('click', async () => {
+      if (!confirm('Publish this? It goes live and the operator gets the credits/reputation the Revisor\'s verdict implied.')) return;
+      await withStatus(sb.rpc('admin_decide_task', { p_task_id: id, p_decision: 'publish', p_note: null }), 'Publishing...');
+      await renderTasksView(document.getElementById('main'));
+    });
+    card.querySelector('.task-reject-btn').addEventListener('click', async () => {
+      const note = prompt('Why are you rejecting this, despite the Revisor\'s verdict? This closes the task with the same penalty as a fail - you can create a fresh task on the same document afterward from the Completed list.');
+      if (note === null) return;
+      if (!note.trim()) { alert('Please enter a reason.'); return; }
+      await withStatus(sb.rpc('admin_decide_task', { p_task_id: id, p_decision: 'reject', p_note: note.trim() }), 'Rejecting...');
+      await renderTasksView(document.getElementById('main'));
+    });
+  });
+}
+
+async function refreshReviewQueue() {
+  const rows = await withStatus(sb.rpc('get_review_queue'));
+  const box = document.getElementById('tasks-review-list');
+  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing waiting for review right now.</div>'; return; }
+  box.innerHTML = rows.map(t => `
+    <div class="panel" data-id="${t.id}" style="margin-bottom:12px;">
+      <b>${esc(t.title)}</b>
+      ${docLine(t)}
+      ${t.description ? `<p>${esc(t.description)}</p>` : ''}
+      <div class="field"><label>Notes for the operator <span class="hint">(optional)</span></label><textarea class="review-notes" rows="2"></textarea></div>
+      <div class="btn-row">
+        <button class="btn review-ok">OK</button>
+        <button class="btn secondary review-okbut">OK, but...</button>
+        <button class="btn danger review-fail">Fail</button>
+      </div>
+    </div>`).join('');
+  box.querySelectorAll('[data-id]').forEach(card => {
+    const id = parseInt(card.dataset.id, 10);
+    const notes = () => card.querySelector('.review-notes').value.trim() || null;
+    const submitVerdict = async (verdict, confirmMsg) => {
+      if (confirmMsg && !confirm(confirmMsg)) return;
+      await withStatus(sb.rpc('submit_task_review', { p_task_id: id, p_verdict: verdict, p_notes: notes() }), 'Submitting review...');
+      await renderTasksView(document.getElementById('main'));
+    };
+    card.querySelector('.review-ok').addEventListener('click', () => submitVerdict('ok'));
+    card.querySelector('.review-okbut').addEventListener('click', () => submitVerdict('ok_but'));
+    card.querySelector('.review-fail').addEventListener('click', () => submitVerdict('fail', 'Mark this as failed? The task will close and a new open task will be created for someone else to redo (not the same operator).'));
+  });
+}
+
 function renderNewTaskForm(operators) {
+  // Consumed once: a "Create task" click from the Messages inbox (chat.js) stashes a prefill
+  // here via State, then hands off to this tab - see chat.js's startTaskFromMessage.
+  const prefill = State.taskPrefill;
+  State.taskPrefill = null;
+
   const panel = document.getElementById('tasks-new-panel');
   panel.innerHTML = `
     <h2>New task</h2>
     <div class="field-grid" style="max-width:640px;">
-      <div class="field"><label>Title</label><input id="task-new-title"></div>
-      <div class="field"><label>Description</label><textarea id="task-new-desc" rows="2"></textarea></div>
-      <div class="field"><label>Document ID <span class="hint">(optional)</span></label><input id="task-new-docid" type="number" min="1"></div>
-      <div class="field"><label>Assign directly to <span class="hint">(optional — otherwise left open to claim)</span></label>
-        <select id="task-new-assignee"><option value="">— leave open —</option>${operators.map(o => `<option value="${o.user_id}" data-email="${esc(o.email)}">${esc(o.displayName)}</option>`).join('')}</select>
+      <div class="field"><label>Title</label><input id="task-new-title" value="${esc(prefill?.title || '')}"></div>
+      <div class="field"><label>Description</label><textarea id="task-new-desc" rows="2">${esc(prefill?.description || '')}</textarea></div>
+      <div class="field"><label>Category <span class="hint">(optional — gates who can see/claim it)</span></label>
+        <select id="task-new-category">${optionsHtml(State.optionListsByName.task_category || [], '', true)}</select>
+      </div>
+      <div class="field"><label>Document ID <span class="hint">(optional)</span></label><input id="task-new-docid" type="number" min="1" value="${esc(prefill?.document_id || '')}"></div>
+      <div class="field"><label>Document pages <span class="hint">(looked up from the document)</span></label><input id="task-new-pages" type="number" min="0" value="${esc(prefill?.document_pages ?? '')}"></div>
+      <div class="field"><label>Credits <span class="hint">(manual for now)</span></label><input id="task-new-credits" type="number" min="0"></div>
+      <div class="field"><label>Assign directly to <span class="hint">(optional — otherwise left open to claim; list narrows to who's qualified once a category is picked)</span></label>
+        <select id="task-new-assignee"></select>
       </div>
       <div class="field" id="task-new-due-field" style="display:none;"><label>Due date</label><input id="task-new-due" type="date"></div>
     </div>
     <div class="btn-row"><button class="btn" id="task-new-submit">Create task</button></div>`;
+  function refreshAssigneeOptions() {
+    const category = document.getElementById('task-new-category').value;
+    const requiredQual = CATEGORY_REQUIRES_QUALIFICATION[category];
+    const eligible = requiredQual ? operators.filter(o => o.qualifications.has(requiredQual)) : operators;
+    const sel = document.getElementById('task-new-assignee');
+    const prior = sel.value;
+    sel.innerHTML = '<option value="">— leave open —</option>' + eligible.map(o => `<option value="${o.user_id}" data-email="${esc(o.email)}">${esc(o.displayName)}</option>`).join('');
+    sel.value = eligible.some(o => o.user_id === prior) ? prior : '';
+    document.getElementById('task-new-due-field').style.display = sel.value ? 'block' : 'none';
+  }
+  refreshAssigneeOptions();
+  document.getElementById('task-new-category').addEventListener('change', refreshAssigneeOptions);
   document.getElementById('task-new-assignee').addEventListener('change', e => {
     document.getElementById('task-new-due-field').style.display = e.target.value ? 'block' : 'none';
+  });
+  // Manually typing/changing a document ID also looks up its page count, same as the
+  // "Create task" button from Messages does - only when the pages field is still empty, so it
+  // never clobbers a value the coordinator already typed or that came in via prefill.
+  document.getElementById('task-new-docid').addEventListener('change', async e => {
+    const pagesField = document.getElementById('task-new-pages');
+    const docId = e.target.value.trim();
+    if (!docId || pagesField.value !== '') return;
+    const { data } = await sb.from('documents').select('pages').eq('document_id', parseInt(docId, 10)).maybeSingle();
+    if (data?.pages != null) pagesField.value = data.pages;
   });
   document.getElementById('task-new-submit').addEventListener('click', async () => {
     const title = document.getElementById('task-new-title').value.trim();
     if (!title) { alert('Please enter a title.'); return; }
     const docId = document.getElementById('task-new-docid').value.trim();
+    const pages = document.getElementById('task-new-pages').value.trim();
+    const credits = document.getElementById('task-new-credits').value.trim();
     const assigneeSel = document.getElementById('task-new-assignee');
     const assigneeId = assigneeSel.value || null;
     const assigneeEmail = assigneeId ? assigneeSel.selectedOptions[0].dataset.email : null;
@@ -68,7 +185,10 @@ function renderNewTaskForm(operators) {
     const { data: { user } } = await sb.auth.getUser();
     await withStatus(sb.from('tasks').insert({
       title, description: document.getElementById('task-new-desc').value.trim() || null,
+      category: document.getElementById('task-new-category').value || null,
       document_id: docId ? parseInt(docId, 10) : null,
+      document_pages: pages ? parseInt(pages, 10) : null,
+      credits: credits ? parseInt(credits, 10) : null,
       created_by_email: user.email,
       status: assigneeId ? 'claimed' : 'open',
       claimed_by: assigneeId, claimed_by_email: assigneeEmail,
@@ -80,17 +200,28 @@ function renderNewTaskForm(operators) {
   });
 }
 
+const ACTIVE_STATUSES = ['claimed', 'submitted'];
+const HISTORY_STATUSES = ['approved', 'rejected', 'published'];
+const STATUS_LABELS = { submitted: 'Waiting for review', approved: 'Approved', rejected: 'Rejected', published: 'Published' };
+
 async function refreshTasks(user, manage, operators) {
   const rows = await withStatus(sb.from('tasks').select('*').order('created_at', { ascending: false }));
   const nameMap = manage ? await nameMapForEmails(rows.flatMap(t => [t.claimed_by_email, t.created_by_email])) : {};
 
   renderOpenList(rows.filter(t => t.status === 'open'));
-  renderMineList(rows.filter(t => t.status === 'claimed' && t.claimed_by === user.id));
-  if (manage) renderTeamList(rows.filter(t => t.status === 'claimed' && t.claimed_by !== user.id), operators, nameMap);
-  renderDoneList(rows.filter(t => t.status === 'done'), manage, nameMap);
+  renderMineList(rows.filter(t => ACTIVE_STATUSES.includes(t.status) && t.claimed_by === user.id));
+  if (manage) renderTeamList(rows.filter(t => ACTIVE_STATUSES.includes(t.status) && t.claimed_by !== user.id), operators, nameMap);
+  renderDoneList(rows.filter(t => HISTORY_STATUSES.includes(t.status)), manage, nameMap);
 }
 
-function docLine(t) { return t.document_id ? `<p class="hint">Document #${esc(t.document_id)}</p>` : ''; }
+function docLine(t) {
+  const parts = [];
+  if (t.category) parts.push(esc(labelOf(State.optionListsByName.task_category || [], t.category)));
+  if (t.document_id) parts.push(`Document #${esc(t.document_id)}`);
+  if (t.document_pages != null) parts.push(`${esc(t.document_pages)} pages`);
+  if (t.credits != null) parts.push(`${esc(t.credits)} credits`);
+  return parts.length ? `<p class="hint">${parts.join(' · ')}</p>` : '';
+}
 
 function renderOpenList(rows) {
   const box = document.getElementById('tasks-open-list');
@@ -125,26 +256,28 @@ function renderMineList(rows) {
   box.innerHTML = rows.map(t => `
     <div class="panel" data-id="${t.id}" style="margin-bottom:12px;${isOverdue(t) ? 'border-color:var(--danger);' : ''}">
       <b>${esc(t.title)}</b> ${isOverdue(t) ? '<span class="chat-tag" style="color:var(--danger);">Overdue</span>' : ''}
+      ${t.status === 'submitted' ? '<span class="chat-tag">Waiting for review</span>' : ''}
       ${docLine(t)}
       ${t.description ? `<p>${esc(t.description)}</p>` : ''}
-      <div class="field-grid" style="max-width:320px;">
-        <div class="field"><label>Due date</label><input class="task-mine-due" type="date" value="${esc(t.due_date || '')}"></div>
-      </div>
-      <div class="btn-row">
-        <button class="btn secondary task-mine-save">Update due date</button>
-        <button class="btn task-mine-done">Mark done</button>
-      </div>
+      ${t.status === 'claimed' ? `
+        <p class="hint">Due ${formatDate(t.due_date)} <span class="hint">(fixed when you claimed it)</span></p>
+        <div class="btn-row">
+          <button class="btn task-mine-submit">Submit for review</button>
+          <button class="btn secondary task-mine-giveup">Give up this task</button>
+        </div>` : '<p class="hint">A Revisor will look at this next - no action needed from you for now.</p>'}
     </div>`).join('');
   box.querySelectorAll('[data-id]').forEach(card => {
     const id = card.dataset.id;
-    card.querySelector('.task-mine-save').addEventListener('click', async () => {
-      const due = card.querySelector('.task-mine-due').value;
-      if (!due) { alert('Please choose a due date.'); return; }
-      await withStatus(sb.from('tasks').update({ due_date: due }).eq('id', id), 'Updating...');
+    card.querySelector('.task-mine-submit')?.addEventListener('click', async () => {
+      if (!confirm('Submit this task for review? You will not be able to make further changes.')) return;
+      await withStatus(sb.from('tasks').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', id), 'Submitting...');
       await renderTasksView(document.getElementById('main'));
     });
-    card.querySelector('.task-mine-done').addEventListener('click', async () => {
-      await withStatus(sb.from('tasks').update({ status: 'done', completed_at: new Date().toISOString() }).eq('id', id), 'Marking done...');
+    card.querySelector('.task-mine-giveup')?.addEventListener('click', async () => {
+      const note = prompt('Why are you giving up this task? A short line is fine - this is logged, but does not affect your standing.');
+      if (note === null) return;
+      if (!note.trim()) { alert('Please enter a reason.'); return; }
+      await withStatus(sb.rpc('give_up_task', { p_task_id: parseInt(id, 10), p_note: note.trim() }), 'Giving up task...');
       await renderTasksView(document.getElementById('main'));
     });
   });
@@ -155,23 +288,24 @@ function renderTeamList(rows, operators, nameMap) {
   if (!rows.length) { box.innerHTML = '<div class="empty-msg">No one else has a claimed task right now.</div>'; return; }
   box.innerHTML = rows.map(t => `
     <div class="panel" data-id="${t.id}" style="margin-bottom:12px;${isOverdue(t) ? 'border-color:var(--danger);' : ''}">
-      <div class="chat-meta"><b>${esc(t.title)}</b> · ${esc(nameMap[t.claimed_by_email] || t.claimed_by_email)} · due ${formatDate(t.due_date)} ${isOverdue(t) ? '<span class="chat-tag" style="color:var(--danger);">Overdue</span>' : ''}</div>
+      <div class="chat-meta"><b>${esc(t.title)}</b> · ${esc(nameMap[t.claimed_by_email] || t.claimed_by_email)} · due ${formatDate(t.due_date)} ${isOverdue(t) ? '<span class="chat-tag" style="color:var(--danger);">Overdue</span>' : ''} ${t.status === 'submitted' ? '<span class="chat-tag">Waiting for review</span>' : ''}</div>
       ${docLine(t)}
       ${t.description ? `<p>${esc(t.description)}</p>` : ''}
-      <div class="field-grid" style="max-width:320px;">
-        <div class="field"><label>Reassign to</label>
-          <select class="task-team-reassign"><option value="">— choose —</option>${operators.filter(o => o.user_id !== t.claimed_by).map(o => `<option value="${o.user_id}" data-email="${esc(o.email)}">${esc(o.displayName)}</option>`).join('')}</select>
+      ${t.status === 'claimed' ? `
+        <div class="field-grid" style="max-width:320px;">
+          <div class="field"><label>Reassign to</label>
+            <select class="task-team-reassign"><option value="">— choose —</option>${operators.filter(o => o.user_id !== t.claimed_by && (!CATEGORY_REQUIRES_QUALIFICATION[t.category] || o.qualifications.has(CATEGORY_REQUIRES_QUALIFICATION[t.category]))).map(o => `<option value="${o.user_id}" data-email="${esc(o.email)}">${esc(o.displayName)}</option>`).join('')}</select>
+          </div>
         </div>
-      </div>
-      <div class="btn-row">
-        <button class="btn secondary task-team-reassign-btn">Reassign</button>
-        <button class="btn secondary task-team-free">Free up (back to open)</button>
-        <button class="btn danger task-team-delete">Delete</button>
-      </div>
+        <div class="btn-row">
+          <button class="btn secondary task-team-reassign-btn">Reassign</button>
+          <button class="btn secondary task-team-free">Free up (back to open)</button>
+          <button class="btn danger task-team-delete">Delete</button>
+        </div>` : '<p class="hint">Submitted - waiting for a Revisor.</p>'}
     </div>`).join('');
   box.querySelectorAll('[data-id]').forEach(card => {
     const id = card.dataset.id;
-    card.querySelector('.task-team-reassign-btn').addEventListener('click', async () => {
+    card.querySelector('.task-team-reassign-btn')?.addEventListener('click', async () => {
       const sel = card.querySelector('.task-team-reassign');
       if (!sel.value) { alert('Choose someone to reassign this task to.'); return; }
       await withStatus(sb.from('tasks').update({
@@ -179,14 +313,13 @@ function renderTeamList(rows, operators, nameMap) {
       }).eq('id', id), 'Reassigning...');
       await renderTasksView(document.getElementById('main'));
     });
-    card.querySelector('.task-team-free').addEventListener('click', async () => {
-      if (!confirm('Free up this task and put it back in the open pool?')) return;
-      await withStatus(sb.from('tasks').update({
-        status: 'open', claimed_by: null, claimed_by_email: null, claimed_at: null, due_date: null,
-      }).eq('id', id), 'Freeing up...');
+    card.querySelector('.task-team-free')?.addEventListener('click', async () => {
+      const note = prompt('Why are you freeing up this task? (overdue with no response, inappropriate conduct, ...) This lowers the operator\'s reputation score.');
+      if (note === null) return;
+      await withStatus(sb.rpc('reclaim_task', { p_task_id: parseInt(id, 10), p_note: note || null }), 'Freeing up...');
       await renderTasksView(document.getElementById('main'));
     });
-    card.querySelector('.task-team-delete').addEventListener('click', async () => {
+    card.querySelector('.task-team-delete')?.addEventListener('click', async () => {
       if (!confirm('Delete this task permanently?')) return;
       await withStatus(sb.from('tasks').delete().eq('id', id), 'Deleting...');
       await renderTasksView(document.getElementById('main'));
@@ -197,13 +330,31 @@ function renderTeamList(rows, operators, nameMap) {
 function renderDoneList(rows, manage, nameMap) {
   const box = document.getElementById('tasks-done-list');
   if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing completed yet.</div>'; return; }
+  // A straight Revisor "fail" already auto-spawns a retry task - only an Admin override
+  // (rejected despite an ok/ok_but verdict) needs this manual follow-up, since that path is a
+  // deliberate one-off decision rather than an automatic respawn.
+  const needsRedo = t => manage && t.status === 'rejected' && t.review_verdict !== 'fail';
   box.innerHTML = rows.slice(0, 30).map(t => `
     <div class="panel" data-id="${t.id}" style="margin-bottom:12px;">
-      <div class="chat-meta">${esc(t.title)} · ${esc(nameMap[t.claimed_by_email] || t.claimed_by_email)} · completed ${formatDate((t.completed_at || '').slice(0, 10))}</div>
-      ${manage ? '<div class="btn-row"><button class="btn danger task-done-delete">Delete</button></div>' : ''}
+      <div class="chat-meta">${esc(t.title)} · ${esc(nameMap[t.claimed_by_email] || t.claimed_by_email)} · ${esc(STATUS_LABELS[t.status] || t.status)}${t.review_verdict ? ` (${esc(t.review_verdict)})` : ''}</div>
+      ${t.review_notes ? `<p class="hint">${esc(t.review_notes)}</p>` : ''}
+      ${manage ? `<div class="btn-row">
+        ${needsRedo(t) ? '<button class="btn secondary task-done-redo">Create task to redo this</button>' : ''}
+        <button class="btn danger task-done-delete">Delete</button>
+      </div>` : ''}
     </div>`).join('');
   if (manage) {
     box.querySelectorAll('[data-id]').forEach(card => {
+      const t = rows.find(r => String(r.id) === card.dataset.id);
+      card.querySelector('.task-done-redo')?.addEventListener('click', async () => {
+        State.taskPrefill = {
+          title: `${t.title} (redo - admin rejected)`,
+          description: t.review_notes ? `Admin rejected the previous attempt. Note: ${t.review_notes}` : 'Admin rejected the previous attempt.',
+          document_id: t.document_id,
+          document_pages: t.document_pages,
+        };
+        await renderTasksView(document.getElementById('main'));
+      });
       card.querySelector('.task-done-delete')?.addEventListener('click', async () => {
         if (!confirm('Delete this completed task permanently?')) return;
         await withStatus(sb.from('tasks').delete().eq('id', card.dataset.id), 'Deleting...');

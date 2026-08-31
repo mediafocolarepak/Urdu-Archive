@@ -85,6 +85,26 @@ body {
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #4a8f4a; display: inline-block; }
 .dot.dirty { background: #d19a2e; }
 
+/* ---------- Standing widget (credits + reputation, topbar) ---------- */
+#standing-widget { display: flex; align-items: center; gap: 8px; }
+#standing-widget .credits-badge { font-weight: 600; color: var(--ink); white-space: nowrap; }
+#standing-widget .rep-label { white-space: nowrap; }
+#standing-widget .rep-track {
+  width: 70px; height: 7px; border-radius: 4px; background: var(--line);
+  overflow: hidden; display: inline-block;
+}
+#standing-widget .rep-fill { display: block; height: 100%; border-radius: 4px; transition: width .3s; }
+#standing-widget .rep-fill.rep-good { background: #4a8f4a; }
+#standing-widget .rep-fill.rep-ok { background: #d19a2e; }
+#standing-widget .rep-fill.rep-low { background: var(--danger); }
+#standing-widget .rep-val { font-size: 11px; color: var(--ink-soft); }
+#good-practices-btn { padding: 4px 10px; }
+
+.good-practices-list { margin: 4px 0 14px; padding-left: 20px; }
+.good-practices-list li { margin-bottom: 8px; font-size: 13.5px; line-height: 1.5; }
+.avoid-list { margin: 4px 0 0; padding-left: 20px; }
+.avoid-list li { margin-bottom: 8px; font-size: 13.5px; line-height: 1.5; color: var(--danger); }
+
 #main { flex: 1; overflow: auto; padding: 16px; }
 
 .panel {
