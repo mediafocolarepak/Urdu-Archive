@@ -1,4 +1,4 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260831103839';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260831112443';
 
 // ---------- Users ----------
 
@@ -18,14 +18,16 @@ export async function renderUsersView(main) {
       <p class="hint">User = read/search only. Operator = can create and edit, and mark documents for deletion. Coordinator = Operator powers, plus reviews "Join the Team" applications. Admin = can also delete permanently and manage roles.</p>
       <p class="hint">Qualifications are tags on top of the Operator role, not extra roles - a person can hold more than one (e.g. Translator + Revisor). They control which task categories someone can see and claim (Translation -> Translator, Revision -> Revisor); manage the list itself from Options -> Operator qualifications.</p>
       <div class="grid-wrap"><table class="grid" id="users-grid">
-        <thead><tr><th>Email</th><th>Role</th><th>Qualifications</th><th>Full name</th><th>City</th><th>Membership</th><th>Phone</th><th>Since</th><th></th></tr></thead>
-        <tbody>${rows.map(r => { const p = profileByUid[r.user_id] || {}; const uidQuals = qualByUid[r.user_id] || new Set(); return `<tr data-uid="${esc(r.user_id)}">
+        <thead><tr><th>Email</th><th>Role</th><th>Qualifications</th><th>Credits</th><th>Reputation</th><th>Full name</th><th>City</th><th>Membership</th><th>Phone</th><th>Since</th><th></th></tr></thead>
+        <tbody>${rows.map(r => { const p = profileByUid[r.user_id] || {}; const uidQuals = qualByUid[r.user_id] || new Set(); const lowRep = r.role === 'operator' && r.reputation != null && r.reputation < 20; return `<tr data-uid="${esc(r.user_id)}">
           <td>${esc(r.email)}</td>
           <td><select class="role-select" data-uid="${esc(r.user_id)}">${optionsHtml([['user', 'User'], ['operator', 'Operator'], ['coordinator', 'Coordinator'], ['admin', 'Admin']], r.role, false)}</select></td>
           <td style="white-space:normal;min-width:220px;">${r.role !== 'operator' ? '<span class="hint">Operators only</span>' : (qualList.map(([code, label]) => `
             <label style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-weight:normal;text-transform:none;font-size:12.5px;">
               <input type="checkbox" class="qual-check" data-uid="${esc(r.user_id)}" data-code="${esc(code)}" ${uidQuals.has(code) ? 'checked' : ''}> ${esc(label)}
             </label>`).join('') || '<span class="hint">None defined yet</span>')}</td>
+          <td>${r.role === 'operator' ? esc(r.credits ?? 0) : '—'}</td>
+          <td>${r.role === 'operator' ? `<span${lowRep ? ' style="color:var(--danger);font-weight:600;"' : ''}>${esc(r.reputation ?? 50)}${lowRep ? ' (low)' : ''}</span>` : '—'}</td>
           <td>${esc(p.full_name)}</td>
           <td>${esc(p.city)}</td>
           <td>${esc(labelOf(State.optionListsByName.membership_type || [], p.membership_type))}</td>

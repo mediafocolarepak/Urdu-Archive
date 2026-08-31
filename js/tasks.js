@@ -5,7 +5,7 @@
 // da qualcun altro (vedi 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel
 // vincolo, non lo sostituiscono.
 
-import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf } from './core.js?v=20260831103839';
+import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf } from './core.js?v=20260831112443';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -15,8 +15,13 @@ function formatDate(d) { return d ? esc(d) : '—'; }
 // 37_task_qualifications_categories.sql. Keep the two in sync if the category list changes.
 const CATEGORY_REQUIRES_QUALIFICATION = { IT_UR: 'TRANSLATOR', EN_UR: 'TRANSLATOR', REVISION: 'REVISOR' };
 
+// Below this, Team overview flags the operator in red so Coordinator/Admin notice and can have
+// a human conversation - deliberately not an automatic block on anything (see 2026-08-31
+// session notes: the team is volunteers, a silent auto-ban would be the wrong tone here).
+const LOW_REPUTATION_THRESHOLD = 20;
+
 async function fetchOperators() {
-  const rows = await withStatus(sb.from('user_roles').select('user_id,email').in('role', ['operator', 'coordinator']).order('email'));
+  const rows = await withStatus(sb.from('user_roles').select('user_id,email,reputation').in('role', ['operator', 'coordinator']).order('email'));
   const names = await Promise.all(rows.map(r => getDisplayNameByEmail(r.email)));
   const qualRows = await withStatus(sb.from('user_qualifications').select('*'));
   const qualByUid = {};
@@ -286,9 +291,14 @@ function renderMineList(rows) {
 function renderTeamList(rows, operators, nameMap) {
   const box = document.getElementById('tasks-team-list');
   if (!rows.length) { box.innerHTML = '<div class="empty-msg">No one else has a claimed task right now.</div>'; return; }
-  box.innerHTML = rows.map(t => `
-    <div class="panel" data-id="${t.id}" style="margin-bottom:12px;${isOverdue(t) ? 'border-color:var(--danger);' : ''}">
-      <div class="chat-meta"><b>${esc(t.title)}</b> · ${esc(nameMap[t.claimed_by_email] || t.claimed_by_email)} · due ${formatDate(t.due_date)} ${isOverdue(t) ? '<span class="chat-tag" style="color:var(--danger);">Overdue</span>' : ''} ${t.status === 'submitted' ? '<span class="chat-tag">Waiting for review</span>' : ''}</div>
+  const repByUid = {};
+  for (const o of operators) repByUid[o.user_id] = o.reputation;
+  box.innerHTML = rows.map(t => {
+    const rep = repByUid[t.claimed_by];
+    const lowRep = rep != null && rep < LOW_REPUTATION_THRESHOLD;
+    return `
+    <div class="panel" data-id="${t.id}" style="margin-bottom:12px;${isOverdue(t) || lowRep ? 'border-color:var(--danger);' : ''}">
+      <div class="chat-meta"><b>${esc(t.title)}</b> · ${esc(nameMap[t.claimed_by_email] || t.claimed_by_email)} · due ${formatDate(t.due_date)} ${isOverdue(t) ? '<span class="chat-tag" style="color:var(--danger);">Overdue</span>' : ''} ${t.status === 'submitted' ? '<span class="chat-tag">Waiting for review</span>' : ''} ${lowRep ? `<span class="chat-tag" style="color:var(--danger);">Low reputation (${esc(rep)})</span>` : ''}</div>
       ${docLine(t)}
       ${t.description ? `<p>${esc(t.description)}</p>` : ''}
       ${t.status === 'claimed' ? `
@@ -302,7 +312,8 @@ function renderTeamList(rows, operators, nameMap) {
           <button class="btn secondary task-team-free">Free up (back to open)</button>
           <button class="btn danger task-team-delete">Delete</button>
         </div>` : '<p class="hint">Submitted - waiting for a Revisor.</p>'}
-    </div>`).join('');
+    </div>`;
+  }).join('');
   box.querySelectorAll('[data-id]').forEach(card => {
     const id = card.dataset.id;
     card.querySelector('.task-team-reassign-btn')?.addEventListener('click', async () => {
