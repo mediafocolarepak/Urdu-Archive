@@ -3,7 +3,7 @@
 // admins see every message and can reply + dismiss. Everything stays in chat_messages
 // forever - "dismiss" is a soft flag hiding a row from the admin's default list, not a delete.
 
-import { sb, State, esc, canReviewApplications, withStatus, nameMapForEmails } from './core.js?v=20260831161247';
+import { sb, State, esc, canReviewApplications, withStatus, nameMapForEmails } from './core.js?v=20260831172011';
 
 const REPORT_TYPES = [
   ['REVISION', 'Revision'],

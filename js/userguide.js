@@ -1,9 +1,41 @@
 // Static, self-contained user guide shown in the "Help" tab. Plain content, no data fetching -
 // written for the plain User role's read-only workflow (search, browse, download); Operators/
 // Admins have extra tabs (Match Review, Bulk Import, Edit Records, etc.) not covered here.
+// The Italian guides (below, "Guide in italiano") are separate, editable-in-place documents
+// (published Claude Artifacts, one per role + one philosophy overview + one technical
+// reference) - this in-app tab stays the quick English reference, those are the fuller read.
+
+import { State } from './core.js?v=20260831172011';
+
+const IT_GUIDES = [
+  { role: null, title: 'Il Libro dei Ruoli', desc: 'filosofia, ruoli, ciclo dei task, crediti e reputazione', url: 'https://claude.ai/code/artifact/91ff6ec9-60ef-4e45-baa1-d5ab2dc8a308' },
+  { role: 'user', title: 'Guida Operativa — User', desc: 'consultare l\'archivio, segnalazioni, candidarsi al team', url: 'https://claude.ai/code/artifact/0d8b970a-3dd8-4012-913b-8194db7ab993' },
+  { role: 'operator', title: 'Guida Operativa — Operator', desc: 'prendere un task, correggere un documento, qualifiche, punteggio', url: 'https://claude.ai/code/artifact/401867d1-4482-4e46-8f74-2a2550ab02de' },
+  { role: 'coordinator', title: 'Guida Operativa — Coordinator', desc: 'creare task, gestire la squadra, messaggi, candidature', url: 'https://claude.ai/code/artifact/4fcb12ae-79fd-4e48-ab34-f6c6c54e0b5e' },
+  { role: 'admin', title: 'Guida Operativa — Admin', desc: 'utenti, opzioni, decisione finale sui task, pubblicazione documenti', url: 'https://claude.ai/code/artifact/74c43b41-c3d6-49aa-90ff-fe2fa98295da' },
+  { role: null, title: 'Schema e Meccanismi del Database', desc: 'riferimento tecnico: tabelle, RLS, funzioni RPC (per chi sviluppa/mantiene l\'app)', url: 'https://claude.ai/code/artifact/e5b1a9a8-35ee-42ee-bb5e-4e3161c4bb7c' },
+];
+
+function italianGuidesSection() {
+  const myRole = State.currentRole;
+  const items = IT_GUIDES.map(g => {
+    const mine = g.role === myRole;
+    return `<li style="margin-bottom:8px;${mine ? 'font-weight:600;' : ''}">
+      <a href="${g.url}" target="_blank" rel="noopener">${g.title}</a>${mine ? ' <span class="hint">(il tuo ruolo)</span>' : ''}
+      <div class="hint" style="margin-top:2px;">${g.desc}</div>
+    </li>`;
+  }).join('');
+  return `
+    <div class="panel report-view" style="max-width:820px;margin:0 auto 16px;">
+      <h2>Guide in italiano</h2>
+      <p class="hint">Documenti di riferimento più completi, in italiano - una guida per ogni ruolo, più la filosofia generale e lo schema tecnico del database. Si aprono in una nuova scheda.</p>
+      <ul style="padding-left:20px;">${items}</ul>
+    </div>`;
+}
 
 export function renderUserGuideView(main) {
   main.innerHTML = `
+    ${italianGuidesSection()}
     <div class="panel report-view" style="max-width:820px;margin:0 auto;">
       <h2>User Guide</h2>
       <p class="hint">A short guide to finding and downloading documents in the Focolare Urdu Archive.</p>
