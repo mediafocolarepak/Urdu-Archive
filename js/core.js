@@ -657,7 +657,7 @@ export function wireAuthButtons() {
     errBox.textContent = '';
     if (!email || password.length < 6) { errBox.textContent = 'Email and password (min. 6 characters) are required.'; return; }
     if (!full_name || !city || !membership_type || !phone) { errBox.textContent = 'Full name, city, membership type and phone are required.'; return; }
-    const { error } = await sb.auth.signUp({ email, password, options: { data: { full_name, city, membership_type, phone } } });
+    const { error } = await sb.auth.signUp({ email, password, options: { data: { full_name, city, membership_type, phone }, emailRedirectTo: 'https://mediafocolarepak.github.io/Urdu-Archive/' } });
     if (error) { errBox.textContent = error.message; return; }
     errBox.style.color = 'var(--accent)';
     errBox.textContent = 'Sign-up submitted. Check your email to confirm, then sign in.';
