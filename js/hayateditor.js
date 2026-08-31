@@ -6,8 +6,8 @@
 // the meantime), per the project's "don't pollute a fixed vocabulary with unreviewed values"
 // rule that also applies to Bulk Import and the rest of this session's schema changes.
 
-import { sb, State, esc, today, canWrite, withStatus, withStatusCount, labelOf, extractHayatRowToDocument, SessionCache } from './core.js?v=20260831120139';
-import { comboboxHtml, wireCombobox } from './combobox.js?v=20260831120139';
+import { sb, State, esc, today, canWrite, withStatus, withStatusCount, labelOf, extractHayatRowToDocument, SessionCache } from './core.js?v=20260831141834';
+import { comboboxHtml, wireCombobox } from './combobox.js?v=20260831141834';
 
 let currentRows = [];
 

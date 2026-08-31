@@ -5,7 +5,7 @@
 // da qualcun altro (vedi 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel
 // vincolo, non lo sostituiscono.
 
-import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET } from './core.js?v=20260831120139';
+import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive } from './core.js?v=20260831141834';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -280,13 +280,27 @@ function renderOpenList(rows) {
 }
 
 // Opens the on-file document for the given document_id (signed URL, same pattern docdetail.js
-// uses) - used both for downloading the original to correct and for an operator double-
-// checking their own uploaded revision candidate before submitting.
+// uses) - used for an operator double-checking their own uploaded revision candidate, and for
+// a Revisor/Admin opening it for review (those always live in Supabase Storage, never Drive).
 async function downloadDocumentFile(documentId) {
   const rows = await withStatus(sb.from('documents').select('storage_path').eq('document_id', documentId));
   const storagePath = rows[0]?.storage_path;
   if (!storagePath) { alert('No file on record for this document yet.'); return; }
   const { data } = await sb.storage.from(BUCKET).createSignedUrl(storagePath, 60);
+  if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+}
+
+// Downloading the ORIGINAL to correct is different: the real source material is the .inp
+// file, tracked separately (original_inp_file_name) and living in the "INPAGE Original
+// Document" Google Drive folder, not the catalog's on-file PDF. Prefer that when it's on
+// record; fall back to whatever PDF we have in Storage otherwise (better than nothing while
+// the .inp archive is still being uploaded/renamed).
+async function downloadOriginalForTask(documentId) {
+  const rows = await withStatus(sb.from('documents').select('storage_path,original_inp_file_name').eq('document_id', documentId));
+  const doc = rows[0];
+  if (doc?.original_inp_file_name) { await downloadInpFromGDrive(doc.original_inp_file_name); return; }
+  if (!doc?.storage_path) { alert('No .inp file on record yet for this document, and no PDF on file either.'); return; }
+  const { data } = await sb.storage.from(BUCKET).createSignedUrl(doc.storage_path, 60);
   if (data?.signedUrl) window.open(data.signedUrl, '_blank');
 }
 
@@ -350,7 +364,7 @@ function renderMineList(rows, candidateByTaskId) {
   box.querySelectorAll('[data-id]').forEach(card => {
     const id = card.dataset.id;
     const t = rows.find(r => String(r.id) === id);
-    card.querySelector('.task-mine-download')?.addEventListener('click', () => downloadDocumentFile(t.document_id));
+    card.querySelector('.task-mine-download')?.addEventListener('click', () => downloadOriginalForTask(t.document_id));
     card.querySelector('.task-mine-download-mine')?.addEventListener('click', () => downloadDocumentFile(candidateByTaskId[t.id]));
     card.querySelector('.task-mine-upload-input')?.addEventListener('change', async e => {
       const file = e.target.files[0];

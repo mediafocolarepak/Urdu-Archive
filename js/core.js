@@ -18,22 +18,37 @@ window.__sb = sb;
 const GDRIVE_API_KEY = 'AIzaSyD_AMo9JFxS3jf6Wv1Cg3TRyMvXkzVYFEQ';
 const GDRIVE_FOLDER_ID = '1r9-UM5hJ6xQYm24RzpK4Zo74x1XKyCIq';
 
-export async function downloadFromGDrive(fileName) {
+// "INPAGE Original Document" folder (My Drive/Urdu text archive/INPAGE Original Document) -
+// holds the original .inp files, renamed with the document ID prefix, referenced by
+// documents.original_inp_file_name. Same lookup mechanism as the PDF folder above, so it also
+// needs "anyone with the link can view" sharing - the API key alone can't read a private
+// folder. If downloads start failing with a permission-flavored error, check that setting.
+const GDRIVE_INP_FOLDER_ID = '1LnZ2qo9bAQfyTnvU8V-0D9qLcXQX82DY';
+
+async function findAndOpenInGDrive(folderId, fileName, notFoundHint) {
   if (!fileName) { alert('This document has no file name yet.'); return; }
-  const q = `name='${fileName.replace(/'/g, "\\'")}' and '${GDRIVE_FOLDER_ID}' in parents and trashed=false`;
+  const q = `name='${fileName.replace(/'/g, "\\'")}' and '${folderId}' in parents and trashed=false`;
   const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&key=${GDRIVE_API_KEY}`;
   try {
     const res = await fetch(url);
     const data = await res.json();
     if (data.error) { alert('Google Drive error: ' + data.error.message); return; }
     if (!data.files || data.files.length === 0) {
-      alert(`"${fileName}" was not found yet in the Google Drive archive folder.`);
+      alert(`"${fileName}" was not found yet in ${notFoundHint}.`);
       return;
     }
     window.open(`https://drive.google.com/file/d/${data.files[0].id}/view`, '_blank');
   } catch (e) {
     alert('Could not reach Google Drive: ' + e.message);
   }
+}
+
+export async function downloadFromGDrive(fileName) {
+  await findAndOpenInGDrive(GDRIVE_FOLDER_ID, fileName, 'the Google Drive archive folder');
+}
+
+export async function downloadInpFromGDrive(fileName) {
+  await findAndOpenInGDrive(GDRIVE_INP_FOLDER_ID, fileName, 'the Google Drive "INPAGE Original Document" folder');
 }
 
 // ---------- Google Drive write access (OAuth) ----------
