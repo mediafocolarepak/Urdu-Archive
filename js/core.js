@@ -500,7 +500,7 @@ async function showApp(session, renderDashboardTab) {
   const roleRow = roleRows && roleRows[0];
   State.currentRole = roleRow ? roleRow.role : 'user';
   document.getElementById('user-email').textContent = `${session.user.email} (${State.currentRole})`;
-  if (canWrite() && roleRow) renderStandingWidget(roleRow.credits, roleRow.reputation);
+  if (State.currentRole === 'operator' && roleRow) renderStandingWidget(roleRow.credits, roleRow.reputation);
 
   await loadOptions();
   renderDashboardTab();

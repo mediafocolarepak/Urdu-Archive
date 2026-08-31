@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260831112443';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260831112443';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260831120139';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260831120139';
 
 export async function renderDashboardView(main) {
   const isUser = State.currentRole === 'user';

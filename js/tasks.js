@@ -5,7 +5,7 @@
 // da qualcun altro (vedi 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel
 // vincolo, non lo sostituiscono.
 
-import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf } from './core.js?v=20260831112443';
+import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET } from './core.js?v=20260831120139';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -70,11 +70,18 @@ async function refreshPublishQueue() {
   const rows = await withStatus(sb.from('tasks').select('*').eq('status', 'approved').order('reviewed_at'));
   const box = document.getElementById('tasks-publish-list');
   if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing waiting to be published right now.</div>'; return; }
+  const docTaskIds = rows.filter(t => t.document_id).map(t => t.id);
+  const candidateByTaskId = {};
+  if (docTaskIds.length) {
+    const candidates = await withStatus(sb.from('documents').select('document_id,source_task_id').in('source_task_id', docTaskIds));
+    for (const c of candidates) candidateByTaskId[c.source_task_id] = c.document_id;
+  }
   box.innerHTML = rows.map(t => `
     <div class="panel" data-id="${t.id}" style="margin-bottom:12px;">
       <b>${esc(t.title)}</b> ${t.review_verdict === 'ok_but' ? '<span class="chat-tag">OK, but...</span>' : ''}
       ${docLine(t)}
       ${t.review_notes ? `<p class="hint">Revisor's note: ${esc(t.review_notes)}</p>` : ''}
+      ${candidateByTaskId[t.id] ? '<div class="btn-row"><button class="btn secondary task-publish-open-file">Open corrected file</button></div>' : ''}
       <div class="btn-row">
         <button class="btn task-publish-btn">Publish</button>
         <button class="btn danger task-reject-btn">Reject</button>
@@ -82,6 +89,7 @@ async function refreshPublishQueue() {
     </div>`).join('');
   box.querySelectorAll('[data-id]').forEach(card => {
     const id = parseInt(card.dataset.id, 10);
+    card.querySelector('.task-publish-open-file')?.addEventListener('click', () => downloadDocumentFile(candidateByTaskId[id]));
     card.querySelector('.task-publish-btn').addEventListener('click', async () => {
       if (!confirm('Publish this? It goes live and the operator gets the credits/reputation the Revisor\'s verdict implied.')) return;
       await withStatus(sb.rpc('admin_decide_task', { p_task_id: id, p_decision: 'publish', p_note: null }), 'Publishing...');
@@ -106,6 +114,7 @@ async function refreshReviewQueue() {
       <b>${esc(t.title)}</b>
       ${docLine(t)}
       ${t.description ? `<p>${esc(t.description)}</p>` : ''}
+      ${t.candidate_document_id ? `<div class="btn-row"><button class="btn secondary review-open-file">Open corrected file</button></div>` : ''}
       <div class="field"><label>Notes for the operator <span class="hint">(optional)</span></label><textarea class="review-notes" rows="2"></textarea></div>
       <div class="btn-row">
         <button class="btn review-ok">OK</button>
@@ -115,7 +124,15 @@ async function refreshReviewQueue() {
     </div>`).join('');
   box.querySelectorAll('[data-id]').forEach(card => {
     const id = parseInt(card.dataset.id, 10);
+    const t = rows.find(r => r.id === id);
     const notes = () => card.querySelector('.review-notes').value.trim() || null;
+    card.querySelector('.review-open-file')?.addEventListener('click', async () => {
+      const docRows = await withStatus(sb.rpc('get_review_document', { p_document_id: t.candidate_document_id }));
+      const storagePath = docRows[0]?.storage_path;
+      if (!storagePath) { alert('No file found for this revision.'); return; }
+      const { data } = await sb.storage.from(BUCKET).createSignedUrl(storagePath, 60);
+      if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+    });
     const submitVerdict = async (verdict, confirmMsg) => {
       if (confirmMsg && !confirm(confirmMsg)) return;
       await withStatus(sb.rpc('submit_task_review', { p_task_id: id, p_verdict: verdict, p_notes: notes() }), 'Submitting review...');
@@ -213,8 +230,15 @@ async function refreshTasks(user, manage, operators) {
   const rows = await withStatus(sb.from('tasks').select('*').order('created_at', { ascending: false }));
   const nameMap = manage ? await nameMapForEmails(rows.flatMap(t => [t.claimed_by_email, t.created_by_email])) : {};
 
+  const myClaimedDocTaskIds = rows.filter(t => t.status === 'claimed' && t.claimed_by === user.id && t.document_id).map(t => t.id);
+  const candidateByTaskId = {};
+  if (myClaimedDocTaskIds.length) {
+    const candidates = await withStatus(sb.from('documents').select('document_id,source_task_id').in('source_task_id', myClaimedDocTaskIds));
+    for (const c of candidates) candidateByTaskId[c.source_task_id] = c.document_id;
+  }
+
   renderOpenList(rows.filter(t => t.status === 'open'));
-  renderMineList(rows.filter(t => ACTIVE_STATUSES.includes(t.status) && t.claimed_by === user.id));
+  renderMineList(rows.filter(t => ACTIVE_STATUSES.includes(t.status) && t.claimed_by === user.id), candidateByTaskId);
   if (manage) renderTeamList(rows.filter(t => ACTIVE_STATUSES.includes(t.status) && t.claimed_by !== user.id), operators, nameMap);
   renderDoneList(rows.filter(t => HISTORY_STATUSES.includes(t.status)), manage, nameMap);
 }
@@ -255,10 +279,54 @@ function renderOpenList(rows) {
   });
 }
 
-function renderMineList(rows) {
+// Opens the on-file document for the given document_id (signed URL, same pattern docdetail.js
+// uses) - used both for downloading the original to correct and for an operator double-
+// checking their own uploaded revision candidate before submitting.
+async function downloadDocumentFile(documentId) {
+  const rows = await withStatus(sb.from('documents').select('storage_path').eq('document_id', documentId));
+  const storagePath = rows[0]?.storage_path;
+  if (!storagePath) { alert('No file on record for this document yet.'); return; }
+  const { data } = await sb.storage.from(BUCKET).createSignedUrl(storagePath, 60);
+  if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+}
+
+// Uploads a corrected file for a document-linked task: creates (or replaces) a sibling
+// documents row - same work_id as the original, workflow_status 'revision' so it's invisible
+// everywhere except to its own claimant and Coordinator/Admin (see 45_document_revision_
+// workflow.sql) until a Revisor and then Admin approve it. Linked back via source_task_id,
+// which is also how the Review queue finds it to offer "open the corrected file".
+async function uploadCorrectedFile(task, file) {
+  const origRows = await withStatus(sb.from('documents').select('*').eq('document_id', task.document_id));
+  const orig = origRows[0];
+  if (!orig) { alert('Original document not found.'); return; }
+  const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
+  const storagePath = `revision-${task.document_id}-${task.id}-${Date.now()}.${ext}`;
+  await withStatus(sb.storage.from(BUCKET).upload(storagePath, file, { upsert: true }), 'Uploading corrected file...');
+
+  const existing = await withStatus(sb.from('documents').select('document_id,storage_path').eq('source_task_id', task.id));
+  if (existing.length) {
+    const old = existing[0];
+    if (old.storage_path && old.storage_path !== storagePath) await sb.storage.from(BUCKET).remove([old.storage_path]);
+    await withStatus(sb.from('documents').update({ storage_path: storagePath, file_name: storagePath }).eq('document_id', old.document_id), 'Replacing corrected file...');
+  } else {
+    const maxRows = await withStatus(sb.from('documents').select('document_id').order('document_id', { ascending: false }).limit(1));
+    const newId = (maxRows[0]?.document_id || 0) + 1;
+    await withStatus(sb.from('documents').insert({
+      document_id: newId, work_id: orig.work_id, title: orig.title, original_title: orig.original_title,
+      ur_title: orig.ur_title, category: orig.category, author: orig.author, language: orig.language,
+      workflow_status: 'revision', source_task_id: task.id, storage_path: storagePath, file_name: storagePath,
+      is_preferred: false, legacy_migrated: false,
+    }), 'Creating revision record...');
+  }
+}
+
+function renderMineList(rows, candidateByTaskId) {
   const box = document.getElementById('tasks-mine-list');
   if (!rows.length) { box.innerHTML = '<div class="empty-msg">You have no claimed tasks. Check "Open tasks" above.</div>'; return; }
-  box.innerHTML = rows.map(t => `
+  box.innerHTML = rows.map(t => {
+    const hasCandidate = !!candidateByTaskId[t.id];
+    const needsFile = t.status === 'claimed' && t.document_id;
+    return `
     <div class="panel" data-id="${t.id}" style="margin-bottom:12px;${isOverdue(t) ? 'border-color:var(--danger);' : ''}">
       <b>${esc(t.title)}</b> ${isOverdue(t) ? '<span class="chat-tag" style="color:var(--danger);">Overdue</span>' : ''}
       ${t.status === 'submitted' ? '<span class="chat-tag">Waiting for review</span>' : ''}
@@ -266,13 +334,30 @@ function renderMineList(rows) {
       ${t.description ? `<p>${esc(t.description)}</p>` : ''}
       ${t.status === 'claimed' ? `
         <p class="hint">Due ${formatDate(t.due_date)} <span class="hint">(fixed when you claimed it)</span></p>
+        ${needsFile ? `
+          <div class="btn-row">
+            <button class="btn secondary task-mine-download">Download original file</button>
+            <label class="btn secondary" style="cursor:pointer;">Upload corrected file<input type="file" class="task-mine-upload-input" accept=".inp,.doc,.docx,.pdf" style="display:none;"></label>
+            ${hasCandidate ? '<button class="btn secondary task-mine-download-mine">Download my corrected file</button>' : ''}
+          </div>
+          <p class="hint">${hasCandidate ? 'Corrected file uploaded - you can still replace it above before submitting.' : 'Upload the corrected file before you can submit this for review.'}</p>` : ''}
         <div class="btn-row">
-          <button class="btn task-mine-submit">Submit for review</button>
+          <button class="btn task-mine-submit" ${needsFile && !hasCandidate ? 'disabled' : ''}>Submit for review</button>
           <button class="btn secondary task-mine-giveup">Give up this task</button>
         </div>` : '<p class="hint">A Revisor will look at this next - no action needed from you for now.</p>'}
-    </div>`).join('');
+    </div>`;
+  }).join('');
   box.querySelectorAll('[data-id]').forEach(card => {
     const id = card.dataset.id;
+    const t = rows.find(r => String(r.id) === id);
+    card.querySelector('.task-mine-download')?.addEventListener('click', () => downloadDocumentFile(t.document_id));
+    card.querySelector('.task-mine-download-mine')?.addEventListener('click', () => downloadDocumentFile(candidateByTaskId[t.id]));
+    card.querySelector('.task-mine-upload-input')?.addEventListener('change', async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      await uploadCorrectedFile(t, file);
+      await renderTasksView(document.getElementById('main'));
+    });
     card.querySelector('.task-mine-submit')?.addEventListener('click', async () => {
       if (!confirm('Submit this task for review? You will not be able to make further changes.')) return;
       await withStatus(sb.from('tasks').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', id), 'Submitting...');
