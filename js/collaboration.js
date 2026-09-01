@@ -5,7 +5,7 @@
 // the UI) - only Admin can set 'approved', paired with the actual role promotion in
 // user_roles (already an admin-only action, see 05_roles_and_permissions.sql).
 
-import { sb, State, esc, canReviewApplications, isAdmin, withStatus, nameMapForEmails } from './core.js?v=20260901172929';
+import { sb, State, esc, canReviewApplications, isAdmin, withStatus, nameMapForEmails } from './core.js?v=20260901174053';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -82,7 +82,11 @@ export async function renderJoinTeamView(main) {
         <textarea id="jt-experience" rows="3" placeholder="Translation, editing, archival work, languages you speak..."></textarea>
       </div>
       <div class="field"><label>Skills</label>
-        <textarea id="jt-skills" rows="2" placeholder="e.g. Urdu-Italian translation, proofreading, InPage/DTP..."></textarea>
+        <div id="jt-skills" style="display:flex;flex-direction:column;gap:4px;">${(State.optionListsByName.collaboration_skill || []).map(([code, label]) => `
+          <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-weight:normal;font-size:13px;">
+            <input type="checkbox" class="jt-skill-check" value="${esc(code)}"> ${esc(label)}
+          </label>`).join('') || '<span class="hint">No skills defined yet - ask an Admin to add some from Options.</span>'}
+        </div>
       </div>
       <div class="field"><label>What motivates you to help?</label>
         <textarea id="jt-motivation" rows="3"></textarea>
@@ -99,7 +103,7 @@ export async function renderJoinTeamView(main) {
       user_id: user.id, user_email: user.email,
       academic_level: document.getElementById('jt-academic').value,
       experience: document.getElementById('jt-experience').value.trim() || null,
-      skills: document.getElementById('jt-skills').value.trim() || null,
+      skills: Array.from(document.querySelectorAll('.jt-skill-check:checked')).map(cb => cb.value).join(', ') || null,
       motivation,
       availability: document.getElementById('jt-availability').value.trim() || null,
     }), 'Sending your request...');
