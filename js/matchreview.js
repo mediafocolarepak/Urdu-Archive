@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, withStatus, mergeWorks, likeSafe, DASH_ROW_LIMIT, downloadFromGDrive, BUCKET } from './core.js?v=20260901232817';
-import { renderDocDetail } from './docdetail.js?v=20260901232817';
+import { sb, State, esc, labelOf, optionsHtml, withStatus, mergeWorks, likeSafe, DASH_ROW_LIMIT, downloadFromGDrive, BUCKET } from './core.js?v=20260901235539';
+import { renderDocDetail } from './docdetail.js?v=20260901235539';
 
 export function rankByDateProximity(refDate, refs, dateField) {
   // Ranks by closeness to refDate, but never drops a candidate just because it (or
@@ -174,7 +174,7 @@ async function renderMatchBody() {
     </div>
   `;
   renderCandidates(ranked, doc);
-  renderDocDetail(doc.document_id);
+  renderDocDetail(doc.document_id, { legacyFullEdit: true });
   document.getElementById('match-search').addEventListener('input', e => {
     const term = e.target.value.toLowerCase();
     if (!term) { renderCandidates(ranked, doc); return; }

@@ -3,11 +3,11 @@
 // `documents` table's full field set.
 
 import {
-  sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete,
+  sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete, isCoordinator, isAdmin,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount,
-} from './core.js?v=20260901232817';
+} from './core.js?v=20260901235539';
 
 // Builds the "riassunto" text block that replaces the old grid of disabled input fields -
 // one line per group of related info, empty groups dropped entirely so the block stays short.
@@ -24,11 +24,14 @@ function renderDocSummary(doc) {
   return lines.map(l => `<div>${l}</div>`).join('');
 }
 
-export function renderDocDetailConsultation(box, doc, workSiblings, docCollections) {
+export function renderDocDetailConsultation(box, doc, workSiblings, docCollections, canEdit) {
   box.innerHTML = `
     <div class="btn-row" style="justify-content:space-between;align-items:center;margin:0 0 8px;">
       <h3 style="margin:0;">Document #${esc(doc.document_id)}</h3>
-      <button class="btn" id="doc-download-gdrive">Open</button>
+      <div class="btn-row" style="margin:0;">
+        ${canEdit ? '<button class="btn secondary" id="doc-open-editor">Edit</button>' : ''}
+        <button class="btn" id="doc-download-gdrive">Open</button>
+      </div>
     </div>
     <div class="field" style="font-size:13px;line-height:1.7;">
       <div style="font-weight:600;font-size:14px;margin-bottom:2px;">${esc(doc.en_title) || '<span class="hint">(no title)</span>'}</div>
@@ -47,6 +50,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     ${doc.storage_path ? `<div class="field"><label>File</label><a href="#" id="doc-download">Download</a></div>` : ''}
   `;
   document.getElementById('doc-download-gdrive').addEventListener('click', () => downloadFromGDrive(doc.file_name));
+  if (canEdit) document.getElementById('doc-open-editor').addEventListener('click', () => openFullScreenEditor(doc.document_id));
   if (doc.storage_path) {
     document.getElementById('doc-download').addEventListener('click', async e => {
       e.preventDefault();
@@ -101,14 +105,13 @@ function renderWorkSiblingsHtml(siblings, currentId, canEdit) {
     </div>`;
 }
 
-function wireWorkSiblingsClicks(box, workId) {
+// `navigate` lets the two contexts that reuse this (plain consultation vs. the full editor,
+// either inline for Match Review or in the full-screen overlay) each decide what "open this
+// sibling" means for them - default is a normal Dashboard-style navigation.
+function wireWorkSiblingsClicks(box, workId, navigate) {
+  navigate = navigate || (async targetId => { State.selectedDocId = targetId; await onAfterDocChange(); await renderDocDetail(targetId); });
   box.querySelectorAll('tr[data-sibling-id]').forEach(tr => {
-    tr.addEventListener('click', async () => {
-      const targetId = tr.dataset.siblingId;
-      State.selectedDocId = targetId;
-      await onAfterDocChange();
-      await renderDocDetail(targetId);
-    });
+    tr.addEventListener('click', () => navigate(tr.dataset.siblingId));
     const openBtn = tr.querySelector('.sibling-open');
     if (openBtn) openBtn.addEventListener('click', async e => {
       e.stopPropagation();
@@ -120,7 +123,7 @@ function wireWorkSiblingsClicks(box, workId) {
       e.stopPropagation();
       await setPreferredVersion(tr.dataset.siblingId, workId);
       await onAfterDocChange();
-      await renderDocDetail(State.selectedDocId);
+      await navigate(State.selectedDocId);
     });
   });
 }
@@ -170,7 +173,12 @@ function wireAllVersionsBar(box, doc, siblings) {
   });
 }
 
-export async function renderDocDetail(id) {
+// The Dashboard now always shows the simplified, read-only consultation panel for every role
+// (User/Operator/Coordinator/Admin alike) - Coordinator/Admin additionally get an "Edit" button
+// there that opens the full field editor in a full-screen overlay (openFullScreenEditor below),
+// replacing the old "Edit Records" tab entirely. `opts.legacyFullEdit` preserves the previous
+// inline-in-the-side-panel behavior for Match Review, which still needs it (see matchreview.js).
+export async function renderDocDetail(id, opts = {}) {
   const box = document.getElementById('doc-detail');
   if (!box) return;
   if (!id) { box.innerHTML = '<div class="empty-msg">Select a document from the list, or create a new one.</div>'; return; }
@@ -180,11 +188,56 @@ export async function renderDocDetail(id) {
   const siblings = await fetchWorkSiblings(doc.work_id);
   const docCollections = await getCollectionsForDocument(doc.document_id);
 
-  // Operator shares the simplified, read-only Dashboard detail panel with User (see the
-  // matching Dashboard grid/filter simplification in dashboard.js) - editing now happens
-  // through Edit Records/Tasks, not by opening a document straight from the Dashboard.
-  if (State.currentRole === 'user' || State.currentRole === 'operator') { renderDocDetailConsultation(box, doc, siblings, docCollections); return; }
+  if (opts.legacyFullEdit && canWrite()) {
+    renderFullEditForm(box, id, doc, siblings, docCollections, {
+      mode: 'legacy',
+      onDone: () => renderDocDetail(id, { legacyFullEdit: true }),
+      refreshSelf: () => renderDocDetail(id, { legacyFullEdit: true }),
+      onDelete: () => renderDocDetail(null, { legacyFullEdit: true }),
+      navigateSibling: targetId => renderDocDetail(targetId, { legacyFullEdit: true }),
+    });
+    return;
+  }
 
+  const canEdit = isCoordinator() || isAdmin();
+  renderDocDetailConsultation(box, doc, siblings, docCollections, canEdit);
+}
+
+// Opens the full field editor for a document in a full-screen overlay (Coordinator/Admin only,
+// triggered by the "Edit" button in the consultation panel). Re-fetches its own data rather
+// than reusing what the consultation panel already has, so it's always safe to call standalone.
+export async function openFullScreenEditor(id) {
+  const rows = await withStatus(sb.from('documents').select('*').eq('document_id', id));
+  if (!rows.length) { alert('Document not found.'); return; }
+  const doc = rows[0];
+  const siblings = await fetchWorkSiblings(doc.work_id);
+  const docCollections = await getCollectionsForDocument(doc.document_id);
+
+  document.getElementById('doc-fullscreen-editor')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'doc-fullscreen-editor';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:2000;background:rgba(20,16,10,.55);display:flex;justify-content:center;overflow:auto;padding:24px 16px;';
+  overlay.innerHTML = '<div class="panel" id="doc-fullscreen-editor-panel" style="max-width:900px;width:100%;height:fit-content;margin:0;"></div>';
+  document.body.appendChild(overlay);
+  const panel = overlay.querySelector('#doc-fullscreen-editor-panel');
+
+  function close() { overlay.remove(); }
+  async function closeAndReturn() { close(); await onAfterDocChange(); await renderDocDetail(id); }
+
+  renderFullEditForm(panel, id, doc, siblings, docCollections, {
+    mode: 'overlay',
+    onDone: closeAndReturn,
+    refreshSelf: () => openFullScreenEditor(id),
+    onDelete: async () => { close(); State.selectedDocId = null; await onAfterDocChange(); await renderDocDetail(null); },
+    onClose: close,
+    navigateSibling: targetId => openFullScreenEditor(targetId),
+  });
+}
+
+// Builds the full field-editor form into `box` (either the Dashboard's side panel for legacy
+// Match Review use, or the full-screen overlay panel) - ctx tells it what to do once an action
+// (save/delete/process-history change/close) completes, since that differs by context.
+async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
   const readOnly = !canWrite();
 
   function textField(label, name, value, type) {
@@ -270,6 +323,7 @@ export async function renderDocDetail(id) {
     </div>` : ''}
     <div class="btn-row">
       ${canWrite() ? '<button class="btn" id="doc-save">Save changes</button>' : ''}
+      ${ctx.mode === 'overlay' ? '<button class="btn secondary" id="doc-editor-close">Close</button>' : ''}
       <button class="btn secondary" id="doc-tracking-sheet">Print Tracking Sheet</button>
       ${canDelete() ? '<button class="btn danger" id="doc-delete">Delete permanently</button>' : ''}
     </div>
@@ -278,6 +332,7 @@ export async function renderDocDetail(id) {
 
   document.getElementById('doc-tracking-sheet').addEventListener('click', () => renderTrackingSheet(id));
   document.getElementById('doc-download-gdrive').addEventListener('click', () => downloadFromGDrive(doc.file_name));
+  if (ctx.mode === 'overlay') document.getElementById('doc-editor-close').addEventListener('click', () => ctx.onClose());
   document.getElementById('doc-read-pages').addEventListener('click', async () => {
     const status = document.getElementById('doc-read-pages-status');
     status.textContent = 'Reading file...';
@@ -286,7 +341,7 @@ export async function renderDocDetail(id) {
     box.querySelector('[data-f="pages"]').value = n;
     status.textContent = `Read ${n} page${n === 1 ? '' : 's'} from the file.`;
   });
-  wireWorkSiblingsClicks(box, doc.work_id);
+  wireWorkSiblingsClicks(box, doc.work_id, ctx.navigateSibling);
   wireAllVersionsBar(box, doc, siblings);
   if (doc.storage_path) {
     document.getElementById('doc-download').addEventListener('click', async e => {
@@ -295,7 +350,7 @@ export async function renderDocDetail(id) {
       if (data?.signedUrl) window.open(data.signedUrl, '_blank');
     });
   }
-  await wireProcessHistorySection(id, doc);
+  await wireProcessHistorySection(id, doc, ctx.refreshSelf);
   if (!canWrite()) return;
 
   function collectFields() {
@@ -350,8 +405,7 @@ export async function renderDocDetail(id) {
 
     await withStatus(sb.from('documents').update(vals).eq('document_id', id), 'Saving...');
     await saveDocumentCollections(id, collectCollections());
-    await onAfterDocChange();
-    await renderDocDetail(id);
+    await ctx.onDone();
   });
 
   if (!canDelete()) return;
@@ -359,9 +413,7 @@ export async function renderDocDetail(id) {
     if (!confirm(`Permanently delete document #${id}? This cannot be undone.`)) return;
     if (doc.storage_path) await sb.storage.from(BUCKET).remove([doc.storage_path]);
     await withStatus(sb.from('documents').delete().eq('document_id', id));
-    State.selectedDocId = null;
-    await onAfterDocChange();
-    await renderDocDetail(null);
+    await ctx.onDelete();
   });
 }
 
@@ -388,8 +440,8 @@ function renderProcessHistorySection(doc) {
     </div>`;
 }
 
-async function wireProcessHistorySection(documentId, doc) {
-  await refreshProcessHistoryLog(documentId);
+async function wireProcessHistorySection(documentId, doc, refreshSelf) {
+  await refreshProcessHistoryLog(documentId, refreshSelf);
   const addBtn = document.getElementById('ph-add');
   if (!addBtn) return;
   addBtn.addEventListener('click', async () => {
@@ -399,11 +451,11 @@ async function wireProcessHistorySection(documentId, doc) {
     await withStatus(sb.from('process_history').insert({ document_id: documentId, step, step_date, note }), 'Adding step...');
     await withStatus(sb.from('documents').update({ workflow_status: step }).eq('document_id', documentId), 'Updating status...');
     await onAfterDocChange();
-    await renderDocDetail(documentId);
+    await refreshSelf();
   });
 }
 
-async function refreshProcessHistoryLog(documentId) {
+async function refreshProcessHistoryLog(documentId, refreshSelf) {
   const box = document.getElementById('process-history-log');
   if (!box) return;
   const rows = await withStatus(sb.from('process_history').select('*').eq('document_id', documentId).order('step_date', { ascending: false }).order('created_at', { ascending: false }));
@@ -421,7 +473,7 @@ async function refreshProcessHistoryLog(documentId) {
     const newStatus = remaining[0]?.step || 'ENTR';
     await withStatus(sb.from('documents').update({ workflow_status: newStatus }).eq('document_id', documentId), 'Updating status...');
     await onAfterDocChange();
-    await renderDocDetail(documentId);
+    await refreshSelf();
   }));
 }
 

@@ -1,10 +1,10 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260901232817';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260901232817';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260901235539';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260901235539';
 
 export async function renderDashboardView(main) {
   // Operator shares the simplified read/search-only Dashboard layout with User - their write
-  // access still works everywhere else (Edit Records, the doc-detail panel, Tasks), just not
-  // via this quick "+ New document" shortcut here.
+  // access still works everywhere else (Tasks, and the doc-detail panel for their own claimed
+  // work), just not via this quick "+ New document" shortcut or the full editor here.
   const isUser = State.currentRole === 'user' || State.currentRole === 'operator';
 
   // Plain Users (and Operators, see above) land on the archive filtered to Urdu by default
@@ -29,6 +29,7 @@ export async function renderDashboardView(main) {
         <div class="field"><label>Main topic</label><select id="f-main_topic">${optionsHtml(State.mainTopics, State.dashFilters.main_topic, true)}</select></div>
         ${isUser ? '' : `<div class="field"><label>Workflow status</label><select id="f-status">${optionsHtml(State.statuses, State.dashFilters.workflow_status, true)}</select></div>`}
         <div class="field"><label>Recipient</label><select id="f-recipient">${optionsHtml(State.recipients, State.dashFilters.recipient, true)}</select></div>
+        <div class="field"><label>Source</label><select id="f-source">${optionsHtml(State.sources, State.dashFilters.source, true)}</select></div>
         <div class="field"><label>Collection</label><select id="f-collection">${optionsHtml(State.collections, State.dashFilters.collection, true)}</select></div>
         <div class="field"><label>Language</label><select id="f-language">${optionsHtml(State.langs, State.dashFilters.language, true)}</select></div>
       </div>
@@ -62,6 +63,7 @@ export async function renderDashboardView(main) {
     document.getElementById('f-pending').addEventListener('change', e => { State.dashFilters.pendingOnly = e.target.checked; refreshDashGrid(); });
   }
   document.getElementById('f-recipient').addEventListener('change', e => { State.dashFilters.recipient = e.target.value; refreshDashGrid(); });
+  document.getElementById('f-source').addEventListener('change', e => { State.dashFilters.source = e.target.value; refreshDashGrid(); });
   document.getElementById('f-collection').addEventListener('change', e => { State.dashFilters.collection = e.target.value; refreshDashGrid(); });
   document.getElementById('f-language').addEventListener('change', e => { State.dashFilters.language = e.target.value; refreshDashGrid(); });
   if (isAdmin()) document.getElementById('dash-export-csv').addEventListener('click', exportDashboardCsv);
@@ -92,6 +94,7 @@ function buildDashQuery(selectAll) {
   if (f.legacyOnly) q = q.eq('legacy_migrated', true);
   if (f.pendingOnly) q = q.eq('pending_deletion', true);
   if (f.recipient) q = q.overlaps('recipient', [f.recipient]);
+  if (f.source) q = q.eq('source', f.source);
   if (f.language) q = q.eq('language', f.language);
   return q;
 }

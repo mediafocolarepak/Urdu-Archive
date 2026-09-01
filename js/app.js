@@ -1,20 +1,19 @@
-import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260901232817';
-import { renderDashboardView } from './dashboard.js?v=20260901232817';
-import { renderReportsView } from './reports.js?v=20260901232817';
-import { renderHayatView } from './hayatindex.js?v=20260901232817';
-import { renderMatchReviewView } from './matchreview.js?v=20260901232817';
-import { renderBulkImportView } from './bulkimport.js?v=20260901232817';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260901232817';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260901232817';
-import { renderAdminEditView } from './adminedit.js?v=20260901232817';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260901232817';
-import { renderHayatEditorView } from './hayateditor.js?v=20260901232817';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260901232817';
-import { renderUserGuideView } from './userguide.js?v=20260901232817';
-import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260901232817';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260901232817';
-import { renderMyProfileView } from './profile.js?v=20260901232817';
-import { registerServiceWorker } from './pwa-register.js?v=20260901232817';
+import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260901235539';
+import { renderDashboardView } from './dashboard.js?v=20260901235539';
+import { renderReportsView } from './reports.js?v=20260901235539';
+import { renderHayatView } from './hayatindex.js?v=20260901235539';
+import { renderMatchReviewView } from './matchreview.js?v=20260901235539';
+import { renderBulkImportView } from './bulkimport.js?v=20260901235539';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260901235539';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260901235539';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260901235539';
+import { renderHayatEditorView } from './hayateditor.js?v=20260901235539';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260901235539';
+import { renderUserGuideView } from './userguide.js?v=20260901235539';
+import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260901235539';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260901235539';
+import { renderMyProfileView } from './profile.js?v=20260901235539';
+import { registerServiceWorker } from './pwa-register.js?v=20260901235539';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -47,7 +46,7 @@ function getTabs() {
   }
   if (canReviewApplications()) { tabs.push({ id: 'applications', label: 'Team Applications' }); }
   if (canWrite()) { tabs.push({ id: 'tasks', label: 'Tasks' }); }
-  if (isAdmin()) { tabs.push({ id: 'users', label: 'Users' }); tabs.push({ id: 'options', label: 'Options' }); tabs.push({ id: 'adminedit', label: 'Edit Records' }); tabs.push({ id: 'announcements', label: 'Announcements' }); }
+  if (isAdmin()) { tabs.push({ id: 'users', label: 'Users' }); tabs.push({ id: 'options', label: 'Options' }); tabs.push({ id: 'announcements', label: 'Announcements' }); }
   tabs.push({ id: 'profile', label: 'My Profile' });
   // Users already got their Chat tab up front as "Report a Problem or Suggestion" (see above);
   // Operators get the same rename, just not moved to the front until the reorder below.
@@ -83,7 +82,6 @@ function renderTab(id) {
   else if (id === 'hayat') renderHayatView(main);
   else if (id === 'users') renderUsersView(main);
   else if (id === 'options') renderOptionsView(main);
-  else if (id === 'adminedit') renderAdminEditView(main);
   else if (id === 'matchreview') renderMatchReviewView(main);
   else if (id === 'workconsolidation') renderWorkConsolidationView(main);
   else if (id === 'hayateditor') renderHayatEditorView(main);
