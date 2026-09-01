@@ -1,12 +1,15 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260901172519';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260901172519';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260901172929';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260901172929';
 
 export async function renderDashboardView(main) {
-  const isUser = State.currentRole === 'user';
+  // Operator shares the simplified read/search-only Dashboard layout with User - their write
+  // access still works everywhere else (Edit Records, the doc-detail panel, Tasks), just not
+  // via this quick "+ New document" shortcut here.
+  const isUser = State.currentRole === 'user' || State.currentRole === 'operator';
 
-  // Plain Users land on the archive filtered to Urdu by default (the vast majority of what
-  // they consult); applied once per session so a manual change to the filter later isn't
-  // silently reset on every dashboard revisit.
+  // Plain Users (and Operators, see above) land on the archive filtered to Urdu by default
+  // (the vast majority of what they consult); applied once per session so a manual change to
+  // the filter later isn't silently reset on every dashboard revisit.
   if (isUser && !State.dashUserDefaultsApplied) {
     State.dashFilters.language = 'URD';
     State.dashUserDefaultsApplied = true;
@@ -17,7 +20,7 @@ export async function renderDashboardView(main) {
       <h2>Dashboard <span class="count-badge" id="dash-count"></span></h2>
       <div class="searchbar">
         <input id="dash-search" placeholder="Search by title or tags..." value="${esc(State.dashFilters.search)}">
-        ${canWrite() ? '<button class="btn" id="dash-new">+ New document</button>' : ''}
+        ${canWrite() && !isUser ? '<button class="btn" id="dash-new">+ New document</button>' : ''}
       </div>
       <div class="field-grid" style="margin-bottom:10px;">
         <div class="field"><label>ID #</label><input id="dash-search-id" placeholder="ID #" value="${esc(State.dashFilters.idSearch)}"></div>
@@ -49,7 +52,7 @@ export async function renderDashboardView(main) {
 
   document.getElementById('dash-search').addEventListener('input', e => { State.dashFilters.search = e.target.value; refreshDashGrid(); });
   document.getElementById('dash-search-id').addEventListener('input', e => { State.dashFilters.idSearch = e.target.value; refreshDashGrid(); });
-  if (canWrite()) document.getElementById('dash-new').addEventListener('click', () => createNewDocument(refreshDashGrid));
+  if (canWrite() && !isUser) document.getElementById('dash-new').addEventListener('click', () => createNewDocument(refreshDashGrid));
   document.getElementById('f-category').addEventListener('change', e => { State.dashFilters.category = e.target.value; refreshDashGrid(); });
   document.getElementById('f-author').addEventListener('change', e => { State.dashFilters.author = e.target.value; refreshDashGrid(); });
   document.getElementById('f-main_topic').addEventListener('change', e => { State.dashFilters.main_topic = e.target.value; refreshDashGrid(); });
@@ -112,7 +115,7 @@ const DASH_SORTABLE_USER = { document_id: 'ID', en_title: 'Title', author: 'Auth
 export async function refreshDashGrid() {
   const grid = document.getElementById('dash-grid');
   if (!grid) return;
-  const isUser = State.currentRole === 'user';
+  const isUser = State.currentRole === 'user' || State.currentRole === 'operator';
   const cols = isUser ? DASH_SORTABLE_USER : DASH_SORTABLE;
   let rows = await withStatus(buildDashQuery(false).order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Searching...');
   rows = await filterByCollection(rows);

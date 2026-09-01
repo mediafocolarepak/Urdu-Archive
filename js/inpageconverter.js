@@ -8,7 +8,7 @@
 // raw .inp binary directly (locates the content block via fixed byte markers, then maps
 // each InPage glyph code to its Unicode Arabic/Urdu codepoint), so no InPage clipboard
 // step is needed. Rewritten here as a pure function instead of relying on globals.
-import { canWrite, esc, getDriveAccessToken, driveUploadOrReplace } from './core.js?v=20260901172519';
+import { canWrite, esc, getDriveAccessToken, driveUploadOrReplace } from './core.js?v=20260901172929';
 
 const DEFAULT_OPTIONS = {
   urdu: true,          // Urdu glyph variants (ک ی ہ ھ ں...) vs. plain Arabic ones
