@@ -1,4 +1,4 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260901225915';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260901232052';
 
 // ---------- Users ----------
 
@@ -105,9 +105,84 @@ export async function renderOptionsView(main) {
         <select id="opt-list-select">${OPTION_LIST_NAMES.map(n => `<option value="${n}" ${n === State.optionsSelectedList ? 'selected' : ''}>${OPTION_LIST_LABELS[n]}</option>`).join('')}</select>
       </div>
       <div id="opt-editor"></div>
+    </div>
+    <div class="panel">
+      <h2>Task reputation tiers <span class="hint">— reputation deltas by task size (base credits)</span></h2>
+      <div id="reptiers-editor"></div>
     </div>`;
   document.getElementById('opt-list-select').addEventListener('change', e => { State.optionsSelectedList = e.target.value; renderOptionsEditor(); });
   await renderOptionsEditor();
+  await renderReputationTiersEditor();
+}
+
+async function renderReputationTiersEditor() {
+  const box = document.getElementById('reptiers-editor');
+  const rows = await withStatus(sb.from('task_reputation_tiers').select('*').order('sort_order'));
+  box.innerHTML = `
+    <div class="grid-wrap"><table class="grid">
+      <thead><tr><th>Tier</th><th>Min base credits</th><th>Max base credits</th><th>OK</th><th>OK, but...</th><th>Fail / Reject</th><th>Sort order</th><th></th></tr></thead>
+      <tbody>${rows.map(r => `<tr data-tier="${esc(r.tier_name)}">
+        <td><input class="rt-name" value="${esc(r.tier_name)}" style="width:90px;"></td>
+        <td><input class="rt-min" type="number" value="${esc(r.min_base_credits)}" style="width:70px;"></td>
+        <td><input class="rt-max" type="number" value="${r.max_base_credits ?? ''}" placeholder="none" style="width:70px;"></td>
+        <td><input class="rt-ok" type="number" value="${esc(r.ok_delta)}" style="width:60px;"></td>
+        <td><input class="rt-okbut" type="number" value="${esc(r.ok_but_delta)}" style="width:60px;"></td>
+        <td><input class="rt-fail" type="number" value="${esc(r.fail_delta)}" style="width:60px;"></td>
+        <td><input class="rt-order" type="number" value="${esc(r.sort_order)}" style="width:60px;"></td>
+        <td><button class="btn secondary rt-save" style="padding:4px 10px;">Save</button>
+            <button class="btn danger rt-delete" style="padding:4px 10px;">Delete</button></td>
+      </tr>`).join('')}
+      <tr data-tier="">
+        <td><input class="rt-name" placeholder="Tier name" style="width:90px;"></td>
+        <td><input class="rt-min" type="number" value="0" style="width:70px;"></td>
+        <td><input class="rt-max" type="number" placeholder="none" style="width:70px;"></td>
+        <td><input class="rt-ok" type="number" value="0" style="width:60px;"></td>
+        <td><input class="rt-okbut" type="number" value="0" style="width:60px;"></td>
+        <td><input class="rt-fail" type="number" value="0" style="width:60px;"></td>
+        <td><input class="rt-order" type="number" value="${rows.length + 1}" style="width:60px;"></td>
+        <td><button class="btn rt-add" style="padding:4px 10px;">Add</button></td>
+      </tr>
+      </tbody>
+    </table></div>
+    <p class="hint" style="margin-top:8px;">Leave "Max base credits" empty for an open-ended top tier. A task's tier is matched by its base credits (rate &times; pages), not by the total including any extra credits.</p>
+  `;
+  function readRow(tr) {
+    const tier_name = tr.querySelector('.rt-name').value.trim();
+    const min_base_credits = parseInt(tr.querySelector('.rt-min').value, 10) || 0;
+    const maxRaw = tr.querySelector('.rt-max').value.trim();
+    const max_base_credits = maxRaw === '' ? null : parseInt(maxRaw, 10);
+    const ok_delta = parseInt(tr.querySelector('.rt-ok').value, 10) || 0;
+    const ok_but_delta = parseInt(tr.querySelector('.rt-okbut').value, 10) || 0;
+    const fail_delta = parseInt(tr.querySelector('.rt-fail').value, 10) || 0;
+    const sort_order = parseInt(tr.querySelector('.rt-order').value, 10) || 0;
+    return { tier_name, min_base_credits, max_base_credits, ok_delta, ok_but_delta, fail_delta, sort_order };
+  }
+  box.querySelectorAll('tr[data-tier]:not([data-tier=""])').forEach(tr => {
+    const originalName = tr.dataset.tier;
+    tr.querySelector('.rt-save').addEventListener('click', async () => {
+      const row = readRow(tr);
+      if (!row.tier_name) { alert('Tier name is required.'); return; }
+      const { data: { user } } = await sb.auth.getUser();
+      if (row.tier_name !== originalName) {
+        await withStatus(sb.from('task_reputation_tiers').delete().eq('tier_name', originalName));
+      }
+      await withStatus(sb.from('task_reputation_tiers').upsert({ ...row, updated_at: new Date().toISOString(), updated_by_email: user.email }), 'Saving...');
+      await renderReputationTiersEditor();
+    });
+    tr.querySelector('.rt-delete').addEventListener('click', async () => {
+      if (!confirm(`Remove tier "${originalName}"?`)) return;
+      await withStatus(sb.from('task_reputation_tiers').delete().eq('tier_name', originalName));
+      await renderReputationTiersEditor();
+    });
+  });
+  const addRow = box.querySelector('tr[data-tier=""]');
+  addRow.querySelector('.rt-add').addEventListener('click', async () => {
+    const row = readRow(addRow);
+    if (!row.tier_name) { alert('Tier name is required.'); return; }
+    const { data: { user } } = await sb.auth.getUser();
+    await withStatus(sb.from('task_reputation_tiers').insert({ ...row, updated_at: new Date().toISOString(), updated_by_email: user.email }), 'Adding...');
+    await renderReputationTiersEditor();
+  });
 }
 
 async function renderOptionsEditor() {
