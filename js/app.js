@@ -1,20 +1,20 @@
-import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260901215404';
-import { renderDashboardView } from './dashboard.js?v=20260901215404';
-import { renderReportsView } from './reports.js?v=20260901215404';
-import { renderHayatView } from './hayatindex.js?v=20260901215404';
-import { renderMatchReviewView } from './matchreview.js?v=20260901215404';
-import { renderBulkImportView } from './bulkimport.js?v=20260901215404';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260901215404';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260901215404';
-import { renderAdminEditView } from './adminedit.js?v=20260901215404';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260901215404';
-import { renderHayatEditorView } from './hayateditor.js?v=20260901215404';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260901215404';
-import { renderUserGuideView } from './userguide.js?v=20260901215404';
-import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260901215404';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260901215404';
-import { renderMyProfileView } from './profile.js?v=20260901215404';
-import { registerServiceWorker } from './pwa-register.js?v=20260901215404';
+import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260901215727';
+import { renderDashboardView } from './dashboard.js?v=20260901215727';
+import { renderReportsView } from './reports.js?v=20260901215727';
+import { renderHayatView } from './hayatindex.js?v=20260901215727';
+import { renderMatchReviewView } from './matchreview.js?v=20260901215727';
+import { renderBulkImportView } from './bulkimport.js?v=20260901215727';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260901215727';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260901215727';
+import { renderAdminEditView } from './adminedit.js?v=20260901215727';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260901215727';
+import { renderHayatEditorView } from './hayateditor.js?v=20260901215727';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260901215727';
+import { renderUserGuideView } from './userguide.js?v=20260901215727';
+import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260901215727';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260901215727';
+import { renderMyProfileView } from './profile.js?v=20260901215727';
+import { registerServiceWorker } from './pwa-register.js?v=20260901215727';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -31,7 +31,7 @@ function getTabs() {
   // Plain Users get a minimal read-only set: browse (Dashboard) and a quick way to flag a
   // problem, right up front as the second tab - Print Reports/Hayat Index are cataloguing
   // tools they have no use for.
-  if (isUser) { tabs.push({ id: 'chat', label: 'Report a Problem' }); }
+  if (isUser) { tabs.push({ id: 'chat', label: 'Report a Problem or Suggestion' }); }
   else { tabs.push({ id: 'reports', label: 'Print Reports' }); }
   if (!isUser && !dataToolsHidden) tabs.push({ id: 'hayat', label: 'Hayat Index' });
   if (canWrite()) {
@@ -47,7 +47,7 @@ function getTabs() {
   if (canWrite()) { tabs.push({ id: 'tasks', label: 'Tasks' }); }
   if (isAdmin()) { tabs.push({ id: 'users', label: 'Users' }); tabs.push({ id: 'options', label: 'Options' }); tabs.push({ id: 'adminedit', label: 'Edit Records' }); tabs.push({ id: 'announcements', label: 'Announcements' }); }
   tabs.push({ id: 'profile', label: 'My Profile' });
-  // Users already got their Chat tab up front as "Report a Problem" (see above).
+  // Users already got their Chat tab up front as "Report a Problem or Suggestion" (see above).
   if (!isUser) { tabs.push({ id: 'chat', label: canReviewApplications() ? 'Messages' : 'Chat' }); }
   // Persistently visible invitation for read-only accounts - collaborators (Operator+)
   // already have other ways to reach out, see the "Join the Team" module for why.
