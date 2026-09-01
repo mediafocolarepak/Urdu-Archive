@@ -6,8 +6,14 @@ import {
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete, isCoordinator, isAdmin,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
-  readPdfPageCount,
-} from './core.js?v=20260901235539';
+  readPdfPageCount, getDisplayNameByEmail,
+} from './core.js?v=20260902000202';
+
+// Categories that gate visibility/assignment to a specific qualification - duplicated from the
+// same constant in tasks.js (project convention: modules only import from core.js, never each
+// other) - mirrors 37_task_qualifications_categories.sql. Keep all three in sync.
+const CATEGORY_REQUIRES_QUALIFICATION = { IT_UR: 'TRANSLATOR', EN_UR: 'TRANSLATOR', REVISION: 'REVISOR' };
+const TASK_STATUS_LABEL = { open: 'Open', claimed: 'Claimed', submitted: 'Submitted', approved: 'Approved', rejected: 'Rejected', published: 'Published' };
 
 // Builds the "riassunto" text block that replaces the old grid of disabled input fields -
 // one line per group of related info, empty groups dropped entirely so the block stays short.
@@ -48,9 +54,14 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     </div>
     ${renderWorkSiblingsHtml(workSiblings, doc.document_id, false)}
     ${doc.storage_path ? `<div class="field"><label>File</label><a href="#" id="doc-download">Download</a></div>` : ''}
+    ${canEdit ? renderDocTasksBox(doc) : ''}
   `;
   document.getElementById('doc-download-gdrive').addEventListener('click', () => downloadFromGDrive(doc.file_name));
-  if (canEdit) document.getElementById('doc-open-editor').addEventListener('click', () => openFullScreenEditor(doc.document_id));
+  if (canEdit) {
+    document.getElementById('doc-open-editor').addEventListener('click', () => openFullScreenEditor(doc.document_id));
+    document.getElementById('doc-create-task').addEventListener('click', () => openCreateTaskPopup(doc, () => refreshDocTasksList(doc)));
+    refreshDocTasksList(doc);
+  }
   if (doc.storage_path) {
     document.getElementById('doc-download').addEventListener('click', async e => {
       e.preventDefault();
@@ -59,6 +70,129 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     });
   }
   wireWorkSiblingsClicks(box);
+}
+
+// ---------- Tasks for this document (Coordinator/Admin only, see canEdit above) ----------
+
+function renderDocTasksBox(doc) {
+  return `
+    <div class="field">
+      <div class="btn-row" style="justify-content:space-between;align-items:center;margin:0 0 4px;">
+        <label style="margin:0;">Tasks for this document</label>
+        <button class="btn secondary" id="doc-create-task" style="padding:4px 10px;">Create Task</button>
+      </div>
+      <div id="doc-tasks-list"><div class="hint">Loading...</div></div>
+    </div>`;
+}
+
+async function refreshDocTasksList(doc) {
+  const box = document.getElementById('doc-tasks-list');
+  if (!box) return;
+  const rows = await withStatus(sb.from('tasks').select('*').eq('document_id', doc.document_id).order('created_at', { ascending: false }));
+  if (!rows.length) { box.innerHTML = '<div class="hint">No tasks yet for this document.</div>'; return; }
+  const names = await Promise.all(rows.map(t => t.claimed_by_email ? getDisplayNameByEmail(t.claimed_by_email) : Promise.resolve(null)));
+  box.innerHTML = `
+    <div class="grid-wrap"><table class="grid">
+      <thead><tr><th>Status</th><th>Claimed by</th><th>Due date</th><th>Credits</th></tr></thead>
+      <tbody>${rows.map((t, i) => `<tr>
+        <td>${esc(TASK_STATUS_LABEL[t.status] || t.status)}</td>
+        <td>${esc(names[i]) || '<span class="hint">— open —</span>'}</td>
+        <td>${esc(t.due_date) || '—'}</td>
+        <td>${t.credits != null ? esc(t.credits) : '—'}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+async function openCreateTaskPopup(doc, onCreated) {
+  document.getElementById('doc-create-task-popup')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'doc-create-task-popup';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:2100;background:rgba(20,16,10,.55);display:flex;align-items:center;justify-content:center;overflow:auto;padding:24px 16px;';
+  overlay.innerHTML = '<div class="panel" style="max-width:560px;width:100%;margin:0;"></div>';
+  document.body.appendChild(overlay);
+  const panel = overlay.querySelector('.panel');
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  const rateRows = await withStatus(sb.from('task_category_rates').select('*'));
+  const categoryRates = Object.fromEntries(rateRows.map(r => [r.category, r.credits_per_page]));
+  const opRows = await withStatus(sb.from('user_roles').select('user_id,email').in('role', ['operator', 'coordinator']).order('email'));
+  const opNames = await Promise.all(opRows.map(r => getDisplayNameByEmail(r.email)));
+  const qualRows = await withStatus(sb.from('user_qualifications').select('*'));
+  const qualByUid = {};
+  for (const q of qualRows) (qualByUid[q.user_id] ||= new Set()).add(q.qualification_code);
+  const operators = opRows.map((r, i) => ({ ...r, displayName: opNames[i], qualifications: qualByUid[r.user_id] || new Set() }));
+
+  panel.innerHTML = `
+    <h2 style="margin-top:0;">Create Task <span class="hint">— Document #${esc(doc.document_id)}</span></h2>
+    <div class="field-grid">
+      <div class="field" style="grid-column:1/-1;"><label>Title</label><input id="ct-title" value="${esc(doc.title || doc.original_title || '')}"></div>
+      <div class="field" style="grid-column:1/-1;"><label>Description</label><textarea id="ct-desc" rows="2"></textarea></div>
+      <div class="field"><label>Category</label><select id="ct-category">${optionsHtml(State.optionListsByName.task_category || [], '', true)}</select></div>
+      <div class="field"><label>Document pages</label><input value="${esc(doc.pages ?? '—')}" disabled></div>
+      <div class="field"><label>Base credits</label><input id="ct-base-credits" value="0" disabled></div>
+      <div class="field"><label>Extra credits <span class="hint">(optional)</span></label><input id="ct-extra-credits" type="number" value="0"></div>
+      <div class="field" id="ct-extra-note-field" style="display:none;grid-column:1/-1;"><label>Why the extra credits?</label><textarea id="ct-extra-note" rows="2"></textarea></div>
+      <div class="field" style="grid-column:1/-1;"><label>Total credits</label><div id="ct-total-credits" style="font-size:14px;font-weight:600;">0</div></div>
+      <div class="field"><label>Assign directly to <span class="hint">(optional)</span></label><select id="ct-assignee"></select></div>
+      <div class="field" id="ct-due-field" style="display:none;"><label>Due date</label><input id="ct-due" type="date"></div>
+    </div>
+    <div class="btn-row"><button class="btn" id="ct-submit">Create task</button><button class="btn secondary" id="ct-cancel">Cancel</button></div>`;
+
+  function recompute() {
+    const category = document.getElementById('ct-category').value;
+    const rate = categoryRates[category] || 0;
+    const base = Math.round(rate * (doc.pages || 0));
+    document.getElementById('ct-base-credits').value = base;
+    const extra = parseInt(document.getElementById('ct-extra-credits').value, 10) || 0;
+    document.getElementById('ct-total-credits').textContent = base + extra;
+    document.getElementById('ct-extra-note-field').style.display = extra !== 0 ? 'block' : 'none';
+  }
+  function refreshAssignees() {
+    const category = document.getElementById('ct-category').value;
+    const requiredQual = CATEGORY_REQUIRES_QUALIFICATION[category];
+    const eligible = requiredQual ? operators.filter(o => o.qualifications.has(requiredQual)) : operators;
+    const sel = document.getElementById('ct-assignee');
+    sel.innerHTML = '<option value="">— leave open —</option>' + eligible.map(o => `<option value="${o.user_id}" data-email="${esc(o.email)}">${esc(o.displayName)}</option>`).join('');
+    document.getElementById('ct-due-field').style.display = 'none';
+  }
+  document.getElementById('ct-category').addEventListener('change', () => { recompute(); refreshAssignees(); });
+  document.getElementById('ct-extra-credits').addEventListener('input', recompute);
+  document.getElementById('ct-assignee').addEventListener('change', e => {
+    document.getElementById('ct-due-field').style.display = e.target.value ? 'block' : 'none';
+  });
+  recompute();
+  refreshAssignees();
+
+  document.getElementById('ct-cancel').addEventListener('click', close);
+  document.getElementById('ct-submit').addEventListener('click', async () => {
+    const title = document.getElementById('ct-title').value.trim();
+    if (!title) { alert('Please enter a title.'); return; }
+    const baseCredits = parseInt(document.getElementById('ct-base-credits').value, 10) || 0;
+    const extraCredits = parseInt(document.getElementById('ct-extra-credits').value, 10) || 0;
+    const extraNote = document.getElementById('ct-extra-note').value.trim();
+    if (extraCredits !== 0 && !extraNote) { alert('Please explain why you are adding extra credits.'); return; }
+    const assigneeSel = document.getElementById('ct-assignee');
+    const assigneeId = assigneeSel.value || null;
+    const assigneeEmail = assigneeId ? assigneeSel.selectedOptions[0].dataset.email : null;
+    const dueDate = document.getElementById('ct-due').value || null;
+    if (assigneeId && !dueDate) { alert('Please set a due date for the person you are assigning this to.'); return; }
+    const { data: { user } } = await sb.auth.getUser();
+    await withStatus(sb.from('tasks').insert({
+      title, description: document.getElementById('ct-desc').value.trim() || null,
+      category: document.getElementById('ct-category').value || null,
+      document_id: doc.document_id, document_pages: doc.pages || null,
+      base_credits: baseCredits, extra_credits: extraCredits, extra_credits_note: extraNote || null,
+      credits: baseCredits + extraCredits,
+      created_by_email: user.email,
+      status: assigneeId ? 'claimed' : 'open',
+      claimed_by: assigneeId, claimed_by_email: assigneeEmail,
+      claimed_at: assigneeId ? new Date().toISOString() : null,
+      due_date: dueDate,
+    }), 'Creating task...');
+    close();
+    await onCreated();
+  });
 }
 
 function renderCollectionsSummary(docCollections) {

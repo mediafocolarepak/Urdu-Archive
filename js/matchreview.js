@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, withStatus, mergeWorks, likeSafe, DASH_ROW_LIMIT, downloadFromGDrive, BUCKET } from './core.js?v=20260901235539';
-import { renderDocDetail } from './docdetail.js?v=20260901235539';
+import { sb, State, esc, labelOf, optionsHtml, withStatus, mergeWorks, likeSafe, DASH_ROW_LIMIT, downloadFromGDrive, BUCKET } from './core.js?v=20260902000202';
+import { renderDocDetail } from './docdetail.js?v=20260902000202';
 
 export function rankByDateProximity(refDate, refs, dateField) {
   // Ranks by closeness to refDate, but never drops a candidate just because it (or
