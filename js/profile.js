@@ -5,7 +5,7 @@
 // reviewed. Deliberately does not import from collaboration.js (project convention: modules
 // only import from core.js), so the skill-chip rendering is duplicated here in small form.
 
-import { sb, State, esc, withStatus, labelOf } from './core.js?v=20260901211255';
+import { sb, State, esc, withStatus, labelOf } from './core.js?v=20260901212032';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -46,9 +46,36 @@ export async function renderMyProfileView(main) {
         <div class="field"><label>Qualifications</label><div style="font-size:13.5px;padding:4px 0;">${myQualLabels.map(esc).join(', ') || '—'}</div></div>
       </div>
       <div class="subpanel" id="profile-editable"></div>
+      <div class="subpanel" style="margin-top:16px;">
+        <h3>Change my password</h3>
+        <div class="field-grid wide">
+          <div class="field"><label>New password</label><input id="pw-new" type="password" autocomplete="new-password"></div>
+          <div class="field"><label>Confirm new password</label><input id="pw-confirm" type="password" autocomplete="new-password"></div>
+        </div>
+        <div class="btn-row"><button class="btn" id="pw-save-btn">Update Password</button></div>
+        <div id="pw-status" class="hint"></div>
+      </div>
     </div>`;
 
   renderEditable(document.getElementById('profile-editable'), profile, skillList, storedSkills, otherSkills, user.id, main);
+  wireChangePassword();
+}
+
+function wireChangePassword() {
+  document.getElementById('pw-save-btn').addEventListener('click', async () => {
+    const status = document.getElementById('pw-status');
+    const pw = document.getElementById('pw-new').value;
+    const pw2 = document.getElementById('pw-confirm').value;
+    status.style.color = 'var(--danger)'; status.textContent = '';
+    if (pw.length < 6) { status.textContent = 'Password must be at least 6 characters.'; return; }
+    if (pw !== pw2) { status.textContent = 'Passwords do not match.'; return; }
+    const { error } = await sb.auth.updateUser({ password: pw });
+    if (error) { status.textContent = error.message; return; }
+    status.style.color = 'var(--accent)';
+    status.textContent = 'Password updated.';
+    document.getElementById('pw-new').value = '';
+    document.getElementById('pw-confirm').value = '';
+  });
 }
 
 function renderEditable(box, profile, skillList, storedSkills, otherSkills, userId, main) {

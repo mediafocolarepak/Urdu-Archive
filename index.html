@@ -8,11 +8,11 @@
 <meta name="theme-color" content="#7a5230">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=20260901211255">
+<link rel="stylesheet" href="css/style.css?v=20260901212032">
 <style>
-#login-screen { display: flex; align-items: center; justify-content: center; height: 100vh; }
-#login-card { width: 100%; max-width: 360px; }
-#login-error { color: var(--danger); font-size: 12.5px; margin-top: 8px; min-height: 16px; }
+#login-screen, #recovery-screen { display: flex; align-items: center; justify-content: center; height: 100vh; }
+#login-card, #recovery-card { width: 100%; max-width: 360px; }
+#login-error, #recovery-error { color: var(--danger); font-size: 12.5px; margin-top: 8px; min-height: 16px; }
 .auth-switch { font-size: 12.5px; text-align: center; margin-top: 10px; color: var(--ink-soft); }
 .auth-switch a { color: var(--accent); cursor: pointer; }
 </style>
@@ -37,6 +37,20 @@
     </div>
     <div id="login-error"></div>
     <div class="auth-switch"><span id="auth-switch-hint">New here?</span> <a id="auth-switch-link">Sign up</a></div>
+    <div class="auth-switch" id="forgot-password-row"><a id="forgot-password-link">Forgot your password?</a></div>
+  </div>
+</div>
+
+<div id="recovery-screen" style="display:none;">
+  <div class="panel" id="recovery-card">
+    <h2 style="text-align:center;">Set a new password</h2>
+    <p class="hint" style="text-align:center; margin-bottom:16px;">You followed a password reset link - choose a new password below.</p>
+    <div class="field"><label>New password</label><input id="recovery-password" type="password" autocomplete="new-password"></div>
+    <div class="field"><label>Confirm new password</label><input id="recovery-password-confirm" type="password" autocomplete="new-password"></div>
+    <div class="btn-row" style="justify-content:center;">
+      <button class="btn" id="recovery-save-btn" style="flex:1;">Set new password</button>
+    </div>
+    <div id="recovery-error"></div>
   </div>
 </div>
 
@@ -56,6 +70,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script type="module" src="js/app.js?v=20260901211255"></script>
+<script type="module" src="js/app.js?v=20260901212032"></script>
 </body>
 </html>

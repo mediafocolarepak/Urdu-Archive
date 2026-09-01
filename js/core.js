@@ -504,6 +504,7 @@ export async function boot(renderDashboardTab) {
   const { data: { session } } = await sb.auth.getSession();
   if (session) { await showApp(session, renderDashboardTab); } else { showLogin(); }
   sb.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'PASSWORD_RECOVERY') { showRecoveryScreen(); return; }
     if (session && !State.appShown) await showApp(session, renderDashboardTab);
     else if (session) document.getElementById('user-email').textContent = session.user.email;
     else { State.appShown = false; showLogin(); }
@@ -645,6 +646,7 @@ export function wireAuthButtons() {
     switchHint.textContent = on ? 'Already have an account?' : 'New here?';
     switchLink.textContent = on ? 'Sign in' : 'Sign up';
     document.getElementById('login-password-label').textContent = on ? 'Create a new password' : 'Password';
+    document.getElementById('forgot-password-row').style.display = on ? 'none' : 'block';
     document.getElementById('login-error').textContent = '';
   }
   switchLink.addEventListener('click', () => setSignupMode(!signupMode));
@@ -676,4 +678,38 @@ export function wireAuthButtons() {
     sessionStorage.removeItem('splashShown');
     sb.auth.signOut();
   });
+
+  document.getElementById('forgot-password-link').addEventListener('click', async () => {
+    const errBox = document.getElementById('login-error');
+    const email = document.getElementById('login-email').value.trim();
+    if (!email) { errBox.style.color = 'var(--danger)'; errBox.textContent = 'Type your email above first, then click "Forgot your password?" again.'; return; }
+    errBox.textContent = '';
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: 'https://mediafocolarepak.github.io/Urdu-Archive/' });
+    if (error) { errBox.style.color = 'var(--danger)'; errBox.textContent = error.message; return; }
+    errBox.style.color = 'var(--accent)';
+    errBox.textContent = 'Check your email for a link to reset your password.';
+  });
+}
+
+// Fired via the onAuthStateChange 'PASSWORD_RECOVERY' event (see boot() below) once someone
+// follows the reset-password link from their email - shows a dedicated "set new password"
+// screen instead of the normal login/app, since the session at this point is a short-lived
+// recovery session, not a real sign-in.
+function showRecoveryScreen() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('recovery-screen').style.display = 'flex';
+  const errBox = document.getElementById('recovery-error');
+  const saveBtn = document.getElementById('recovery-save-btn');
+  saveBtn.onclick = async () => {
+    const pw = document.getElementById('recovery-password').value;
+    const pw2 = document.getElementById('recovery-password-confirm').value;
+    errBox.style.color = 'var(--danger)'; errBox.textContent = '';
+    if (pw.length < 6) { errBox.textContent = 'Password must be at least 6 characters.'; return; }
+    if (pw !== pw2) { errBox.textContent = 'Passwords do not match.'; return; }
+    const { error } = await sb.auth.updateUser({ password: pw });
+    if (error) { errBox.textContent = error.message; return; }
+    document.getElementById('recovery-screen').style.display = 'none';
+    location.reload();
+  };
 }
