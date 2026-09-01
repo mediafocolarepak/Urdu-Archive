@@ -1,20 +1,20 @@
-import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260901215727';
-import { renderDashboardView } from './dashboard.js?v=20260901215727';
-import { renderReportsView } from './reports.js?v=20260901215727';
-import { renderHayatView } from './hayatindex.js?v=20260901215727';
-import { renderMatchReviewView } from './matchreview.js?v=20260901215727';
-import { renderBulkImportView } from './bulkimport.js?v=20260901215727';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260901215727';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260901215727';
-import { renderAdminEditView } from './adminedit.js?v=20260901215727';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260901215727';
-import { renderHayatEditorView } from './hayateditor.js?v=20260901215727';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260901215727';
-import { renderUserGuideView } from './userguide.js?v=20260901215727';
-import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260901215727';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260901215727';
-import { renderMyProfileView } from './profile.js?v=20260901215727';
-import { registerServiceWorker } from './pwa-register.js?v=20260901215727';
+import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260901220646';
+import { renderDashboardView } from './dashboard.js?v=20260901220646';
+import { renderReportsView } from './reports.js?v=20260901220646';
+import { renderHayatView } from './hayatindex.js?v=20260901220646';
+import { renderMatchReviewView } from './matchreview.js?v=20260901220646';
+import { renderBulkImportView } from './bulkimport.js?v=20260901220646';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260901220646';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260901220646';
+import { renderAdminEditView } from './adminedit.js?v=20260901220646';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260901220646';
+import { renderHayatEditorView } from './hayateditor.js?v=20260901220646';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260901220646';
+import { renderUserGuideView } from './userguide.js?v=20260901220646';
+import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260901220646';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260901220646';
+import { renderMyProfileView } from './profile.js?v=20260901220646';
+import { registerServiceWorker } from './pwa-register.js?v=20260901220646';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -23,16 +23,18 @@ function getTabs() {
   // Index/Match Review/Work Consolidation/Hayat Editor/Bulk Import stay hidden for them unless
   // they hold the "Data Assistant" qualification (Options -> Operator qualifications).
   // Coordinator/Admin always see them; InPage Converter is unaffected (not part of this list).
-  const dataToolsHidden = State.currentRole === 'operator' && !State.myQualifications.has('DATA_ASSISTANT');
+  const isOperator = State.currentRole === 'operator';
+  const dataToolsHidden = isOperator && !State.myQualifications.has('DATA_ASSISTANT');
   const isUser = State.currentRole === 'user';
   const tabs = [
     { id: 'dashboard', label: 'Dashboard' },
   ];
   // Plain Users get a minimal read-only set: browse (Dashboard) and a quick way to flag a
   // problem, right up front as the second tab - Print Reports/Hayat Index are cataloguing
-  // tools they have no use for.
+  // tools they have no use for. Operators don't need Print Reports either (see below, they
+  // work the Tasks queue instead - reordered to the front further down).
   if (isUser) { tabs.push({ id: 'chat', label: 'Report a Problem or Suggestion' }); }
-  else { tabs.push({ id: 'reports', label: 'Print Reports' }); }
+  else if (!isOperator) { tabs.push({ id: 'reports', label: 'Print Reports' }); }
   if (!isUser && !dataToolsHidden) tabs.push({ id: 'hayat', label: 'Hayat Index' });
   if (canWrite()) {
     if (!dataToolsHidden) {
@@ -47,12 +49,21 @@ function getTabs() {
   if (canWrite()) { tabs.push({ id: 'tasks', label: 'Tasks' }); }
   if (isAdmin()) { tabs.push({ id: 'users', label: 'Users' }); tabs.push({ id: 'options', label: 'Options' }); tabs.push({ id: 'adminedit', label: 'Edit Records' }); tabs.push({ id: 'announcements', label: 'Announcements' }); }
   tabs.push({ id: 'profile', label: 'My Profile' });
-  // Users already got their Chat tab up front as "Report a Problem or Suggestion" (see above).
-  if (!isUser) { tabs.push({ id: 'chat', label: canReviewApplications() ? 'Messages' : 'Chat' }); }
+  // Users already got their Chat tab up front as "Report a Problem or Suggestion" (see above);
+  // Operators get the same rename, just not moved to the front until the reorder below.
+  if (!isUser) { tabs.push({ id: 'chat', label: canReviewApplications() ? 'Messages' : (isOperator ? 'Report a Problem or Suggestion' : 'Chat') }); }
   // Persistently visible invitation for read-only accounts - collaborators (Operator+)
   // already have other ways to reach out, see the "Join the Team" module for why.
   if (isUser) { tabs.push({ id: 'jointeam', label: 'Join the Team' }); }
   tabs.push({ id: 'help', label: 'Help' });
+
+  // Operators work the Tasks queue first and foremost - reorder so Dashboard, Tasks, then
+  // the renamed Chat lead the tab bar, with everything else following in its usual order.
+  if (isOperator) {
+    const front = ['dashboard', 'tasks', 'chat'].map(id => tabs.find(t => t.id === id)).filter(Boolean);
+    const rest = tabs.filter(t => !['dashboard', 'tasks', 'chat'].includes(t.id));
+    return [...front, ...rest];
+  }
   return tabs;
 }
 
