@@ -2,9 +2,9 @@
 // Run before every publish (see publish.ps1). Only tests functions with no Supabase calls;
 // mocking supabase-js well enough to unit-test the CRUD glue isn't worth it for this app.
 
-import { slugify, computeFileName, yearOf, titleOverlapScore, normalizeForCompare } from './core.js?v=20260901203845';
-import { extractDateFromFilename } from './bulkimport.js?v=20260901203845';
-import { rankByDateProximity } from './matchreview.js?v=20260901203845';
+import { slugify, computeFileName, yearOf, titleOverlapScore, normalizeForCompare } from './core.js?v=20260901205125';
+import { extractDateFromFilename } from './bulkimport.js?v=20260901205125';
+import { rankByDateProximity } from './matchreview.js?v=20260901205125';
 
 let passed = 0, failed = 0;
 const results = [];

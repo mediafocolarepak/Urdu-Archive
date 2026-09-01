@@ -5,7 +5,7 @@
 // the UI) - only Admin can set 'approved', paired with the actual role promotion in
 // user_roles (already an admin-only action, see 05_roles_and_permissions.sql).
 
-import { sb, State, esc, canReviewApplications, isAdmin, withStatus, nameMapForEmails } from './core.js?v=20260901203845';
+import { sb, State, esc, canReviewApplications, isAdmin, withStatus, nameMapForEmails } from './core.js?v=20260901205125';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -74,36 +74,54 @@ export async function renderJoinTeamView(main) {
   }
 
   body.innerHTML += `
-    <div class="field-grid" style="max-width:640px;">
-      <div class="field"><label>Academic level</label>
-        <select id="jt-academic">${ACADEMIC_LEVELS.map(([c, l]) => `<option value="${c}">${l}</option>`).join('')}</select>
-      </div>
-      <div class="field"><label>Relevant experience</label>
-        <textarea id="jt-experience" rows="3" placeholder="Translation, editing, archival work, languages you speak..."></textarea>
-      </div>
-      <div class="field"><label>Skills</label>
-        <div id="jt-skills" style="display:flex;flex-direction:column;gap:4px;">${(State.optionListsByName.collaboration_skill || []).map(([code, label]) => `
-          <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-weight:normal;font-size:13px;">
-            <input type="checkbox" class="jt-skill-check" value="${esc(code)}"> ${esc(label)}
-          </label>`).join('') || '<span class="hint">No skills defined yet - ask an Admin to add some from Options.</span>'}
+    <div class="subpanel">
+      <h3>Tell us about you</h3>
+      <div class="field-grid wide">
+        <div class="field"><label>Academic level</label>
+          <select id="jt-academic">${ACADEMIC_LEVELS.map(([c, l]) => `<option value="${c}">${l}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Availability <span class="hint">(optional)</span></label>
+          <input id="jt-availability" type="text" placeholder="e.g. a few hours a week, weekends only..."></div>
+        <div class="field" style="grid-column:1/-1;"><label>Relevant experience</label>
+          <textarea id="jt-experience" rows="2" placeholder="Translation, editing, archival work, languages you speak..."></textarea>
+        </div>
+        <div class="field" style="grid-column:1/-1;"><label>Skills</label>
+          <div class="skill-chips">${(State.optionListsByName.collaboration_skill || []).map(([code, label]) => `
+            <label class="skill-chip"><input type="checkbox" class="jt-skill-check" value="${esc(label)}"> ${esc(label)}</label>`).join('') || '<span class="hint">No skills defined yet - ask an Admin to add some from Options.</span>'}
+            <label class="skill-chip skill-chip-other">
+              <input type="checkbox" id="jt-skill-other-check">Other
+              <input type="text" id="jt-skill-other-text" placeholder="please specify" disabled>
+            </label>
+          </div>
+        </div>
+        <div class="field" style="grid-column:1/-1;"><label>What motivates you to help?</label>
+          <textarea id="jt-motivation" rows="3"></textarea>
         </div>
       </div>
-      <div class="field"><label>What motivates you to help?</label>
-        <textarea id="jt-motivation" rows="3"></textarea>
-      </div>
-      <div class="field"><label>Availability <span class="hint">(optional)</span></label>
-        <input id="jt-availability" type="text" placeholder="e.g. a few hours a week, weekends only..."></div>
     </div>
     <div class="btn-row"><button class="btn" id="jt-submit-btn">Submit Request</button></div>`;
+
+  body.querySelectorAll('.jt-skill-check').forEach(cb => cb.addEventListener('change', () => {
+    cb.closest('.skill-chip').classList.toggle('checked', cb.checked);
+  }));
+  const otherCheck = document.getElementById('jt-skill-other-check');
+  const otherText = document.getElementById('jt-skill-other-text');
+  otherCheck.addEventListener('change', () => {
+    otherCheck.closest('.skill-chip').classList.toggle('checked', otherCheck.checked);
+    otherText.disabled = !otherCheck.checked;
+    if (!otherCheck.checked) otherText.value = '';
+  });
 
   document.getElementById('jt-submit-btn').addEventListener('click', async () => {
     const motivation = document.getElementById('jt-motivation').value.trim();
     if (!motivation) { alert('Please tell us what motivates you to help - it\'s the field reviewers read first.'); return; }
+    const skillLabels = Array.from(document.querySelectorAll('.jt-skill-check:checked')).map(cb => cb.value);
+    if (otherCheck.checked && otherText.value.trim()) skillLabels.push(otherText.value.trim());
     await withStatus(sb.from('collaboration_applications').insert({
       user_id: user.id, user_email: user.email,
       academic_level: document.getElementById('jt-academic').value,
       experience: document.getElementById('jt-experience').value.trim() || null,
-      skills: Array.from(document.querySelectorAll('.jt-skill-check:checked')).map(cb => cb.value).join(', ') || null,
+      skills: skillLabels.join(', ') || null,
       motivation,
       availability: document.getElementById('jt-availability').value.trim() || null,
     }), 'Sending your request...');
