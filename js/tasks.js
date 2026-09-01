@@ -5,7 +5,7 @@
 // da qualcun altro (vedi 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel
 // vincolo, non lo sostituiscono.
 
-import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName } from './core.js?v=20260901221352';
+import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName } from './core.js?v=20260901225915';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -217,13 +217,36 @@ function renderNewTaskForm(operators) {
       </div>
       <div class="field"><label>Document ID <span class="hint">(optional)</span></label><input id="task-new-docid" type="number" min="1" value="${esc(prefill?.document_id || '')}"></div>
       <div class="field"><label>Document pages <span class="hint">(looked up from the document)</span></label><input id="task-new-pages" type="number" min="0" value="${esc(prefill?.document_pages ?? '')}"></div>
-      <div class="field"><label>Credits <span class="hint">(manual for now)</span></label><input id="task-new-credits" type="number" min="0"></div>
+      <div class="field"><label>Base credits <span class="hint">(category rate &times; pages)</span></label><input id="task-new-base-credits" type="number" min="0" readonly style="background:var(--paper-card, #f3f4ea);"></div>
+      <div class="field"><label>Extra credits <span class="hint">(difficulty/urgency bonus, optional)</span></label><input id="task-new-extra-credits" type="number" value="0"></div>
+      <div class="field" id="task-new-extra-note-field" style="display:none;grid-column:1/-1;"><label>Why the extra credits? <span class="hint">(required if not zero)</span></label><textarea id="task-new-extra-note" rows="2"></textarea></div>
+      <div class="field" style="grid-column:1/-1;"><label>Total credits</label><div id="task-new-total-credits" style="font-size:14px;font-weight:600;padding:4px 0;">0</div></div>
       <div class="field"><label>Assign directly to <span class="hint">(optional — otherwise left open to claim; list narrows to who's qualified once a category is picked)</span></label>
         <select id="task-new-assignee"></select>
       </div>
       <div class="field" id="task-new-due-field" style="display:none;"><label>Due date</label><input id="task-new-due" type="date"></div>
     </div>
     <div class="btn-row"><button class="btn" id="task-new-submit">Create task</button></div>`;
+
+  let categoryRates = {};
+  sb.from('task_category_rates').select('*').then(({ data }) => {
+    categoryRates = Object.fromEntries((data || []).map(r => [r.category, r.credits_per_page]));
+    recomputeCredits();
+  });
+
+  function recomputeCredits() {
+    const category = document.getElementById('task-new-category').value;
+    const pages = parseFloat(document.getElementById('task-new-pages').value) || 0;
+    const rate = categoryRates[category] || 0;
+    const base = Math.round(rate * pages);
+    document.getElementById('task-new-base-credits').value = base;
+    const extra = parseInt(document.getElementById('task-new-extra-credits').value, 10) || 0;
+    document.getElementById('task-new-total-credits').textContent = base + extra;
+    document.getElementById('task-new-extra-note-field').style.display = extra !== 0 ? 'block' : 'none';
+  }
+  document.getElementById('task-new-pages').addEventListener('input', recomputeCredits);
+  document.getElementById('task-new-extra-credits').addEventListener('input', recomputeCredits);
+  document.getElementById('task-new-category').addEventListener('change', recomputeCredits);
   function refreshAssigneeOptions() {
     const category = document.getElementById('task-new-category').value;
     const requiredQual = CATEGORY_REQUIRES_QUALIFICATION[category];
@@ -248,13 +271,17 @@ function renderNewTaskForm(operators) {
     if (!docId || pagesField.value !== '') return;
     const { data } = await sb.from('documents').select('pages').eq('document_id', parseInt(docId, 10)).maybeSingle();
     if (data?.pages != null) pagesField.value = data.pages;
+    recomputeCredits();
   });
   document.getElementById('task-new-submit').addEventListener('click', async () => {
     const title = document.getElementById('task-new-title').value.trim();
     if (!title) { alert('Please enter a title.'); return; }
     const docId = document.getElementById('task-new-docid').value.trim();
     const pages = document.getElementById('task-new-pages').value.trim();
-    const credits = document.getElementById('task-new-credits').value.trim();
+    const baseCredits = parseInt(document.getElementById('task-new-base-credits').value, 10) || 0;
+    const extraCredits = parseInt(document.getElementById('task-new-extra-credits').value, 10) || 0;
+    const extraNote = document.getElementById('task-new-extra-note').value.trim();
+    if (extraCredits !== 0 && !extraNote) { alert('Please explain why you are adding extra credits.'); return; }
     const assigneeSel = document.getElementById('task-new-assignee');
     const assigneeId = assigneeSel.value || null;
     const assigneeEmail = assigneeId ? assigneeSel.selectedOptions[0].dataset.email : null;
@@ -266,7 +293,8 @@ function renderNewTaskForm(operators) {
       category: document.getElementById('task-new-category').value || null,
       document_id: docId ? parseInt(docId, 10) : null,
       document_pages: pages ? parseInt(pages, 10) : null,
-      credits: credits ? parseInt(credits, 10) : null,
+      base_credits: baseCredits, extra_credits: extraCredits, extra_credits_note: extraNote || null,
+      credits: baseCredits + extraCredits,
       created_by_email: user.email,
       status: assigneeId ? 'claimed' : 'open',
       claimed_by: assigneeId, claimed_by_email: assigneeEmail,

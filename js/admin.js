@@ -1,4 +1,4 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260901221352';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260901225915';
 
 // ---------- Users ----------
 
@@ -112,14 +112,23 @@ export async function renderOptionsView(main) {
 
 async function renderOptionsEditor() {
   const box = document.getElementById('opt-editor');
+  const isTaskCategory = State.optionsSelectedList === 'task_category';
   const rows = await withStatus(sb.from('option_lists').select('*').eq('list_name', State.optionsSelectedList).order('sort_order'));
+  const rateByCode = {};
+  if (isTaskCategory) {
+    const rateRows = await withStatus(sb.from('task_category_rates').select('*'));
+    for (const r of rateRows) rateByCode[r.category] = r.credits_per_page;
+  }
+  const rateHeadCell = isTaskCategory ? '<th>Credits/page</th>' : '';
+  const rateCell = code => isTaskCategory ? `<td><input class="opt-rate" type="number" min="0" step="0.5" value="${esc(rateByCode[code] ?? 0)}" style="width:70px;"></td>` : '';
   box.innerHTML = `
     <div class="grid-wrap"><table class="grid">
-      <thead><tr><th>Code</th><th>Label</th><th>Sort order</th><th></th></tr></thead>
+      <thead><tr><th>Code</th><th>Label</th><th>Sort order</th>${rateHeadCell}<th></th></tr></thead>
       <tbody>${rows.map(r => `<tr data-code="${esc(r.code)}">
         <td><input class="opt-code" value="${esc(r.code)}" style="width:90px;"></td>
         <td><input class="opt-label" value="${esc(r.label)}"></td>
         <td><input class="opt-order" type="number" value="${esc(r.sort_order)}" style="width:70px;"></td>
+        ${rateCell(r.code)}
         <td><button class="btn secondary opt-save" style="padding:4px 10px;">Save</button>
             <button class="btn danger opt-delete" style="padding:4px 10px;">Delete</button></td>
       </tr>`).join('')}
@@ -127,11 +136,13 @@ async function renderOptionsEditor() {
         <td><input class="opt-code" placeholder="NEWCODE" style="width:90px;"></td>
         <td><input class="opt-label" placeholder="New option label"></td>
         <td><input class="opt-order" type="number" value="${rows.length + 1}" style="width:70px;"></td>
+        ${isTaskCategory ? '<td><input class="opt-rate" type="number" min="0" step="0.5" value="0" style="width:70px;"></td>' : ''}
         <td><button class="btn opt-add" style="padding:4px 10px;">Add</button></td>
       </tr>
       </tbody>
     </table></div>
     <p class="hint" style="margin-top:8px;">Changing or removing a code here does not update documents that already use the old code — edit those separately if needed.</p>
+    ${isTaskCategory ? '<p class="hint">Credits/page is the base rate used to suggest a task\'s credits (rate &times; document pages) when creating a task in that category - see the Tasks tab.</p>' : ''}
   `;
   box.querySelectorAll('tr[data-code]:not([data-code=""])').forEach(tr => {
     const originalCode = tr.dataset.code;
@@ -142,14 +153,21 @@ async function renderOptionsEditor() {
       if (!code || !label) { alert('Code and label are required.'); return; }
       if (code !== originalCode) {
         await withStatus(sb.from('option_lists').delete().eq('list_name', State.optionsSelectedList).eq('code', originalCode));
+        if (isTaskCategory) await withStatus(sb.from('task_category_rates').delete().eq('category', originalCode));
       }
       await withStatus(sb.from('option_lists').upsert({ list_name: State.optionsSelectedList, code, label, sort_order: sortOrder }), 'Saving...');
+      if (isTaskCategory) {
+        const { data: { user } } = await sb.auth.getUser();
+        const rate = parseFloat(tr.querySelector('.opt-rate').value) || 0;
+        await withStatus(sb.from('task_category_rates').upsert({ category: code, credits_per_page: rate, updated_at: new Date().toISOString(), updated_by_email: user.email }), 'Saving...');
+      }
       await loadOptions();
       await renderOptionsEditor();
     });
     tr.querySelector('.opt-delete').addEventListener('click', async () => {
       if (!confirm(`Remove option "${originalCode}" from this list?`)) return;
       await withStatus(sb.from('option_lists').delete().eq('list_name', State.optionsSelectedList).eq('code', originalCode));
+      if (isTaskCategory) await withStatus(sb.from('task_category_rates').delete().eq('category', originalCode));
       await loadOptions();
       await renderOptionsEditor();
     });
@@ -161,6 +179,11 @@ async function renderOptionsEditor() {
     const sortOrder = parseInt(addRow.querySelector('.opt-order').value, 10) || 0;
     if (!code || !label) { alert('Code and label are required.'); return; }
     await withStatus(sb.from('option_lists').insert({ list_name: State.optionsSelectedList, code, label, sort_order: sortOrder }), 'Adding...');
+    if (isTaskCategory) {
+      const { data: { user } } = await sb.auth.getUser();
+      const rate = parseFloat(addRow.querySelector('.opt-rate').value) || 0;
+      await withStatus(sb.from('task_category_rates').upsert({ category: code, credits_per_page: rate, updated_at: new Date().toISOString(), updated_by_email: user.email }), 'Saving...');
+    }
     await loadOptions();
     await renderOptionsEditor();
   });
