@@ -2,7 +2,7 @@
 // Cache name is keyed to the same ?v= deploy version already used across the app's own
 // script/style tags (see index.html), so a new deploy gets a fresh cache automatically -
 // old caches are dropped in 'activate' below.
-const CACHE_VERSION = '20260828223000';
+const CACHE_VERSION = '20260901221500';
 const CACHE_NAME = 'urdu-archive-' + CACHE_VERSION;
 
 // Only same-origin static assets are ever cached. Supabase (API/Auth/Storage) and Google
@@ -38,9 +38,13 @@ self.addEventListener('fetch', event => {
   const isVersionedScript = url.pathname.startsWith('/js/') || url.pathname === '/index.html' || url.pathname === '/';
   if (isVersionedScript) {
     // network-first: these carry a ?v= cache-buster already, but network-first also means
-    // a user is never stuck on stale app code just because the SW cache wasn't evicted yet
+    // a user is never stuck on stale app code just because the SW cache wasn't evicted yet.
+    // { cache: 'no-store' } is required here, not optional - without it, fetch() still obeys
+    // whatever Cache-Control header GitHub Pages sent (commonly ~10 min), so a "network" fetch
+    // can silently return a stale response from the browser's own HTTP cache, defeating the
+    // whole point of network-first (this was the actual cause of "changes don't show up").
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: 'no-store' })
         .then(res => { caches.open(CACHE_NAME).then(cache => cache.put(event.request, res.clone())); return res; })
         .catch(() => caches.match(event.request))
     );
