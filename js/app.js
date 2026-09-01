@@ -1,33 +1,40 @@
-import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260901174053';
-import { renderDashboardView } from './dashboard.js?v=20260901174053';
-import { renderReportsView } from './reports.js?v=20260901174053';
-import { renderHayatView } from './hayatindex.js?v=20260901174053';
-import { renderMatchReviewView } from './matchreview.js?v=20260901174053';
-import { renderBulkImportView } from './bulkimport.js?v=20260901174053';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260901174053';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260901174053';
-import { renderAdminEditView } from './adminedit.js?v=20260901174053';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260901174053';
-import { renderHayatEditorView } from './hayateditor.js?v=20260901174053';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260901174053';
-import { renderUserGuideView } from './userguide.js?v=20260901174053';
-import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260901174053';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260901174053';
-import { registerServiceWorker } from './pwa-register.js?v=20260901174053';
+import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260901180401';
+import { renderDashboardView } from './dashboard.js?v=20260901180401';
+import { renderReportsView } from './reports.js?v=20260901180401';
+import { renderHayatView } from './hayatindex.js?v=20260901180401';
+import { renderMatchReviewView } from './matchreview.js?v=20260901180401';
+import { renderBulkImportView } from './bulkimport.js?v=20260901180401';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260901180401';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260901180401';
+import { renderAdminEditView } from './adminedit.js?v=20260901180401';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260901180401';
+import { renderHayatEditorView } from './hayateditor.js?v=20260901180401';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260901180401';
+import { renderUserGuideView } from './userguide.js?v=20260901180401';
+import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260901180401';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260901180401';
+import { registerServiceWorker } from './pwa-register.js?v=20260901180401';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
 function getTabs() {
+  // Plain Operators are meant to work the Tasks queue, not the cataloguing tools - so Hayat
+  // Index/Match Review/Work Consolidation/Hayat Editor/Bulk Import stay hidden for them unless
+  // they hold the "Data Assistant" qualification (Options -> Operator qualifications).
+  // Coordinator/Admin always see them; InPage Converter is unaffected (not part of this list).
+  const dataToolsHidden = State.currentRole === 'operator' && !State.myQualifications.has('DATA_ASSISTANT');
   const tabs = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'reports', label: 'Print Reports' },
-    { id: 'hayat', label: 'Hayat Index' },
   ];
+  if (!dataToolsHidden) tabs.push({ id: 'hayat', label: 'Hayat Index' });
   if (canWrite()) {
-    tabs.push({ id: 'matchreview', label: 'Match Review' });
-    tabs.push({ id: 'workconsolidation', label: 'Work Consolidation' });
-    tabs.push({ id: 'hayateditor', label: 'Hayat Editor' });
-    tabs.push({ id: 'bulkimport', label: 'Bulk Import' });
+    if (!dataToolsHidden) {
+      tabs.push({ id: 'matchreview', label: 'Match Review' });
+      tabs.push({ id: 'workconsolidation', label: 'Work Consolidation' });
+      tabs.push({ id: 'hayateditor', label: 'Hayat Editor' });
+      tabs.push({ id: 'bulkimport', label: 'Bulk Import' });
+    }
     tabs.push({ id: 'inpageconverter', label: 'InPage Converter' });
   }
   if (canReviewApplications()) { tabs.push({ id: 'applications', label: 'Team Applications' }); }

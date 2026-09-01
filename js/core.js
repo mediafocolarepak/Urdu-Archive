@@ -151,6 +151,7 @@ export const State = {
   categories: [], authors: [], mainTopics: [], recipients: [], langs: [], statuses: [],
   mediaTypes: [], sources: [], collections: [], qualities: [], operators: [],
   currentRole: 'user',
+  myQualifications: new Set(),  // qualification_code set for the signed-in Operator (empty for other roles)
   appShown: false,
   selectedDocId: null,
   selectedCategoryId: null,
@@ -525,6 +526,12 @@ async function showApp(session, renderDashboardTab) {
   State.currentRole = roleRow ? roleRow.role : 'user';
   document.getElementById('user-email').textContent = `${session.user.email} (${State.currentRole})`;
   if (State.currentRole === 'operator' && roleRow) renderStandingWidget(roleRow.credits, roleRow.reputation);
+
+  State.myQualifications = new Set();
+  if (State.currentRole === 'operator') {
+    const { data: myQuals } = await sb.from('user_qualifications').select('qualification_code').eq('user_id', session.user.id);
+    for (const q of (myQuals || [])) State.myQualifications.add(q.qualification_code);
+  }
 
   await loadOptions();
   renderDashboardTab();
