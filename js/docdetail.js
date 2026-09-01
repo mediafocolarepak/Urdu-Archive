@@ -6,7 +6,7 @@ import {
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
-} from './core.js?v=20260901180401';
+} from './core.js?v=20260901203845';
 
 // Builds the "riassunto" text block that replaces the old grid of disabled input fields -
 // one line per group of related info, empty groups dropped entirely so the block stays short.
@@ -27,9 +27,8 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
   box.innerHTML = `
     <div class="btn-row" style="justify-content:space-between;align-items:center;margin:0 0 8px;">
       <h3 style="margin:0;">Document #${esc(doc.document_id)}</h3>
-      <button class="btn" id="doc-download-gdrive">Download Document</button>
+      <button class="btn" id="doc-download-gdrive">Open</button>
     </div>
-    ${renderAllVersionsBar(doc, workSiblings)}
     <div class="field" style="font-size:13px;line-height:1.7;">
       <div style="font-weight:600;font-size:14px;margin-bottom:2px;">${esc(doc.en_title) || '<span class="hint">(no title)</span>'}</div>
       ${doc.ur_title ? `<div dir="auto" style="font-size:14px;margin-bottom:6px;">${esc(doc.ur_title)}</div>` : ''}
@@ -55,7 +54,6 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     });
   }
   wireWorkSiblingsClicks(box);
-  wireAllVersionsBar(box, doc, workSiblings);
 }
 
 function renderCollectionsSummary(docCollections) {
@@ -73,19 +71,31 @@ function renderWorkSiblingsHtml(siblings, currentId, canEdit) {
   if (!siblings || siblings.length === 0) return '';
   const others = siblings.filter(s => String(s.document_id) !== String(currentId));
   if (!others.length) return '';
+  // Consultation (canEdit false - plain User/Operator reading a document) shows only the
+  // fields someone browsing needs to pick a version; the editing context (canEdit true) keeps
+  // the fuller set needed to actually manage versions (source/type/file, set-preferred).
+  const headCells = canEdit
+    ? '<th>ID</th><th>Title</th><th>Language</th><th>Source</th><th>Type</th><th>File</th><th>Preferred</th><th></th>'
+    : '<th>ID</th><th>Title</th><th>Category</th><th>Author</th><th>Language</th><th></th>';
   return `
     <div class="field">
       <label>Other versions of this document</label>
       <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>ID</th><th>Title</th><th>Language</th><th>Source</th><th>Type</th><th>File</th><th>Preferred</th><th></th></tr></thead>
-        <tbody>${others.map(s => `<tr data-sibling-id="${esc(s.document_id)}">
-          <td>${esc(s.document_id)}</td><td>${esc(s.title)}</td><td>${esc(labelOf(State.langs, s.language))}</td>
-          <td>${esc(labelOf(State.sources, s.source))}</td><td>${esc(labelOf(State.mediaTypes, s.media_type))}</td>
-          <td>${esc(s.file_name)}</td>
-          <td>${s.is_preferred ? '<span class="count-badge">&#9733; Preferred</span>'
-              : (canEdit ? `<button class="btn secondary sibling-set-preferred" style="padding:2px 8px;">Set preferred</button>` : '')}</td>
+        <thead><tr>${headCells}</tr></thead>
+        <tbody>${others.map(s => {
+          const cells = canEdit
+            ? `<td>${esc(s.document_id)}</td><td>${esc(s.title)}</td><td>${esc(labelOf(State.langs, s.language))}</td>
+               <td>${esc(labelOf(State.sources, s.source))}</td><td>${esc(labelOf(State.mediaTypes, s.media_type))}</td>
+               <td>${esc(s.file_name)}</td>
+               <td>${s.is_preferred ? '<span class="count-badge">&#9733; Preferred</span>'
+                   : `<button class="btn secondary sibling-set-preferred" style="padding:2px 8px;">Set preferred</button>`}</td>`
+            : `<td>${esc(s.document_id)}</td><td>${esc(s.title)}</td><td>${esc(labelOf(State.categories, s.category))}</td>
+               <td>${esc(labelOf(State.authors, s.author))}</td><td>${esc(labelOf(State.langs, s.language))}</td>`;
+          return `<tr data-sibling-id="${esc(s.document_id)}">
+          ${cells}
           <td><button class="btn secondary sibling-open" style="padding:2px 8px;">Open</button></td>
-        </tr>`).join('')}</tbody>
+        </tr>`;
+        }).join('')}</tbody>
       </table></div>
     </div>`;
 }
@@ -116,7 +126,7 @@ function wireWorkSiblingsClicks(box, workId) {
 
 async function fetchWorkSiblings(workId) {
   if (!workId) return [];
-  return await withStatus(sb.from('documents').select('document_id,title,language,source,media_type,file_name,is_preferred,storage_path').eq('work_id', workId));
+  return await withStatus(sb.from('documents').select('document_id,title,category,author,language,source,media_type,file_name,is_preferred,storage_path').eq('work_id', workId));
 }
 
 // Downloads a specific version, preferring the app-managed Storage copy (signed URL) over the
@@ -169,7 +179,10 @@ export async function renderDocDetail(id) {
   const siblings = await fetchWorkSiblings(doc.work_id);
   const docCollections = await getCollectionsForDocument(doc.document_id);
 
-  if (State.currentRole === 'user') { renderDocDetailConsultation(box, doc, siblings, docCollections); return; }
+  // Operator shares the simplified, read-only Dashboard detail panel with User (see the
+  // matching Dashboard grid/filter simplification in dashboard.js) - editing now happens
+  // through Edit Records/Tasks, not by opening a document straight from the Dashboard.
+  if (State.currentRole === 'user' || State.currentRole === 'operator') { renderDocDetailConsultation(box, doc, siblings, docCollections); return; }
 
   const readOnly = !canWrite();
 
