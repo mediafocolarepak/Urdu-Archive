@@ -47,6 +47,50 @@ export async function downloadFromGDrive(fileName) {
   await findAndOpenInGDrive(GDRIVE_FOLDER_ID, fileName, 'the Google Drive archive folder');
 }
 
+// Fetches a Drive file's raw bytes (not just opening the viewer, see findAndOpenInGDrive
+// above) via the same public "anyone with the link" folder + API key, using ?alt=media.
+// Returns null (never throws) so callers can fall back to a manual entry.
+async function fetchGDriveFileBlob(folderId, fileName) {
+  if (!fileName) return null;
+  const q = `name='${fileName.replace(/'/g, "\\'")}' and '${folderId}' in parents and trashed=false`;
+  const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&key=${GDRIVE_API_KEY}`;
+  try {
+    const listRes = await fetch(listUrl);
+    const listData = await listRes.json();
+    const fileId = listData.files?.[0]?.id;
+    if (!fileId) return null;
+    const mediaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${GDRIVE_API_KEY}`);
+    if (!mediaRes.ok) return null;
+    return await mediaRes.blob();
+  } catch {
+    return null;
+  }
+}
+
+// Reads a document's PDF (Supabase Storage first, then the Google Drive archive folder as
+// fallback - same precedence as downloadVersion in docdetail.js) and counts its pages with
+// pdf.js. Returns null (never throws) on any failure - callers should fall back to letting
+// the person type the page count in by hand.
+export async function readPdfPageCount(doc) {
+  if (!window.pdfjsLib) return null;
+  let blob = null;
+  if (doc.storage_path) {
+    const { data } = await sb.storage.from(BUCKET).createSignedUrl(doc.storage_path, 60);
+    if (data?.signedUrl) {
+      try { const res = await fetch(data.signedUrl); if (res.ok) blob = await res.blob(); } catch {}
+    }
+  }
+  if (!blob) blob = await fetchGDriveFileBlob(GDRIVE_FOLDER_ID, doc.file_name);
+  if (!blob) return null;
+  try {
+    const buf = await blob.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    return pdf.numPages;
+  } catch {
+    return null;
+  }
+}
+
 export async function downloadInpFromGDrive(fileName) {
   await findAndOpenInGDrive(GDRIVE_INP_FOLDER_ID, fileName, 'the Google Drive "INPAGE Original Document" folder');
 }

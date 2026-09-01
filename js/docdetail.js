@@ -6,7 +6,8 @@ import {
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
-} from './core.js?v=20260901232052';
+  readPdfPageCount,
+} from './core.js?v=20260901232817';
 
 // Builds the "riassunto" text block that replaces the old grid of disabled input fields -
 // one line per group of related info, empty groups dropped entirely so the block stays short.
@@ -220,7 +221,13 @@ export async function renderDocDetail(id) {
       ${textField('Physical box', 'physical_box', doc.physical_box)}
       ${textField('Episode number', 'episode_number', doc.episode_number)}
       ${textField('Bible verse', 'bible_verse', doc.bible_verse)}
-      ${textField('Pages', 'pages', doc.pages, 'number')}
+      <div class="field"><label>Pages</label>
+        <div class="btn-row" style="margin:0;gap:6px;">
+          <input data-f="pages" type="number" value="${esc(doc.pages)}">
+          <button type="button" class="btn secondary" id="doc-read-pages" style="padding:6px 10px;white-space:nowrap;">Read from file</button>
+        </div>
+        <div class="hint" id="doc-read-pages-status"></div>
+      </div>
       <div class="field"><label>File name</label><input value="${esc(doc.file_name)}" disabled></div>
       ${textField('Duration (video only)', 'duration', doc.duration)}
       ${selectField('Quality (video only)', 'quality', doc.quality, State.qualities)}
@@ -271,6 +278,14 @@ export async function renderDocDetail(id) {
 
   document.getElementById('doc-tracking-sheet').addEventListener('click', () => renderTrackingSheet(id));
   document.getElementById('doc-download-gdrive').addEventListener('click', () => downloadFromGDrive(doc.file_name));
+  document.getElementById('doc-read-pages').addEventListener('click', async () => {
+    const status = document.getElementById('doc-read-pages-status');
+    status.textContent = 'Reading file...';
+    const n = await readPdfPageCount(doc);
+    if (n == null) { status.textContent = 'Could not read the file automatically - enter the page count by hand.'; return; }
+    box.querySelector('[data-f="pages"]').value = n;
+    status.textContent = `Read ${n} page${n === 1 ? '' : 's'} from the file.`;
+  });
   wireWorkSiblingsClicks(box, doc.work_id);
   wireAllVersionsBar(box, doc, siblings);
   if (doc.storage_path) {
