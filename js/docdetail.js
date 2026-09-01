@@ -7,7 +7,7 @@ import {
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, getDisplayNameByEmail,
-} from './core.js?v=20260902002107';
+} from './core.js?v=20260902002728';
 
 // Categories that gate visibility/assignment to a specific qualification - duplicated from the
 // same constant in tasks.js (project convention: modules only import from core.js, never each
@@ -129,8 +129,10 @@ async function openCreateTaskPopup(doc, onCreated) {
       <div class="field" style="grid-column:1/-1;"><label>Title</label><input id="ct-title" value="${esc(doc.title || doc.original_title || '')}"></div>
       <div class="field" style="grid-column:1/-1;"><label>Description</label><textarea id="ct-desc" rows="2"></textarea></div>
       <div class="field"><label>Category</label><select id="ct-category">${optionsHtml(State.optionListsByName.task_category || [], '', true)}</select></div>
-      <div class="field"><label>Document pages ${doc.pages == null ? '<span class="hint">(not set on the document - enter it here)</span>' : ''}</label><input id="ct-pages" type="number" min="0" value="${esc(doc.pages ?? '')}"></div>
-      <div class="field"><label>Base credits</label><input id="ct-base-credits" value="0" disabled></div>
+      <div class="field"><label>Document pages</label><input id="ct-pages" type="number" min="0" value="${esc(doc.pages ?? '')}">
+        <div class="hint" id="ct-pages-status">${doc.pages == null ? 'Reading from file...' : ''}</div>
+      </div>
+      <div class="field"><label>Base credits <span class="hint">(rate &times; pages)</span></label><input id="ct-base-credits" value="0" disabled></div>
       <div class="field"><label>Extra credits <span class="hint">(optional)</span></label><input id="ct-extra-credits" type="number" value="0"></div>
       <div class="field" id="ct-extra-note-field" style="display:none;grid-column:1/-1;"><label>Why the extra credits?</label><textarea id="ct-extra-note" rows="2"></textarea></div>
       <div class="field" style="grid-column:1/-1;"><label>Total credits</label><div id="ct-total-credits" style="font-size:14px;font-weight:600;">0</div></div>
@@ -165,6 +167,20 @@ async function openCreateTaskPopup(doc, onCreated) {
   });
   recompute();
   refreshAssignees();
+
+  // Auto-read the page count from the actual PDF when the document doesn't have one saved yet
+  // (same pdf.js mechanism as the "Read from file" button in the full editor) - only when the
+  // popup is still open by the time it resolves, since this document could get closed quickly.
+  if (doc.pages == null) {
+    readPdfPageCount(doc).then(n => {
+      if (!document.body.contains(overlay)) return;
+      const status = document.getElementById('ct-pages-status');
+      if (n == null) { status.textContent = 'Could not read the file automatically - enter the page count by hand.'; return; }
+      document.getElementById('ct-pages').value = n;
+      status.textContent = `Read ${n} page${n === 1 ? '' : 's'} from the file.`;
+      recompute();
+    });
+  }
 
   document.getElementById('ct-cancel').addEventListener('click', close);
   document.getElementById('ct-submit').addEventListener('click', async () => {
