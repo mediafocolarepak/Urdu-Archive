@@ -1,19 +1,20 @@
-import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260901205125';
-import { renderDashboardView } from './dashboard.js?v=20260901205125';
-import { renderReportsView } from './reports.js?v=20260901205125';
-import { renderHayatView } from './hayatindex.js?v=20260901205125';
-import { renderMatchReviewView } from './matchreview.js?v=20260901205125';
-import { renderBulkImportView } from './bulkimport.js?v=20260901205125';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260901205125';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260901205125';
-import { renderAdminEditView } from './adminedit.js?v=20260901205125';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260901205125';
-import { renderHayatEditorView } from './hayateditor.js?v=20260901205125';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260901205125';
-import { renderUserGuideView } from './userguide.js?v=20260901205125';
-import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260901205125';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260901205125';
-import { registerServiceWorker } from './pwa-register.js?v=20260901205125';
+import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260901211255';
+import { renderDashboardView } from './dashboard.js?v=20260901211255';
+import { renderReportsView } from './reports.js?v=20260901211255';
+import { renderHayatView } from './hayatindex.js?v=20260901211255';
+import { renderMatchReviewView } from './matchreview.js?v=20260901211255';
+import { renderBulkImportView } from './bulkimport.js?v=20260901211255';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260901211255';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260901211255';
+import { renderAdminEditView } from './adminedit.js?v=20260901211255';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260901211255';
+import { renderHayatEditorView } from './hayateditor.js?v=20260901211255';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260901211255';
+import { renderUserGuideView } from './userguide.js?v=20260901211255';
+import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260901211255';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260901211255';
+import { renderMyProfileView } from './profile.js?v=20260901211255';
+import { registerServiceWorker } from './pwa-register.js?v=20260901211255';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -40,6 +41,7 @@ function getTabs() {
   if (canReviewApplications()) { tabs.push({ id: 'applications', label: 'Team Applications' }); }
   if (canWrite()) { tabs.push({ id: 'tasks', label: 'Tasks' }); }
   if (isAdmin()) { tabs.push({ id: 'users', label: 'Users' }); tabs.push({ id: 'options', label: 'Options' }); tabs.push({ id: 'adminedit', label: 'Edit Records' }); tabs.push({ id: 'announcements', label: 'Announcements' }); }
+  tabs.push({ id: 'profile', label: 'My Profile' });
   tabs.push({ id: 'chat', label: canReviewApplications() ? 'Messages' : 'Chat' });
   // Persistently visible invitation for read-only accounts - collaborators (Operator+)
   // already have other ways to reach out, see the "Join the Team" module for why.
@@ -75,6 +77,7 @@ function renderTab(id) {
   else if (id === 'applications') renderApplicationsView(main);
   else if (id === 'tasks') renderTasksView(main);
   else if (id === 'jointeam') renderJoinTeamView(main);
+  else if (id === 'profile') renderMyProfileView(main);
   else if (id === 'help') renderUserGuideView(main);
 }
 

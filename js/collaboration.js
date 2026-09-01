@@ -5,7 +5,7 @@
 // the UI) - only Admin can set 'approved', paired with the actual role promotion in
 // user_roles (already an admin-only action, see 05_roles_and_permissions.sql).
 
-import { sb, State, esc, canReviewApplications, isAdmin, withStatus, nameMapForEmails } from './core.js?v=20260901205125';
+import { sb, State, esc, canReviewApplications, isAdmin, withStatus, nameMapForEmails } from './core.js?v=20260901211255';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -76,6 +76,7 @@ export async function renderJoinTeamView(main) {
   body.innerHTML += `
     <div class="subpanel">
       <h3>Tell us about you</h3>
+      <p class="hint" style="margin-top:-4px;">Please share with us your experience and capabilities by filling this form.</p>
       <div class="field-grid wide">
         <div class="field"><label>Academic level</label>
           <select id="jt-academic">${ACADEMIC_LEVELS.map(([c, l]) => `<option value="${c}">${l}</option>`).join('')}</select>
@@ -94,7 +95,7 @@ export async function renderJoinTeamView(main) {
             </label>
           </div>
         </div>
-        <div class="field" style="grid-column:1/-1;"><label>What motivates you to help?</label>
+        <div class="field" style="grid-column:1/-1;"><label>Why do you like to be part of our team?</label>
           <textarea id="jt-motivation" rows="3"></textarea>
         </div>
       </div>
@@ -114,17 +115,23 @@ export async function renderJoinTeamView(main) {
 
   document.getElementById('jt-submit-btn').addEventListener('click', async () => {
     const motivation = document.getElementById('jt-motivation').value.trim();
-    if (!motivation) { alert('Please tell us what motivates you to help - it\'s the field reviewers read first.'); return; }
+    if (!motivation) { alert('Please tell us why you\'d like to join - it\'s the field reviewers read first.'); return; }
     const skillLabels = Array.from(document.querySelectorAll('.jt-skill-check:checked')).map(cb => cb.value);
     if (otherCheck.checked && otherText.value.trim()) skillLabels.push(otherText.value.trim());
+    const academic_level = document.getElementById('jt-academic').value;
+    const experience = document.getElementById('jt-experience').value.trim() || null;
+    const skills = skillLabels.join(', ') || null;
+    const availability = document.getElementById('jt-availability').value.trim() || null;
     await withStatus(sb.from('collaboration_applications').insert({
       user_id: user.id, user_email: user.email,
-      academic_level: document.getElementById('jt-academic').value,
-      experience: document.getElementById('jt-experience').value.trim() || null,
-      skills: skillLabels.join(', ') || null,
-      motivation,
-      availability: document.getElementById('jt-availability').value.trim() || null,
+      academic_level, experience, skills, motivation, availability,
     }), 'Sending your request...');
+    // Mirrors the same answers onto user_profiles so they stay editable afterwards from
+    // "My Profile" (profile.js), independent of how the application itself gets reviewed.
+    await withStatus(sb.from('user_profiles').update({
+      academic_level, experience, skills, motivation, availability,
+      profile_updated_at: new Date().toISOString(),
+    }).eq('user_id', user.id), 'Saving...');
     await renderJoinTeamView(main);
   });
 }
