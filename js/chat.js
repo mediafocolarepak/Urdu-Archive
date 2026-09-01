@@ -3,15 +3,12 @@
 // admins see every message and can reply + dismiss. Everything stays in chat_messages
 // forever - "dismiss" is a soft flag hiding a row from the admin's default list, not a delete.
 
-import { sb, State, esc, canReviewApplications, withStatus, nameMapForEmails } from './core.js?v=20260901213103';
+import { sb, State, esc, canReviewApplications, withStatus, nameMapForEmails, labelOf } from './core.js?v=20260901215404';
 
-const REPORT_TYPES = [
-  ['REVISION', 'Revision'],
-  ['DOWNLOAD_ERROR', 'Download error'],
-  ['BUG', 'Software bug'],
-  ['SUGGESTION', 'Suggestion'],
-];
-const REPORT_TYPE_LABEL = Object.fromEntries(REPORT_TYPES);
+// Report types are admin-editable from Options ("Report type" list) - see OPTION_LIST_NAMES
+// in core.js and 55_report_types.sql for the seed. Read fresh each time rather than cached in
+// a module-level constant so an Options edit shows up without a page reload.
+function reportTypes() { return State.optionListsByName.report_type || []; }
 
 function formatDateTime(iso) {
   return esc((iso || '').slice(0, 16).replace('T', ' '));
@@ -24,15 +21,15 @@ export async function renderChatView(main) {
   markChatSeen('user_' + user.id);
   main.innerHTML = `
     <div class="panel">
-      <h2>Chat with Admin</h2>
+      <h2>Report a Problem or Suggestion to the Team</h2>
       <div class="chat-thread" id="chat-thread"></div>
       <div class="field-grid">
         <div class="field"><label>Report type</label>
-          <select id="chat-report-type">${REPORT_TYPES.map(([c, l]) => `<option value="${c}">${l}</option>`).join('')}</select>
+          <select id="chat-report-type">${reportTypes().map(([c, l]) => `<option value="${c}">${l}</option>`).join('')}</select>
         </div>
         <div class="field"><label>Document ID <span class="hint">(optional)</span></label><input id="chat-document-id" type="number" min="1" value="${State.selectedDocId ? esc(State.selectedDocId) : ''}"></div>
       </div>
-      <div class="field"><label>Message</label><textarea id="chat-message-text" rows="3"></textarea></div>
+      <div class="field"><label>Tell us in detail about the problem, and any suggestions or thoughts you have</label><textarea id="chat-message-text" rows="3"></textarea></div>
       <div class="btn-row"><button class="btn" id="chat-send-btn">Send</button></div>
     </div>`;
   await refreshChatThread();
@@ -60,7 +57,7 @@ async function refreshChatThread() {
   box.innerHTML = rows.map(r => {
     const userBubble = `
       <div class="chat-bubble from-user">
-        <div class="chat-meta"><span class="chat-tag">${esc(REPORT_TYPE_LABEL[r.report_type] || r.report_type)}</span>${r.document_id ? `Doc #${esc(r.document_id)} · ` : ''}${formatDateTime(r.created_at)}</div>
+        <div class="chat-meta"><span class="chat-tag">${esc(labelOf(reportTypes(), r.report_type) || r.report_type)}</span>${r.document_id ? `Doc #${esc(r.document_id)} · ` : ''}${formatDateTime(r.created_at)}</div>
         ${esc(r.message_text)}
       </div>`;
     const replyBubble = r.reply_text ? `
@@ -85,7 +82,7 @@ export async function renderAdminMessagesView(main) {
       <div class="field-grid">
         <div class="field"><label>User</label><input id="msg-filter-user" type="text" placeholder="Email contains..."></div>
         <div class="field"><label>Report type</label>
-          <select id="msg-filter-type"><option value="">All</option>${REPORT_TYPES.map(([c, l]) => `<option value="${c}">${l}</option>`).join('')}</select>
+          <select id="msg-filter-type"><option value="">All</option>${reportTypes().map(([c, l]) => `<option value="${c}">${l}</option>`).join('')}</select>
         </div>
         <div class="field"><label>Document ID</label><input id="msg-filter-docid" type="number" min="1"></div>
         <div class="field"><label>&nbsp;</label><label style="text-transform:none;font-size:13px;"><input id="msg-filter-dismissed" type="checkbox" style="width:auto;"> Show dismissed</label></div>
@@ -122,7 +119,7 @@ async function refreshAdminMessages() {
     <tr data-id="${r.id}" class="${r.dismissed ? 'dismissed-row' : ''}">
       <td>${formatDateTime(r.created_at)}</td>
       <td>${esc(nameMap[r.user_email] || r.user_email)}</td>
-      <td>${esc(REPORT_TYPE_LABEL[r.report_type] || r.report_type)}</td>
+      <td>${esc(labelOf(reportTypes(), r.report_type) || r.report_type)}</td>
       <td>${r.document_id ? esc(r.document_id) : '—'}</td>
       <td style="white-space:normal;max-width:260px;">${esc(r.message_text)}</td>
       <td><textarea class="msg-reply-input" rows="2" style="min-width:180px;">${esc(r.reply_text)}</textarea></td>
@@ -166,7 +163,7 @@ async function startTaskFromMessage(r) {
     document_pages = data?.pages ?? null;
   }
   State.taskPrefill = {
-    title: `Proofreading: ${REPORT_TYPE_LABEL[r.report_type] || r.report_type}${r.document_id ? ` - Doc #${r.document_id}` : ''}`,
+    title: `Proofreading: ${labelOf(reportTypes(), r.report_type) || r.report_type}${r.document_id ? ` - Doc #${r.document_id}` : ''}`,
     description: r.message_text,
     document_id: r.document_id || null,
     document_pages,
