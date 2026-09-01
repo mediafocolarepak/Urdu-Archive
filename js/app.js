@@ -1,20 +1,20 @@
-import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260901212032';
-import { renderDashboardView } from './dashboard.js?v=20260901212032';
-import { renderReportsView } from './reports.js?v=20260901212032';
-import { renderHayatView } from './hayatindex.js?v=20260901212032';
-import { renderMatchReviewView } from './matchreview.js?v=20260901212032';
-import { renderBulkImportView } from './bulkimport.js?v=20260901212032';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260901212032';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260901212032';
-import { renderAdminEditView } from './adminedit.js?v=20260901212032';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260901212032';
-import { renderHayatEditorView } from './hayateditor.js?v=20260901212032';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260901212032';
-import { renderUserGuideView } from './userguide.js?v=20260901212032';
-import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260901212032';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260901212032';
-import { renderMyProfileView } from './profile.js?v=20260901212032';
-import { registerServiceWorker } from './pwa-register.js?v=20260901212032';
+import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260901213103';
+import { renderDashboardView } from './dashboard.js?v=20260901213103';
+import { renderReportsView } from './reports.js?v=20260901213103';
+import { renderHayatView } from './hayatindex.js?v=20260901213103';
+import { renderMatchReviewView } from './matchreview.js?v=20260901213103';
+import { renderBulkImportView } from './bulkimport.js?v=20260901213103';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260901213103';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260901213103';
+import { renderAdminEditView } from './adminedit.js?v=20260901213103';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260901213103';
+import { renderHayatEditorView } from './hayateditor.js?v=20260901213103';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260901213103';
+import { renderUserGuideView } from './userguide.js?v=20260901213103';
+import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260901213103';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260901213103';
+import { renderMyProfileView } from './profile.js?v=20260901213103';
+import { registerServiceWorker } from './pwa-register.js?v=20260901213103';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -24,11 +24,16 @@ function getTabs() {
   // they hold the "Data Assistant" qualification (Options -> Operator qualifications).
   // Coordinator/Admin always see them; InPage Converter is unaffected (not part of this list).
   const dataToolsHidden = State.currentRole === 'operator' && !State.myQualifications.has('DATA_ASSISTANT');
+  const isUser = State.currentRole === 'user';
   const tabs = [
     { id: 'dashboard', label: 'Dashboard' },
-    { id: 'reports', label: 'Print Reports' },
   ];
-  if (!dataToolsHidden) tabs.push({ id: 'hayat', label: 'Hayat Index' });
+  // Plain Users get a minimal read-only set: browse (Dashboard) and a quick way to flag a
+  // problem, right up front as the second tab - Print Reports/Hayat Index are cataloguing
+  // tools they have no use for.
+  if (isUser) { tabs.push({ id: 'chat', label: 'Report a Problem' }); }
+  else { tabs.push({ id: 'reports', label: 'Print Reports' }); }
+  if (!isUser && !dataToolsHidden) tabs.push({ id: 'hayat', label: 'Hayat Index' });
   if (canWrite()) {
     if (!dataToolsHidden) {
       tabs.push({ id: 'matchreview', label: 'Match Review' });
@@ -42,10 +47,11 @@ function getTabs() {
   if (canWrite()) { tabs.push({ id: 'tasks', label: 'Tasks' }); }
   if (isAdmin()) { tabs.push({ id: 'users', label: 'Users' }); tabs.push({ id: 'options', label: 'Options' }); tabs.push({ id: 'adminedit', label: 'Edit Records' }); tabs.push({ id: 'announcements', label: 'Announcements' }); }
   tabs.push({ id: 'profile', label: 'My Profile' });
-  tabs.push({ id: 'chat', label: canReviewApplications() ? 'Messages' : 'Chat' });
+  // Users already got their Chat tab up front as "Report a Problem" (see above).
+  if (!isUser) { tabs.push({ id: 'chat', label: canReviewApplications() ? 'Messages' : 'Chat' }); }
   // Persistently visible invitation for read-only accounts - collaborators (Operator+)
   // already have other ways to reach out, see the "Join the Team" module for why.
-  if (State.currentRole === 'user') { tabs.push({ id: 'jointeam', label: 'Join the Team' }); }
+  if (isUser) { tabs.push({ id: 'jointeam', label: 'Join the Team' }); }
   tabs.push({ id: 'help', label: 'Help' });
   return tabs;
 }
