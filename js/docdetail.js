@@ -7,7 +7,7 @@ import {
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, getDisplayNameByEmail,
-} from './core.js?v=20260902000202';
+} from './core.js?v=20260902002107';
 
 // Categories that gate visibility/assignment to a specific qualification - duplicated from the
 // same constant in tasks.js (project convention: modules only import from core.js, never each
@@ -129,7 +129,7 @@ async function openCreateTaskPopup(doc, onCreated) {
       <div class="field" style="grid-column:1/-1;"><label>Title</label><input id="ct-title" value="${esc(doc.title || doc.original_title || '')}"></div>
       <div class="field" style="grid-column:1/-1;"><label>Description</label><textarea id="ct-desc" rows="2"></textarea></div>
       <div class="field"><label>Category</label><select id="ct-category">${optionsHtml(State.optionListsByName.task_category || [], '', true)}</select></div>
-      <div class="field"><label>Document pages</label><input value="${esc(doc.pages ?? '—')}" disabled></div>
+      <div class="field"><label>Document pages ${doc.pages == null ? '<span class="hint">(not set on the document - enter it here)</span>' : ''}</label><input id="ct-pages" type="number" min="0" value="${esc(doc.pages ?? '')}"></div>
       <div class="field"><label>Base credits</label><input id="ct-base-credits" value="0" disabled></div>
       <div class="field"><label>Extra credits <span class="hint">(optional)</span></label><input id="ct-extra-credits" type="number" value="0"></div>
       <div class="field" id="ct-extra-note-field" style="display:none;grid-column:1/-1;"><label>Why the extra credits?</label><textarea id="ct-extra-note" rows="2"></textarea></div>
@@ -142,7 +142,8 @@ async function openCreateTaskPopup(doc, onCreated) {
   function recompute() {
     const category = document.getElementById('ct-category').value;
     const rate = categoryRates[category] || 0;
-    const base = Math.round(rate * (doc.pages || 0));
+    const pages = parseFloat(document.getElementById('ct-pages').value) || 0;
+    const base = Math.round(rate * pages);
     document.getElementById('ct-base-credits').value = base;
     const extra = parseInt(document.getElementById('ct-extra-credits').value, 10) || 0;
     document.getElementById('ct-total-credits').textContent = base + extra;
@@ -157,6 +158,7 @@ async function openCreateTaskPopup(doc, onCreated) {
     document.getElementById('ct-due-field').style.display = 'none';
   }
   document.getElementById('ct-category').addEventListener('change', () => { recompute(); refreshAssignees(); });
+  document.getElementById('ct-pages').addEventListener('input', recompute);
   document.getElementById('ct-extra-credits').addEventListener('input', recompute);
   document.getElementById('ct-assignee').addEventListener('change', e => {
     document.getElementById('ct-due-field').style.display = e.target.value ? 'block' : 'none';
@@ -177,11 +179,18 @@ async function openCreateTaskPopup(doc, onCreated) {
     const assigneeEmail = assigneeId ? assigneeSel.selectedOptions[0].dataset.email : null;
     const dueDate = document.getElementById('ct-due').value || null;
     if (assigneeId && !dueDate) { alert('Please set a due date for the person you are assigning this to.'); return; }
+    const taskPages = parseInt(document.getElementById('ct-pages').value, 10) || null;
+    // If the document itself never had its page count recorded, save what was typed here back
+    // onto the document too, so the next task on it (or the doc detail view) doesn't start blank.
+    if (taskPages != null && doc.pages == null) {
+      await withStatus(sb.from('documents').update({ pages: taskPages }).eq('document_id', doc.document_id), 'Saving page count...');
+      doc.pages = taskPages;
+    }
     const { data: { user } } = await sb.auth.getUser();
     await withStatus(sb.from('tasks').insert({
       title, description: document.getElementById('ct-desc').value.trim() || null,
       category: document.getElementById('ct-category').value || null,
-      document_id: doc.document_id, document_pages: doc.pages || null,
+      document_id: doc.document_id, document_pages: taskPages,
       base_credits: baseCredits, extra_credits: extraCredits, extra_credits_note: extraNote || null,
       credits: baseCredits + extraCredits,
       created_by_email: user.email,
