@@ -636,6 +636,7 @@ export function wireAuthButtons() {
     document.getElementById('signup-btn').style.display = on ? 'flex' : 'none';
     switchHint.textContent = on ? 'Already have an account?' : 'New here?';
     switchLink.textContent = on ? 'Sign in' : 'Sign up';
+    document.getElementById('login-password-label').textContent = on ? 'Create a new password' : 'Password';
     document.getElementById('login-error').textContent = '';
   }
   switchLink.addEventListener('click', () => setSignupMode(!signupMode));

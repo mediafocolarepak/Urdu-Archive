@@ -1,4 +1,4 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260831220259';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260901172519';
 
 // ---------- Users ----------
 
@@ -11,17 +11,19 @@ export async function renderUsersView(main) {
   const qualRows = qualList.length ? await withStatus(sb.from('user_qualifications').select('*')) : [];
   const qualByUid = {};
   for (const q of qualRows) (qualByUid[q.user_id] ||= new Set()).add(q.qualification_code);
+  const adminCount = rows.filter(r => r.role === 'admin').length;
 
   main.innerHTML = `
     <div class="panel">
       <h2>Users <span class="count-badge">${rows.length}</span></h2>
       <p class="hint">User = read/search only. Operator = can create and edit, and mark documents for deletion. Coordinator = Operator powers, plus reviews "Join the Team" applications. Admin = can also delete permanently and manage roles.</p>
       <p class="hint">Qualifications are tags on top of the Operator role, not extra roles - a person can hold more than one (e.g. Translator + Revisor). They control which task categories someone can see and claim (Translation -> Translator, Revision -> Revisor); manage the list itself from Options -> Operator qualifications.</p>
+      <p class="hint">An Admin's role can't be changed from this dropdown - remove their access and re-add them at the new role instead. There must always be at least one Admin, so the last one can't be removed either.</p>
       <div class="grid-wrap"><table class="grid" id="users-grid">
         <thead><tr><th>Email</th><th>Role</th><th>Qualifications</th><th>Credits</th><th>Reputation</th><th>Full name</th><th>City</th><th>Membership</th><th>Phone</th><th>Since</th><th></th></tr></thead>
         <tbody>${rows.map(r => { const p = profileByUid[r.user_id] || {}; const uidQuals = qualByUid[r.user_id] || new Set(); const lowRep = r.role === 'operator' && r.reputation != null && r.reputation < 20; return `<tr data-uid="${esc(r.user_id)}">
           <td>${esc(r.email)}</td>
-          <td><select class="role-select" data-uid="${esc(r.user_id)}">${optionsHtml([['user', 'User'], ['operator', 'Operator'], ['coordinator', 'Coordinator'], ['admin', 'Admin']], r.role, false)}</select></td>
+          <td><select class="role-select" data-uid="${esc(r.user_id)}" ${r.role === 'admin' ? 'disabled title="Admin role can\'t be changed here - remove access and re-add at the new role instead."' : ''}>${optionsHtml([['user', 'User'], ['operator', 'Operator'], ['coordinator', 'Coordinator'], ['admin', 'Admin']], r.role, false)}</select></td>
           <td style="white-space:normal;min-width:220px;">${r.role !== 'operator' ? '<span class="hint">Operators only</span>' : (qualList.map(([code, label]) => `
             <label style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-weight:normal;text-transform:none;font-size:12.5px;">
               <input type="checkbox" class="qual-check" data-uid="${esc(r.user_id)}" data-code="${esc(code)}" ${uidQuals.has(code) ? 'checked' : ''}> ${esc(label)}
@@ -50,6 +52,8 @@ export async function renderUsersView(main) {
     else await withStatus(sb.from('user_qualifications').delete().eq('user_id', uid).eq('qualification_code', code), 'Saving...');
   }));
   main.querySelectorAll('.remove-user-btn').forEach(btn => btn.addEventListener('click', async () => {
+    const row = rows.find(r => r.user_id === btn.dataset.uid);
+    if (row && row.role === 'admin' && adminCount <= 1) { alert('There must always be at least one Admin - promote someone else first before removing this one.'); return; }
     if (!confirm(`Remove access for ${btn.dataset.email}? They will lose all access to the app until re-added (their login account itself is not deleted).`)) return;
     await withStatus(sb.from('user_roles').delete().eq('user_id', btn.dataset.uid), 'Removing...');
     await renderUsersView(main);
