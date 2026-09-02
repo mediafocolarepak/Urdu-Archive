@@ -1,4 +1,4 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug } from './core.js?v=20260902170240';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug } from './core.js?v=20260902170432';
 
 // ---------- Users ----------
 
@@ -168,6 +168,11 @@ async function runBackfillPageCounts() {
     }
     done++;
     progress.textContent = `${done} / ${rows.length} (${ok} saved, ${failed} skipped)${backfillStopRequested ? ' — stopped, safe to resume.' : ''}`;
+    // A small pause between Drive lookups - unthrottled, this loop can burn through the Drive
+    // API's per-100-seconds quota in well under a minute on a set this size, which then makes
+    // every later document look like "not found" too (see readPdfPageCountDebug's API-error
+    // branch, added after exactly that got misread as a per-file problem).
+    await new Promise(r => setTimeout(r, 200));
   }
   if (!backfillStopRequested) progress.textContent += ' — done.';
   startBtn.style.display = 'inline-block';
