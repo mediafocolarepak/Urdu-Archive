@@ -7,7 +7,7 @@ import {
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, getDisplayNameByEmail,
-} from './core.js?v=20260902002728';
+} from './core.js?v=20260902141721';
 
 // Categories that gate visibility/assignment to a specific qualification - duplicated from the
 // same constant in tasks.js (project convention: modules only import from core.js, never each
@@ -93,8 +93,9 @@ async function refreshDocTasksList(doc) {
   const names = await Promise.all(rows.map(t => t.claimed_by_email ? getDisplayNameByEmail(t.claimed_by_email) : Promise.resolve(null)));
   box.innerHTML = `
     <div class="grid-wrap"><table class="grid">
-      <thead><tr><th>Status</th><th>Claimed by</th><th>Due date</th><th>Credits</th></tr></thead>
+      <thead><tr><th>ID</th><th>Status</th><th>Claimed by</th><th>Due date</th><th>Credits</th></tr></thead>
       <tbody>${rows.map((t, i) => `<tr>
+        <td>#${esc(t.id)}</td>
         <td>${esc(TASK_STATUS_LABEL[t.status] || t.status)}</td>
         <td>${esc(names[i]) || '<span class="hint">— open —</span>'}</td>
         <td>${esc(t.due_date) || '—'}</td>
@@ -134,7 +135,7 @@ async function openCreateTaskPopup(doc, onCreated) {
       </div>
       <div class="field"><label>Base credits <span class="hint">(rate &times; pages)</span></label><input id="ct-base-credits" value="0" disabled></div>
       <div class="field"><label>Extra credits <span class="hint">(optional)</span></label><input id="ct-extra-credits" type="number" value="0"></div>
-      <div class="field" id="ct-extra-note-field" style="display:none;grid-column:1/-1;"><label>Why the extra credits?</label><textarea id="ct-extra-note" rows="2"></textarea></div>
+      <div class="field" id="ct-extra-note-field" style="display:none;grid-column:1/-1;"><label>Why the extra credits?</label><select id="ct-extra-note">${optionsHtml(State.optionListsByName.extra_credit_reason || [], '', true)}</select></div>
       <div class="field" style="grid-column:1/-1;"><label>Total credits</label><div id="ct-total-credits" style="font-size:14px;font-weight:600;">0</div></div>
       <div class="field"><label>Assign directly to <span class="hint">(optional)</span></label><select id="ct-assignee"></select></div>
       <div class="field" id="ct-due-field" style="display:none;"><label>Due date</label><input id="ct-due" type="date"></div>

@@ -1,14 +1,23 @@
-// Fase 2 di "Join the Team": bacheca di task. Coordinator/Admin creano i task (testo libero,
-// con un document_id opzionale per legarli a un record dell'archivio) e possono assegnarli
-// direttamente a un Operator o lasciarli liberi; qualunque Operator+ può "prendere" (claim) un
-// task libero fissando lui stesso la data di consegna. RLS impedisce di toccare un task preso
-// da qualcun altro (vedi 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel
-// vincolo, non lo sostituiscono.
+// Fase 2 di "Join the Team": bacheca di task, organizzata come un processo di lavoro in
+// sotto-schede interne (vedi 2026-09-02 session): Tasks Store (spazio pubblico degli open
+// task, uguale per tutti i ruoli inclusi Coordinator/Admin) -> claim -> My Tasks (i miei task
+// in corso/in revisione/chiusi, con un ledger crediti calcolato al volo dagli
+// task_outcome_events, non una tabella a parte) mentre Team overview/Review/Publish restano
+// strumenti di gestione separati (Team e Review: Coordinator+Admin; Publish: solo Admin, è
+// un'operazione tecnica). RLS impedisce di toccare un task preso da qualcun altro (vedi
+// 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel vincolo, non lo sostituiscono.
 
-import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName } from './core.js?v=20260902002728';
+import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName } from './core.js?v=20260902141721';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
+function taskIdBadge(t) { return `<span style="position:absolute;top:10px;right:14px;font-size:12px;color:var(--muted,#666);">Task ID N. <b>${esc(t.id)}</b></span>`; }
+function relativeDate(iso) {
+  if (!iso) return '—';
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days <= 0) return 'today';
+  return days === 1 ? '1 day ago' : `${days} days ago`;
+}
 
 // Categories that gate visibility/assignment to a specific qualification - mirrors the case
 // expression in operator_qualifies_for_category()/user_qualifies_for_category() in
@@ -20,6 +29,8 @@ const CATEGORY_REQUIRES_QUALIFICATION = { IT_UR: 'TRANSLATOR', EN_UR: 'TRANSLATO
 // session notes: the team is volunteers, a silent auto-ban would be the wrong tone here).
 const LOW_REPUTATION_THRESHOLD = 20;
 
+const STATUS_LABELS = { claimed: 'Claimed', submitted: 'Waiting for review', approved: 'Approved', rejected: 'Rejected', published: 'Published' };
+
 async function fetchOperators() {
   const rows = await withStatus(sb.from('user_roles').select('user_id,email,reputation').in('role', ['operator', 'coordinator']).order('email'));
   const names = await Promise.all(rows.map(r => getDisplayNameByEmail(r.email)));
@@ -27,304 +38,6 @@ async function fetchOperators() {
   const qualByUid = {};
   for (const q of qualRows) (qualByUid[q.user_id] ||= new Set()).add(q.qualification_code);
   return rows.map((r, i) => ({ ...r, displayName: names[i], qualifications: qualByUid[r.user_id] || new Set() }));
-}
-
-export async function renderTasksView(main) {
-  if (!canWrite()) { main.innerHTML = '<div class="empty-msg">Operator access required.</div>'; return; }
-  const { data: { user } } = await sb.auth.getUser();
-  const manage = canReviewApplications(); // same tier as Team Applications review: Coordinator + Admin
-  const myQuals = await withStatus(sb.from('user_qualifications').select('qualification_code').eq('user_id', user.id));
-  // Coordinator/Admin can act as Revisor without the tag (oversight tier - e.g. stepping in if
-  // the queue backs up), same anonymization as an Operator holding the REVISOR qualification.
-  const isRevisor = manage || myQuals.some(q => q.qualification_code === 'REVISOR');
-
-  main.innerHTML = `
-    <div class="panel" id="tasks-new-panel" style="display:none;"></div>
-    <div class="panel" id="tasks-review-panel" style="display:none;"><h2>Review queue <span class="hint">— we review only the task, so who did the work isn't shown here</span></h2><div id="tasks-review-list"></div></div>
-    <div class="panel" id="tasks-publish-panel" style="display:none;"><h2>Publish queue <span class="hint">— approved by a Revisor, ready to go live</span></h2><div id="tasks-publish-list"></div></div>
-    <div class="panel" id="tasks-finalize-panel" style="display:none;"><h2>Documents ready to publish <span class="hint">— task already closed; upload the final PDF and InPage file, then publish</span></h2><div id="tasks-finalize-list"></div></div>
-    <div class="panel"><h2>Open tasks <span class="hint">— free to claim</span></h2><div id="tasks-open-list"></div></div>
-    <div class="panel"><h2>My tasks</h2><div id="tasks-mine-list"></div></div>
-    <div class="panel" id="tasks-team-panel" style="display:none;"><h2>Team overview <span class="hint">— everyone's claimed tasks</span></h2><div id="tasks-team-list"></div></div>
-    <div class="panel"><h2>Completed</h2><div id="tasks-done-list"></div></div>`;
-
-  let operators = [];
-  if (manage) {
-    operators = await fetchOperators();
-    document.getElementById('tasks-new-panel').style.display = 'block';
-    renderNewTaskForm(operators);
-    document.getElementById('tasks-team-panel').style.display = 'block';
-  }
-  if (isRevisor) {
-    document.getElementById('tasks-review-panel').style.display = 'block';
-    await refreshReviewQueue();
-  }
-  if (isAdmin()) {
-    document.getElementById('tasks-publish-panel').style.display = 'block';
-    await refreshPublishQueue();
-    document.getElementById('tasks-finalize-panel').style.display = 'block';
-    await refreshFinalizeQueue();
-  }
-
-  await refreshTasks(user, manage, operators);
-}
-
-// Second, separate Admin step (after admin_decide_task('publish') already closed the task and
-// awarded credits): documents sitting at 'pending_publish' still need the final PDF - and
-// ideally the final InPage file, uploaded to Drive - before finalize_document_publish() makes
-// them live. Deliberately decoupled from the Publish queue above (2026-08-31 session decision):
-// closing the task shouldn't be blocked on the PDF being ready yet.
-async function refreshFinalizeQueue() {
-  const rows = await withStatus(sb.from('documents').select('*').eq('workflow_status', 'pending_publish').order('document_id'));
-  const box = document.getElementById('tasks-finalize-list');
-  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing waiting to be finalized right now.</div>'; return; }
-  box.innerHTML = rows.map(d => `
-    <div class="panel" data-id="${d.document_id}" style="margin-bottom:12px;">
-      <b>${esc(d.title)}</b> <span class="hint">Document #${esc(d.document_id)}</span>
-      <div class="btn-row"><button class="btn secondary finalize-download-draft">Download draft file</button></div>
-      <div class="field-grid" style="max-width:520px;">
-        <div class="field"><label>Final PDF ${d.storage_path ? '(uploaded)' : ''}</label><input type="file" class="finalize-pdf-input" accept=".pdf"></div>
-        <div class="field"><label>Final .INP for Drive ${d.renamed_inp_file_name ? '(uploaded)' : ''}</label><input type="file" class="finalize-inp-input" accept=".inp,.doc,.docx"></div>
-      </div>
-      <div class="btn-row"><button class="btn finalize-publish-btn">Publish</button></div>
-    </div>`).join('');
-  box.querySelectorAll('[data-id]').forEach(card => {
-    const id = parseInt(card.dataset.id, 10);
-    const d = rows.find(r => r.document_id === id);
-    card.querySelector('.finalize-download-draft').addEventListener('click', () => downloadDraftFile(id));
-    card.querySelector('.finalize-pdf-input').addEventListener('change', async e => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const baseName = computeFileName({ document_id: id, title: d.title });
-      const finalName = await uniqueFileName(baseName, id);
-      await withStatus(sb.storage.from(BUCKET).upload(finalName, file, { upsert: true }), 'Uploading PDF...');
-      await withStatus(sb.from('documents').update({ storage_path: finalName, file_name: finalName }).eq('document_id', id), 'Saving...');
-      await renderTasksView(document.getElementById('main'));
-    });
-    card.querySelector('.finalize-inp-input').addEventListener('change', async e => {
-      const file = e.target.files[0];
-      if (!file) return;
-      try {
-        const token = await getDriveAccessToken();
-        const driveFileName = `${id}-${file.name}`;
-        await uploadInpToGDrive(driveFileName, file, token);
-        await withStatus(sb.from('documents').update({ renamed_inp_file_name: driveFileName }).eq('document_id', id), 'Saving...');
-        await renderTasksView(document.getElementById('main'));
-      } catch (err) {
-        alert('Could not upload to Google Drive: ' + err.message);
-      }
-    });
-    card.querySelector('.finalize-publish-btn').addEventListener('click', async () => {
-      if (!d.storage_path) { if (!confirm('No final PDF uploaded yet - publish anyway?')) return; }
-      await withStatus(sb.rpc('finalize_document_publish', { p_document_id: id }), 'Publishing document...');
-      await renderTasksView(document.getElementById('main'));
-    });
-  });
-}
-
-async function refreshPublishQueue() {
-  const rows = await withStatus(sb.from('tasks').select('*').eq('status', 'approved').order('reviewed_at'));
-  const box = document.getElementById('tasks-publish-list');
-  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing waiting to be published right now.</div>'; return; }
-  const docTaskIds = rows.filter(t => t.document_id).map(t => t.id);
-  const candidateByTaskId = {};
-  if (docTaskIds.length) {
-    const candidates = await withStatus(sb.from('documents').select('document_id,source_task_id').in('source_task_id', docTaskIds));
-    for (const c of candidates) candidateByTaskId[c.source_task_id] = c.document_id;
-  }
-  box.innerHTML = rows.map(t => `
-    <div class="panel" data-id="${t.id}" style="margin-bottom:12px;">
-      <b>${esc(t.title)}</b> ${t.review_verdict === 'ok_but' ? '<span class="chat-tag">OK, but...</span>' : ''}
-      ${docLine(t)}
-      ${t.review_notes ? `<p class="hint">Revisor's note: ${esc(t.review_notes)}</p>` : ''}
-      ${candidateByTaskId[t.id] ? '<div class="btn-row"><button class="btn secondary task-publish-open-file">Open corrected file</button></div>' : ''}
-      <div class="btn-row">
-        <button class="btn task-publish-btn">Publish</button>
-        <button class="btn danger task-reject-btn">Reject</button>
-      </div>
-    </div>`).join('');
-  box.querySelectorAll('[data-id]').forEach(card => {
-    const id = parseInt(card.dataset.id, 10);
-    card.querySelector('.task-publish-open-file')?.addEventListener('click', () => downloadDraftFile(candidateByTaskId[id]));
-    card.querySelector('.task-publish-btn').addEventListener('click', async () => {
-      if (!confirm('Close this task? The operator gets the credits/reputation the Revisor\'s verdict implied. The document itself isn\'t live yet - you\'ll prepare the final PDF and publish it separately, from "Documents ready to publish" below.')) return;
-      await withStatus(sb.rpc('admin_decide_task', { p_task_id: id, p_decision: 'publish', p_note: null }), 'Closing task...');
-      await renderTasksView(document.getElementById('main'));
-    });
-    card.querySelector('.task-reject-btn').addEventListener('click', async () => {
-      const note = prompt('Why are you rejecting this, despite the Revisor\'s verdict? This closes the task with the same penalty as a fail - you can create a fresh task on the same document afterward from the Completed list.');
-      if (note === null) return;
-      if (!note.trim()) { alert('Please enter a reason.'); return; }
-      await withStatus(sb.rpc('admin_decide_task', { p_task_id: id, p_decision: 'reject', p_note: note.trim() }), 'Rejecting...');
-      await renderTasksView(document.getElementById('main'));
-    });
-  });
-}
-
-async function refreshReviewQueue() {
-  const rows = await withStatus(sb.rpc('get_review_queue'));
-  const box = document.getElementById('tasks-review-list');
-  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing waiting for review right now.</div>'; return; }
-  box.innerHTML = rows.map(t => `
-    <div class="panel" data-id="${t.id}" style="margin-bottom:12px;">
-      <b>${esc(t.title)}</b>
-      ${docLine(t)}
-      ${t.description ? `<p>${esc(t.description)}</p>` : ''}
-      ${t.candidate_document_id ? `<div class="btn-row"><button class="btn secondary review-open-file">Open corrected file</button></div>` : ''}
-      <div class="field"><label>Notes for the operator <span class="hint">(optional)</span></label><textarea class="review-notes" rows="2"></textarea></div>
-      <div class="btn-row">
-        <button class="btn review-ok">OK</button>
-        <button class="btn secondary review-okbut">OK, but...</button>
-        <button class="btn danger review-fail">Fail</button>
-      </div>
-    </div>`).join('');
-  box.querySelectorAll('[data-id]').forEach(card => {
-    const id = parseInt(card.dataset.id, 10);
-    const t = rows.find(r => r.id === id);
-    const notes = () => card.querySelector('.review-notes').value.trim() || null;
-    card.querySelector('.review-open-file')?.addEventListener('click', async () => {
-      const docRows = await withStatus(sb.rpc('get_review_document', { p_document_id: t.candidate_document_id }));
-      const draftPath = docRows[0]?.draft_inp_path;
-      if (!draftPath) { alert('No file found for this revision.'); return; }
-      const { data } = await sb.storage.from(BUCKET).createSignedUrl(draftPath, 60);
-      if (data?.signedUrl) window.open(data.signedUrl, '_blank');
-    });
-    const submitVerdict = async (verdict, confirmMsg) => {
-      if (confirmMsg && !confirm(confirmMsg)) return;
-      await withStatus(sb.rpc('submit_task_review', { p_task_id: id, p_verdict: verdict, p_notes: notes() }), 'Submitting review...');
-      await renderTasksView(document.getElementById('main'));
-    };
-    card.querySelector('.review-ok').addEventListener('click', () => submitVerdict('ok'));
-    card.querySelector('.review-okbut').addEventListener('click', () => submitVerdict('ok_but'));
-    card.querySelector('.review-fail').addEventListener('click', () => submitVerdict('fail', 'Mark this as failed? The task will close and a new open task will be created for someone else to redo (not the same operator).'));
-  });
-}
-
-function renderNewTaskForm(operators) {
-  // Consumed once: a "Create task" click from the Messages inbox (chat.js) stashes a prefill
-  // here via State, then hands off to this tab - see chat.js's startTaskFromMessage.
-  const prefill = State.taskPrefill;
-  State.taskPrefill = null;
-
-  const panel = document.getElementById('tasks-new-panel');
-  panel.innerHTML = `
-    <h2>New task</h2>
-    <div class="field-grid" style="max-width:640px;">
-      <div class="field"><label>Title</label><input id="task-new-title" value="${esc(prefill?.title || '')}"></div>
-      <div class="field"><label>Description</label><textarea id="task-new-desc" rows="2">${esc(prefill?.description || '')}</textarea></div>
-      <div class="field"><label>Category <span class="hint">(optional — gates who can see/claim it)</span></label>
-        <select id="task-new-category">${optionsHtml(State.optionListsByName.task_category || [], '', true)}</select>
-      </div>
-      <div class="field"><label>Document ID <span class="hint">(optional)</span></label><input id="task-new-docid" type="number" min="1" value="${esc(prefill?.document_id || '')}"></div>
-      <div class="field"><label>Document pages <span class="hint">(looked up from the document)</span></label><input id="task-new-pages" type="number" min="0" value="${esc(prefill?.document_pages ?? '')}"></div>
-      <div class="field"><label>Base credits <span class="hint">(category rate &times; pages)</span></label><input id="task-new-base-credits" type="number" min="0" readonly style="background:var(--paper-card, #f3f4ea);"></div>
-      <div class="field"><label>Extra credits <span class="hint">(difficulty/urgency bonus, optional)</span></label><input id="task-new-extra-credits" type="number" value="0"></div>
-      <div class="field" id="task-new-extra-note-field" style="display:none;grid-column:1/-1;"><label>Why the extra credits? <span class="hint">(required if not zero)</span></label><textarea id="task-new-extra-note" rows="2"></textarea></div>
-      <div class="field" style="grid-column:1/-1;"><label>Total credits</label><div id="task-new-total-credits" style="font-size:14px;font-weight:600;padding:4px 0;">0</div></div>
-      <div class="field"><label>Assign directly to <span class="hint">(optional — otherwise left open to claim; list narrows to who's qualified once a category is picked)</span></label>
-        <select id="task-new-assignee"></select>
-      </div>
-      <div class="field" id="task-new-due-field" style="display:none;"><label>Due date</label><input id="task-new-due" type="date"></div>
-    </div>
-    <div class="btn-row"><button class="btn" id="task-new-submit">Create task</button></div>`;
-
-  let categoryRates = {};
-  sb.from('task_category_rates').select('*').then(({ data }) => {
-    categoryRates = Object.fromEntries((data || []).map(r => [r.category, r.credits_per_page]));
-    recomputeCredits();
-  });
-
-  function recomputeCredits() {
-    const category = document.getElementById('task-new-category').value;
-    const pages = parseFloat(document.getElementById('task-new-pages').value) || 0;
-    const rate = categoryRates[category] || 0;
-    const base = Math.round(rate * pages);
-    document.getElementById('task-new-base-credits').value = base;
-    const extra = parseInt(document.getElementById('task-new-extra-credits').value, 10) || 0;
-    document.getElementById('task-new-total-credits').textContent = base + extra;
-    document.getElementById('task-new-extra-note-field').style.display = extra !== 0 ? 'block' : 'none';
-  }
-  document.getElementById('task-new-pages').addEventListener('input', recomputeCredits);
-  document.getElementById('task-new-extra-credits').addEventListener('input', recomputeCredits);
-  document.getElementById('task-new-category').addEventListener('change', recomputeCredits);
-  function refreshAssigneeOptions() {
-    const category = document.getElementById('task-new-category').value;
-    const requiredQual = CATEGORY_REQUIRES_QUALIFICATION[category];
-    const eligible = requiredQual ? operators.filter(o => o.qualifications.has(requiredQual)) : operators;
-    const sel = document.getElementById('task-new-assignee');
-    const prior = sel.value;
-    sel.innerHTML = '<option value="">— leave open —</option>' + eligible.map(o => `<option value="${o.user_id}" data-email="${esc(o.email)}">${esc(o.displayName)}</option>`).join('');
-    sel.value = eligible.some(o => o.user_id === prior) ? prior : '';
-    document.getElementById('task-new-due-field').style.display = sel.value ? 'block' : 'none';
-  }
-  refreshAssigneeOptions();
-  document.getElementById('task-new-category').addEventListener('change', refreshAssigneeOptions);
-  document.getElementById('task-new-assignee').addEventListener('change', e => {
-    document.getElementById('task-new-due-field').style.display = e.target.value ? 'block' : 'none';
-  });
-  // Manually typing/changing a document ID also looks up its page count, same as the
-  // "Create task" button from Messages does - only when the pages field is still empty, so it
-  // never clobbers a value the coordinator already typed or that came in via prefill.
-  document.getElementById('task-new-docid').addEventListener('change', async e => {
-    const pagesField = document.getElementById('task-new-pages');
-    const docId = e.target.value.trim();
-    if (!docId || pagesField.value !== '') return;
-    const { data } = await sb.from('documents').select('pages').eq('document_id', parseInt(docId, 10)).maybeSingle();
-    if (data?.pages != null) pagesField.value = data.pages;
-    recomputeCredits();
-  });
-  document.getElementById('task-new-submit').addEventListener('click', async () => {
-    const title = document.getElementById('task-new-title').value.trim();
-    if (!title) { alert('Please enter a title.'); return; }
-    const docId = document.getElementById('task-new-docid').value.trim();
-    const pages = document.getElementById('task-new-pages').value.trim();
-    const baseCredits = parseInt(document.getElementById('task-new-base-credits').value, 10) || 0;
-    const extraCredits = parseInt(document.getElementById('task-new-extra-credits').value, 10) || 0;
-    const extraNote = document.getElementById('task-new-extra-note').value.trim();
-    if (extraCredits !== 0 && !extraNote) { alert('Please explain why you are adding extra credits.'); return; }
-    const assigneeSel = document.getElementById('task-new-assignee');
-    const assigneeId = assigneeSel.value || null;
-    const assigneeEmail = assigneeId ? assigneeSel.selectedOptions[0].dataset.email : null;
-    const dueDate = document.getElementById('task-new-due').value || null;
-    if (assigneeId && !dueDate) { alert('Please set a due date for the person you are assigning this to.'); return; }
-    const { data: { user } } = await sb.auth.getUser();
-    await withStatus(sb.from('tasks').insert({
-      title, description: document.getElementById('task-new-desc').value.trim() || null,
-      category: document.getElementById('task-new-category').value || null,
-      document_id: docId ? parseInt(docId, 10) : null,
-      document_pages: pages ? parseInt(pages, 10) : null,
-      base_credits: baseCredits, extra_credits: extraCredits, extra_credits_note: extraNote || null,
-      credits: baseCredits + extraCredits,
-      created_by_email: user.email,
-      status: assigneeId ? 'claimed' : 'open',
-      claimed_by: assigneeId, claimed_by_email: assigneeEmail,
-      claimed_at: assigneeId ? new Date().toISOString() : null,
-      due_date: dueDate,
-    }), 'Creating task...');
-    const main = document.getElementById('main');
-    await renderTasksView(main);
-  });
-}
-
-const ACTIVE_STATUSES = ['claimed', 'submitted'];
-const HISTORY_STATUSES = ['approved', 'rejected', 'published'];
-const STATUS_LABELS = { submitted: 'Waiting for review', approved: 'Approved', rejected: 'Rejected', published: 'Published' };
-
-async function refreshTasks(user, manage, operators) {
-  const rows = await withStatus(sb.from('tasks').select('*').order('created_at', { ascending: false }));
-  const nameMap = manage ? await nameMapForEmails(rows.flatMap(t => [t.claimed_by_email, t.created_by_email])) : {};
-
-  const myClaimedDocTaskIds = rows.filter(t => t.status === 'claimed' && t.claimed_by === user.id && t.document_id).map(t => t.id);
-  const candidateByTaskId = {};
-  if (myClaimedDocTaskIds.length) {
-    const candidates = await withStatus(sb.from('documents').select('document_id,source_task_id').in('source_task_id', myClaimedDocTaskIds));
-    for (const c of candidates) candidateByTaskId[c.source_task_id] = c.document_id;
-  }
-
-  renderOpenList(rows.filter(t => t.status === 'open'));
-  renderMineList(rows.filter(t => ACTIVE_STATUSES.includes(t.status) && t.claimed_by === user.id), candidateByTaskId);
-  if (manage) renderTeamList(rows.filter(t => ACTIVE_STATUSES.includes(t.status) && t.claimed_by !== user.id), operators, nameMap);
-  renderDoneList(rows.filter(t => HISTORY_STATUSES.includes(t.status)), manage, nameMap);
 }
 
 function docLine(t) {
@@ -336,31 +49,301 @@ function docLine(t) {
   return parts.length ? `<p class="hint">${parts.join(' · ')}</p>` : '';
 }
 
-function renderOpenList(rows) {
-  const box = document.getElementById('tasks-open-list');
-  if (!rows.length) { box.innerHTML = '<div class="empty-msg">No open tasks right now.</div>'; return; }
-  box.innerHTML = rows.map(t => `
-    <div class="panel" data-id="${t.id}" style="margin-bottom:12px;">
-      <b>${esc(t.title)}</b>
-      ${docLine(t)}
-      ${t.description ? `<p>${esc(t.description)}</p>` : ''}
-      <div class="field-grid" style="max-width:320px;">
-        <div class="field"><label>Your target due date</label><input class="task-claim-due" type="date"></div>
+// ---------- Entry point + inner tab bar ----------
+
+let currentView = 'store';
+
+export async function renderTasksView(main) {
+  if (!canWrite()) { main.innerHTML = '<div class="empty-msg">Operator access required.</div>'; return; }
+  const { data: { user } } = await sb.auth.getUser();
+  const manage = canReviewApplications(); // same tier as Team Applications review: Coordinator + Admin
+  const myQuals = await withStatus(sb.from('user_qualifications').select('qualification_code').eq('user_id', user.id));
+  // Coordinator/Admin can act as Revisor without the tag (oversight tier - e.g. stepping in if
+  // the queue backs up), same anonymization as an Operator holding the REVISOR qualification.
+  const isRevisor = manage || myQuals.some(q => q.qualification_code === 'REVISOR');
+  const admin = isAdmin();
+
+  // A "Create task" from Messages, or "redo" from Team overview, stashes a prefill and jumps
+  // here (see chat.js's startTaskFromMessage) - always land on Store, where the New task
+  // popup lives, so the prefill actually gets seen.
+  if (State.taskPrefill) currentView = 'store';
+
+  const tabs = [{ id: 'store', label: 'Tasks Store' }, { id: 'mine', label: 'My Tasks' }];
+  if (manage) tabs.push({ id: 'team', label: 'Team overview' });
+  if (isRevisor) tabs.push({ id: 'review', label: 'Review Tasks' });
+  if (admin) tabs.push({ id: 'publish', label: 'Publish Tasks' });
+  if (!tabs.some(t => t.id === currentView)) currentView = 'store';
+
+  main.innerHTML = `
+    <div class="btn-row" style="margin-bottom:16px;">
+      ${tabs.map(t => `<button class="btn ${t.id === currentView ? '' : 'secondary'} tasks-nav-btn" data-view="${t.id}">${t.label}</button>`).join('')}
+    </div>
+    <div id="tasks-body"></div>`;
+  main.querySelectorAll('.tasks-nav-btn').forEach(b => b.addEventListener('click', () => {
+    currentView = b.dataset.view;
+    renderTasksView(main);
+  }));
+
+  const body = document.getElementById('tasks-body');
+  if (currentView === 'store') await renderStoreView(body, manage);
+  else if (currentView === 'mine') await renderMineView(body, user);
+  else if (currentView === 'team') await renderTeamView(body);
+  else if (currentView === 'review') await renderReviewViewBody(body);
+  else if (currentView === 'publish') await renderPublishViewBody(body);
+}
+
+// ---------- Tasks Store: public, same for every role - free tasks to claim ----------
+
+async function renderStoreView(body, manage) {
+  const rows = await withStatus(sb.from('tasks').select('*').eq('status', 'open').order('created_at', { ascending: false }));
+  let sortDesc = true;
+
+  body.innerHTML = `
+    <div class="btn-row" style="justify-content:space-between;align-items:flex-end;flex-wrap:wrap;">
+      <div class="field-grid" style="margin:0;">
+        <div class="field"><label>Category</label><select id="store-category">${optionsHtml(State.optionListsByName.task_category || [], '', true)}</select></div>
+        <div class="field"><label>Min credits</label><input id="store-mincredits" type="number" min="0" style="width:110px;"></div>
+        <div class="field"><label>Order</label><button class="btn secondary" id="store-sort-btn">Newest first</button></div>
       </div>
-      <div class="btn-row"><button class="btn task-claim-btn">Claim this task</button></div>
-    </div>`).join('');
-  box.querySelectorAll('[data-id]').forEach(card => {
-    card.querySelector('.task-claim-btn').addEventListener('click', async () => {
-      const due = card.querySelector('.task-claim-due').value;
-      if (!due) { alert('Please set a target due date before claiming.'); return; }
-      const { data: { user } } = await sb.auth.getUser();
-      await withStatus(sb.from('tasks').update({
-        status: 'claimed', claimed_by: user.id, claimed_by_email: user.email,
-        claimed_at: new Date().toISOString(), due_date: due,
-      }).eq('id', card.dataset.id), 'Claiming...');
-      await renderTasksView(document.getElementById('main'));
+      ${manage ? '<button class="btn" id="store-new-task-btn">+ New task</button>' : ''}
+    </div>
+    <div class="grid-wrap" style="margin-top:12px;"><table class="grid">
+      <thead><tr><th>ID</th><th>Title</th><th>Category</th><th>Credits</th><th>Posted</th><th></th></tr></thead>
+      <tbody id="store-rows"></tbody>
+    </table></div>`;
+
+  function applyAndRender() {
+    const cat = document.getElementById('store-category').value;
+    const minCredits = parseInt(document.getElementById('store-mincredits').value, 10) || 0;
+    const filtered = rows
+      .filter(t => (!cat || t.category === cat) && (t.credits || 0) >= minCredits)
+      .sort((a, b) => sortDesc ? new Date(b.created_at) - new Date(a.created_at) : new Date(a.created_at) - new Date(b.created_at));
+    const tbody = document.getElementById('store-rows');
+    if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">No open tasks match this filter.</td></tr>'; return; }
+    tbody.innerHTML = filtered.map(t => `
+      <tr data-id="${t.id}">
+        <td>#${esc(t.id)}</td>
+        <td>${esc(t.title)}${t.document_id ? ` <span class="hint">Doc #${esc(t.document_id)}</span>` : ''}</td>
+        <td>${esc(labelOf(State.optionListsByName.task_category || [], t.category)) || '—'}</td>
+        <td>${t.credits != null ? esc(t.credits) : '—'}</td>
+        <td>${relativeDate(t.created_at)}</td>
+        <td><button class="btn secondary store-claim-btn" style="padding:4px 12px;">Claim</button></td>
+      </tr>`).join('');
+    tbody.querySelectorAll('.store-claim-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.closest('tr').dataset.id;
+        openClaimPopup(filtered.find(x => String(x.id) === id));
+      });
     });
+  }
+
+  document.getElementById('store-category').addEventListener('change', applyAndRender);
+  document.getElementById('store-mincredits').addEventListener('input', applyAndRender);
+  document.getElementById('store-sort-btn').addEventListener('click', () => {
+    sortDesc = !sortDesc;
+    document.getElementById('store-sort-btn').textContent = sortDesc ? 'Newest first' : 'Oldest first';
+    applyAndRender();
   });
+  applyAndRender();
+
+  if (manage) {
+    const operators = await fetchOperators();
+    document.getElementById('store-new-task-btn').addEventListener('click', () => openNewTaskPopup(operators));
+    if (State.taskPrefill) openNewTaskPopup(operators);
+  }
+}
+
+function openClaimPopup(t) {
+  document.getElementById('claim-task-popup')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'claim-task-popup';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:2100;background:rgba(20,16,10,.55);display:flex;align-items:center;justify-content:center;overflow:auto;padding:24px 16px;';
+  overlay.innerHTML = '<div class="panel" style="max-width:420px;width:100%;margin:0;"></div>';
+  document.body.appendChild(overlay);
+  const panel = overlay.querySelector('.panel');
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  panel.innerHTML = `
+    <h2 style="margin-top:0;">Claim task <span class="hint">#${esc(t.id)}</span></h2>
+    <p>${esc(t.title)}</p>
+    ${docLine(t)}
+    <div class="field"><label>Your target due date</label><input id="claim-due" type="date"></div>
+    <div class="btn-row"><button class="btn" id="claim-confirm">Claim</button><button class="btn secondary" id="claim-cancel">Cancel</button></div>`;
+  panel.querySelector('#claim-cancel').addEventListener('click', close);
+  panel.querySelector('#claim-confirm').addEventListener('click', async () => {
+    const due = panel.querySelector('#claim-due').value;
+    if (!due) { alert('Please set a target due date before claiming.'); return; }
+    const { data: { user } } = await sb.auth.getUser();
+    await withStatus(sb.from('tasks').update({
+      status: 'claimed', claimed_by: user.id, claimed_by_email: user.email,
+      claimed_at: new Date().toISOString(), due_date: due,
+    }).eq('id', t.id), 'Claiming...');
+    close();
+    await renderTasksView(document.getElementById('main'));
+  });
+}
+
+function openNewTaskPopup(operators) {
+  document.getElementById('new-task-popup')?.remove();
+  // Consumed once: a "Create task" click from the Messages inbox (chat.js) or a "redo" from
+  // Team overview stashes a prefill here via State, then hands off to this popup.
+  const prefill = State.taskPrefill;
+  State.taskPrefill = null;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'new-task-popup';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:2100;background:rgba(20,16,10,.55);display:flex;align-items:center;justify-content:center;overflow:auto;padding:24px 16px;';
+  overlay.innerHTML = '<div class="panel" style="max-width:560px;width:100%;margin:0;"></div>';
+  document.body.appendChild(overlay);
+  const panel = overlay.querySelector('.panel');
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  panel.innerHTML = `
+    <h2 style="margin-top:0;">New task</h2>
+    <div class="field-grid" style="max-width:640px;">
+      <div class="field"><label>Title</label><input id="task-new-title" value="${esc(prefill?.title || '')}"></div>
+      <div class="field"><label>Description</label><textarea id="task-new-desc" rows="2">${esc(prefill?.description || '')}</textarea></div>
+      <div class="field"><label>Category <span class="hint">(optional — gates who can see/claim it)</span></label>
+        <select id="task-new-category">${optionsHtml(State.optionListsByName.task_category || [], '', true)}</select>
+      </div>
+      <div class="field"><label>Document ID <span class="hint">(optional)</span></label><input id="task-new-docid" type="number" min="1" value="${esc(prefill?.document_id || '')}"></div>
+      <div class="field"><label>Document pages <span class="hint">(looked up from the document)</span></label><input id="task-new-pages" type="number" min="0" value="${esc(prefill?.document_pages ?? '')}"></div>
+      <div class="field"><label>Base credits <span class="hint">(category rate &times; pages)</span></label><input id="task-new-base-credits" type="number" min="0" readonly style="background:var(--paper-card, #f3f4ea);"></div>
+      <div class="field"><label>Extra credits <span class="hint">(difficulty/urgency bonus, optional)</span></label><input id="task-new-extra-credits" type="number" value="0"></div>
+      <div class="field" id="task-new-extra-note-field" style="display:none;grid-column:1/-1;"><label>Why the extra credits? <span class="hint">(required if not zero)</span></label><select id="task-new-extra-note">${optionsHtml(State.optionListsByName.extra_credit_reason || [], '', true)}</select></div>
+      <div class="field" style="grid-column:1/-1;"><label>Total credits</label><div id="task-new-total-credits" style="font-size:14px;font-weight:600;padding:4px 0;">0</div></div>
+      <div class="field"><label>Assign directly to <span class="hint">(optional — otherwise left open to claim; list narrows to who's qualified once a category is picked)</span></label>
+        <select id="task-new-assignee"></select>
+      </div>
+      <div class="field" id="task-new-due-field" style="display:none;"><label>Due date</label><input id="task-new-due" type="date"></div>
+    </div>
+    <div class="btn-row"><button class="btn" id="task-new-submit">Create task</button><button class="btn secondary" id="task-new-cancel">Cancel</button></div>`;
+
+  panel.querySelector('#task-new-cancel').addEventListener('click', close);
+
+  let categoryRates = {};
+  sb.from('task_category_rates').select('*').then(({ data }) => {
+    categoryRates = Object.fromEntries((data || []).map(r => [r.category, r.credits_per_page]));
+    recomputeCredits();
+  });
+
+  function recomputeCredits() {
+    const category = panel.querySelector('#task-new-category').value;
+    const pages = parseFloat(panel.querySelector('#task-new-pages').value) || 0;
+    const rate = categoryRates[category] || 0;
+    const base = Math.round(rate * pages);
+    panel.querySelector('#task-new-base-credits').value = base;
+    const extra = parseInt(panel.querySelector('#task-new-extra-credits').value, 10) || 0;
+    panel.querySelector('#task-new-total-credits').textContent = base + extra;
+    panel.querySelector('#task-new-extra-note-field').style.display = extra !== 0 ? 'block' : 'none';
+  }
+  panel.querySelector('#task-new-pages').addEventListener('input', recomputeCredits);
+  panel.querySelector('#task-new-extra-credits').addEventListener('input', recomputeCredits);
+  panel.querySelector('#task-new-category').addEventListener('change', recomputeCredits);
+  function refreshAssigneeOptions() {
+    const category = panel.querySelector('#task-new-category').value;
+    const requiredQual = CATEGORY_REQUIRES_QUALIFICATION[category];
+    const eligible = requiredQual ? operators.filter(o => o.qualifications.has(requiredQual)) : operators;
+    const sel = panel.querySelector('#task-new-assignee');
+    const prior = sel.value;
+    sel.innerHTML = '<option value="">— leave open —</option>' + eligible.map(o => `<option value="${o.user_id}" data-email="${esc(o.email)}">${esc(o.displayName)}</option>`).join('');
+    sel.value = eligible.some(o => o.user_id === prior) ? prior : '';
+    panel.querySelector('#task-new-due-field').style.display = sel.value ? 'block' : 'none';
+  }
+  refreshAssigneeOptions();
+  panel.querySelector('#task-new-category').addEventListener('change', refreshAssigneeOptions);
+  panel.querySelector('#task-new-assignee').addEventListener('change', e => {
+    panel.querySelector('#task-new-due-field').style.display = e.target.value ? 'block' : 'none';
+  });
+  // Manually typing/changing a document ID also looks up its page count, same as the
+  // "Create task" button from Messages does - only when the pages field is still empty, so it
+  // never clobbers a value the coordinator already typed or that came in via prefill.
+  panel.querySelector('#task-new-docid').addEventListener('change', async e => {
+    const pagesField = panel.querySelector('#task-new-pages');
+    const docId = e.target.value.trim();
+    if (!docId || pagesField.value !== '') return;
+    const { data } = await sb.from('documents').select('pages').eq('document_id', parseInt(docId, 10)).maybeSingle();
+    if (data?.pages != null) pagesField.value = data.pages;
+    recomputeCredits();
+  });
+  panel.querySelector('#task-new-submit').addEventListener('click', async () => {
+    const title = panel.querySelector('#task-new-title').value.trim();
+    if (!title) { alert('Please enter a title.'); return; }
+    const docId = panel.querySelector('#task-new-docid').value.trim();
+    const pages = panel.querySelector('#task-new-pages').value.trim();
+    const baseCredits = parseInt(panel.querySelector('#task-new-base-credits').value, 10) || 0;
+    const extraCredits = parseInt(panel.querySelector('#task-new-extra-credits').value, 10) || 0;
+    const extraNote = panel.querySelector('#task-new-extra-note').value.trim();
+    if (extraCredits !== 0 && !extraNote) { alert('Please explain why you are adding extra credits.'); return; }
+    const assigneeSel = panel.querySelector('#task-new-assignee');
+    const assigneeId = assigneeSel.value || null;
+    const assigneeEmail = assigneeId ? assigneeSel.selectedOptions[0].dataset.email : null;
+    const dueDate = panel.querySelector('#task-new-due').value || null;
+    if (assigneeId && !dueDate) { alert('Please set a due date for the person you are assigning this to.'); return; }
+    const { data: { user } } = await sb.auth.getUser();
+    await withStatus(sb.from('tasks').insert({
+      title, description: panel.querySelector('#task-new-desc').value.trim() || null,
+      category: panel.querySelector('#task-new-category').value || null,
+      document_id: docId ? parseInt(docId, 10) : null,
+      document_pages: pages ? parseInt(pages, 10) : null,
+      base_credits: baseCredits, extra_credits: extraCredits, extra_credits_note: extraNote || null,
+      credits: baseCredits + extraCredits,
+      created_by_email: user.email,
+      status: assigneeId ? 'claimed' : 'open',
+      claimed_by: assigneeId, claimed_by_email: assigneeEmail,
+      claimed_at: assigneeId ? new Date().toISOString() : null,
+      due_date: dueDate,
+    }), 'Creating task...');
+    close();
+    await renderTasksView(document.getElementById('main'));
+  });
+}
+
+// ---------- My Tasks: personal queue (any role) + a computed credits ledger ----------
+
+async function renderMineView(body, user) {
+  const rows = await withStatus(sb.from('tasks').select('*').eq('claimed_by', user.id).order('created_at', { ascending: false }));
+  const docTaskIds = rows.filter(t => t.status === 'claimed' && t.document_id).map(t => t.id);
+  const candidateByTaskId = {};
+  if (docTaskIds.length) {
+    const candidates = await withStatus(sb.from('documents').select('document_id,source_task_id').in('source_task_id', docTaskIds));
+    for (const c of candidates) candidateByTaskId[c.source_task_id] = c.document_id;
+  }
+
+  body.innerHTML = `
+    <div class="btn-row"><button class="btn secondary" id="mine-credits-btn">My credits</button></div>
+    <div id="mine-ledger" style="display:none;margin-top:12px;"></div>
+    <h3>In progress</h3><div id="mine-active-list"></div>
+    <h3>Waiting for review</h3><div id="mine-submitted-list"></div>
+    <h3>Closed</h3><div id="mine-closed-list"></div>`;
+
+  renderMineActiveList(rows.filter(t => t.status === 'claimed'), candidateByTaskId);
+  renderMineSubmittedList(rows.filter(t => t.status === 'submitted'));
+  renderMineClosedList(rows.filter(t => ['approved', 'rejected', 'published'].includes(t.status)));
+
+  document.getElementById('mine-credits-btn').addEventListener('click', () => toggleLedger(user));
+}
+
+async function toggleLedger(user) {
+  const box = document.getElementById('mine-ledger');
+  if (box.style.display === 'block') { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  box.innerHTML = '<div class="hint">Loading...</div>';
+  const [events, pending] = await Promise.all([
+    withStatus(sb.from('task_outcome_events').select('credit_delta').eq('user_id', user.id)),
+    withStatus(sb.from('tasks').select('credits').eq('claimed_by', user.id).in('status', ['claimed', 'submitted', 'approved'])),
+  ]);
+  const earned = events.reduce((sum, e) => sum + (e.credit_delta || 0), 0);
+  const inProgress = pending.reduce((sum, t) => sum + (t.credits || 0), 0);
+  box.innerHTML = `
+    <div class="panel">
+      <div class="field-grid">
+        <div class="field"><label>Earned</label><div style="font-size:20px;font-weight:600;">${esc(earned)}</div></div>
+        <div class="field"><label>In progress <span class="hint">(if approved)</span></label><div style="font-size:20px;font-weight:600;">${esc(inProgress)}</div></div>
+        <div class="field"><label>Redeemed</label><div style="font-size:20px;font-weight:600;">0 <span class="hint">(not available yet)</span></div></div>
+      </div>
+    </div>`;
 }
 
 // Opens the DRAFT correction (an operator's raw upload, still in Supabase Storage) for the
@@ -422,31 +405,30 @@ async function uploadCorrectedFile(task, file) {
   }
 }
 
-function renderMineList(rows, candidateByTaskId) {
-  const box = document.getElementById('tasks-mine-list');
-  if (!rows.length) { box.innerHTML = '<div class="empty-msg">You have no claimed tasks. Check "Open tasks" above.</div>'; return; }
+function renderMineActiveList(rows, candidateByTaskId) {
+  const box = document.getElementById('mine-active-list');
+  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing in progress. Check Tasks Store to claim one.</div>'; return; }
   box.innerHTML = rows.map(t => {
     const hasCandidate = !!candidateByTaskId[t.id];
-    const needsFile = t.status === 'claimed' && t.document_id;
+    const needsFile = t.document_id;
     return `
-    <div class="panel" data-id="${t.id}" style="margin-bottom:12px;${isOverdue(t) ? 'border-color:var(--danger);' : ''}">
+    <div class="panel" data-id="${t.id}" style="margin-bottom:12px;position:relative;${isOverdue(t) ? 'border-color:var(--danger);' : ''}">
+      ${taskIdBadge(t)}
       <b>${esc(t.title)}</b> ${isOverdue(t) ? '<span class="chat-tag" style="color:var(--danger);">Overdue</span>' : ''}
-      ${t.status === 'submitted' ? '<span class="chat-tag">Waiting for review</span>' : ''}
       ${docLine(t)}
       ${t.description ? `<p>${esc(t.description)}</p>` : ''}
-      ${t.status === 'claimed' ? `
-        <p class="hint">Due ${formatDate(t.due_date)} <span class="hint">(fixed when you claimed it)</span></p>
-        ${needsFile ? `
-          <div class="btn-row">
-            <button class="btn secondary task-mine-download">Download original file</button>
-            <label class="btn secondary" style="cursor:pointer;">Upload corrected file<input type="file" class="task-mine-upload-input" accept=".inp,.doc,.docx,.pdf" style="display:none;"></label>
-            ${hasCandidate ? '<button class="btn secondary task-mine-download-mine">Download my corrected file</button>' : ''}
-          </div>
-          <p class="hint">${hasCandidate ? 'Corrected file uploaded - you can still replace it above before submitting.' : 'Upload the corrected file before you can submit this for review.'}</p>` : ''}
+      <p class="hint">Due ${formatDate(t.due_date)} <span class="hint">(fixed when you claimed it)</span></p>
+      ${needsFile ? `
         <div class="btn-row">
-          <button class="btn task-mine-submit" ${needsFile && !hasCandidate ? 'disabled' : ''}>Submit for review</button>
-          <button class="btn secondary task-mine-giveup">Give up this task</button>
-        </div>` : '<p class="hint">A Revisor will look at this next - no action needed from you for now.</p>'}
+          <button class="btn secondary task-mine-download">Download original file</button>
+          <label class="btn secondary" style="cursor:pointer;">Upload corrected file<input type="file" class="task-mine-upload-input" accept=".inp,.doc,.docx,.pdf" style="display:none;"></label>
+          ${hasCandidate ? '<button class="btn secondary task-mine-download-mine">Download my corrected file</button>' : ''}
+        </div>
+        <p class="hint">${hasCandidate ? 'Corrected file uploaded - you can still replace it above before submitting.' : 'Upload the corrected file before you can submit this for review.'}</p>` : ''}
+      <div class="btn-row">
+        <button class="btn task-mine-submit" ${needsFile && !hasCandidate ? 'disabled' : ''}>Submit for review</button>
+        <button class="btn secondary task-mine-giveup">Give up this task</button>
+      </div>
     </div>`;
   }).join('');
   box.querySelectorAll('[data-id]').forEach(card => {
@@ -475,19 +457,83 @@ function renderMineList(rows, candidateByTaskId) {
   });
 }
 
+function renderMineSubmittedList(rows) {
+  const box = document.getElementById('mine-submitted-list');
+  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing waiting for review.</div>'; return; }
+  box.innerHTML = rows.map(t => `
+    <div class="panel" style="margin-bottom:12px;position:relative;">
+      ${taskIdBadge(t)}
+      <b>${esc(t.title)}</b>
+      ${docLine(t)}
+      <p class="hint">A Revisor will look at this next - no action needed from you for now.</p>
+    </div>`).join('');
+}
+
+function renderMineClosedList(rows) {
+  const box = document.getElementById('mine-closed-list');
+  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing closed yet.</div>'; return; }
+  box.innerHTML = rows.slice(0, 30).map(t => `
+    <div class="panel" style="margin-bottom:12px;position:relative;opacity:.8;">
+      ${taskIdBadge(t)}
+      <div class="chat-meta">${esc(t.title)} · ${esc(STATUS_LABELS[t.status] || t.status)}${t.review_verdict ? ` (${esc(t.review_verdict)})` : ''}</div>
+      ${t.review_notes ? `<p class="hint">${esc(t.review_notes)}</p>` : ''}
+    </div>`).join('');
+}
+
+// ---------- Team overview: Coordinator/Admin, everyone else's tasks (active + history) ----------
+
+async function renderTeamView(body) {
+  const { data: { user } } = await sb.auth.getUser();
+  const [rows, operators] = await Promise.all([
+    withStatus(sb.from('tasks').select('*').neq('status', 'open').neq('claimed_by', user.id).order('created_at', { ascending: false })),
+    fetchOperators(),
+  ]);
+  const nameMap = await nameMapForEmails(rows.flatMap(t => [t.claimed_by_email, t.created_by_email]));
+
+  body.innerHTML = `
+    <div class="field-grid">
+      <div class="field"><label><input type="checkbox" id="team-overdue"> Overdue only</label></div>
+      <div class="field"><label>Category</label><select id="team-category">${optionsHtml(State.optionListsByName.task_category || [], '', true)}</select></div>
+      <div class="field"><label>Operator</label><select id="team-operator"><option value="">All operators</option>${operators.map(o => `<option value="${o.user_id}">${esc(o.displayName)}</option>`).join('')}</select></div>
+      <div class="field"><label>Status</label><select id="team-status"><option value="">All statuses</option>${Object.entries(STATUS_LABELS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
+    </div>
+    <div id="team-list" style="margin-top:12px;"></div>`;
+
+  const apply = () => {
+    const overdueOnly = document.getElementById('team-overdue').checked;
+    const cat = document.getElementById('team-category').value;
+    const op = document.getElementById('team-operator').value;
+    const status = document.getElementById('team-status').value;
+    const filtered = rows.filter(t =>
+      (!overdueOnly || isOverdue(t)) &&
+      (!cat || t.category === cat) &&
+      (!op || t.claimed_by === op) &&
+      (!status || t.status === status));
+    renderTeamList(filtered, operators, nameMap);
+  };
+  ['team-overdue', 'team-category', 'team-operator', 'team-status'].forEach(id => document.getElementById(id).addEventListener('change', apply));
+  apply();
+}
+
 function renderTeamList(rows, operators, nameMap) {
-  const box = document.getElementById('tasks-team-list');
-  if (!rows.length) { box.innerHTML = '<div class="empty-msg">No one else has a claimed task right now.</div>'; return; }
+  const box = document.getElementById('team-list');
+  if (!rows.length) { box.innerHTML = '<div class="empty-msg">No tasks match this filter.</div>'; return; }
   const repByUid = {};
   for (const o of operators) repByUid[o.user_id] = o.reputation;
+  // A straight Revisor "fail" already auto-spawns a retry task - only an Admin override
+  // (rejected despite an ok/ok_but verdict) needs this manual follow-up, since that path is a
+  // deliberate one-off decision rather than an automatic respawn.
+  const needsRedo = t => t.status === 'rejected' && t.review_verdict !== 'fail';
   box.innerHTML = rows.map(t => {
     const rep = repByUid[t.claimed_by];
     const lowRep = rep != null && rep < LOW_REPUTATION_THRESHOLD;
     return `
-    <div class="panel" data-id="${t.id}" style="margin-bottom:12px;${isOverdue(t) || lowRep ? 'border-color:var(--danger);' : ''}">
-      <div class="chat-meta"><b>${esc(t.title)}</b> · ${esc(nameMap[t.claimed_by_email] || t.claimed_by_email)} · due ${formatDate(t.due_date)} ${isOverdue(t) ? '<span class="chat-tag" style="color:var(--danger);">Overdue</span>' : ''} ${t.status === 'submitted' ? '<span class="chat-tag">Waiting for review</span>' : ''} ${lowRep ? `<span class="chat-tag" style="color:var(--danger);">Low reputation (${esc(rep)})</span>` : ''}</div>
+    <div class="panel" data-id="${t.id}" style="margin-bottom:12px;position:relative;${isOverdue(t) || lowRep ? 'border-color:var(--danger);' : ''}">
+      ${taskIdBadge(t)}
+      <div class="chat-meta"><b>${esc(t.title)}</b> · ${esc(nameMap[t.claimed_by_email] || t.claimed_by_email)} · ${esc(STATUS_LABELS[t.status] || t.status)}${t.status === 'claimed' ? ` · due ${formatDate(t.due_date)}` : ''} ${isOverdue(t) ? '<span class="chat-tag" style="color:var(--danger);">Overdue</span>' : ''} ${lowRep ? `<span class="chat-tag" style="color:var(--danger);">Low reputation (${esc(rep)})</span>` : ''}</div>
       ${docLine(t)}
       ${t.description ? `<p>${esc(t.description)}</p>` : ''}
+      ${t.review_notes ? `<p class="hint">${esc(t.review_notes)}</p>` : ''}
       ${t.status === 'claimed' ? `
         <div class="field-grid" style="max-width:320px;">
           <div class="field"><label>Reassign to</label>
@@ -498,11 +544,16 @@ function renderTeamList(rows, operators, nameMap) {
           <button class="btn secondary task-team-reassign-btn">Reassign</button>
           <button class="btn secondary task-team-free">Free up (back to open)</button>
           <button class="btn danger task-team-delete">Delete</button>
-        </div>` : '<p class="hint">Submitted - waiting for a Revisor.</p>'}
+        </div>` : ''}
+      ${['approved', 'rejected', 'published'].includes(t.status) ? `<div class="btn-row">
+        ${needsRedo(t) ? '<button class="btn secondary task-done-redo">Create task to redo this</button>' : ''}
+        <button class="btn danger task-done-delete">Delete</button>
+      </div>` : ''}
     </div>`;
   }).join('');
   box.querySelectorAll('[data-id]').forEach(card => {
     const id = card.dataset.id;
+    const t = rows.find(r => String(r.id) === id);
     card.querySelector('.task-team-reassign-btn')?.addEventListener('click', async () => {
       const sel = card.querySelector('.task-team-reassign');
       if (!sel.value) { alert('Choose someone to reassign this task to.'); return; }
@@ -522,44 +573,171 @@ function renderTeamList(rows, operators, nameMap) {
       await withStatus(sb.from('tasks').delete().eq('id', id), 'Deleting...');
       await renderTasksView(document.getElementById('main'));
     });
+    card.querySelector('.task-done-redo')?.addEventListener('click', async () => {
+      State.taskPrefill = {
+        title: `${t.title} (redo - admin rejected)`,
+        description: t.review_notes ? `Admin rejected the previous attempt. Note: ${t.review_notes}` : 'Admin rejected the previous attempt.',
+        document_id: t.document_id,
+        document_pages: t.document_pages,
+      };
+      await renderTasksView(document.getElementById('main'));
+    });
+    card.querySelector('.task-done-delete')?.addEventListener('click', async () => {
+      if (!confirm('Delete this completed task permanently?')) return;
+      await withStatus(sb.from('tasks').delete().eq('id', id), 'Deleting...');
+      await renderTasksView(document.getElementById('main'));
+    });
   });
 }
 
-function renderDoneList(rows, manage, nameMap) {
-  const box = document.getElementById('tasks-done-list');
-  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing completed yet.</div>'; return; }
-  // A straight Revisor "fail" already auto-spawns a retry task - only an Admin override
-  // (rejected despite an ok/ok_but verdict) needs this manual follow-up, since that path is a
-  // deliberate one-off decision rather than an automatic respawn.
-  const needsRedo = t => manage && t.status === 'rejected' && t.review_verdict !== 'fail';
-  box.innerHTML = rows.slice(0, 30).map(t => `
-    <div class="panel" data-id="${t.id}" style="margin-bottom:12px;">
-      <div class="chat-meta">${esc(t.title)} · ${esc(nameMap[t.claimed_by_email] || t.claimed_by_email)} · ${esc(STATUS_LABELS[t.status] || t.status)}${t.review_verdict ? ` (${esc(t.review_verdict)})` : ''}</div>
-      ${t.review_notes ? `<p class="hint">${esc(t.review_notes)}</p>` : ''}
-      ${manage ? `<div class="btn-row">
-        ${needsRedo(t) ? '<button class="btn secondary task-done-redo">Create task to redo this</button>' : ''}
-        <button class="btn danger task-done-delete">Delete</button>
-      </div>` : ''}
+// ---------- Review Tasks: Coordinator/Admin, or an Operator with the Revisor qualification ----------
+
+async function renderReviewViewBody(body) {
+  body.innerHTML = `<p class="hint">We review only the task, so who did the work isn't shown here.</p><div id="tasks-review-list"><div class="hint">Loading...</div></div>`;
+  await refreshReviewQueue();
+}
+
+async function refreshReviewQueue() {
+  const rows = await withStatus(sb.rpc('get_review_queue'));
+  const box = document.getElementById('tasks-review-list');
+  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing waiting for review right now.</div>'; return; }
+  box.innerHTML = rows.map(t => `
+    <div class="panel" data-id="${t.id}" style="margin-bottom:12px;position:relative;">
+      ${taskIdBadge(t)}
+      <b>${esc(t.title)}</b>
+      ${docLine(t)}
+      ${t.description ? `<p>${esc(t.description)}</p>` : ''}
+      ${t.candidate_document_id ? `<div class="btn-row"><button class="btn secondary review-open-file">Open corrected file</button></div>` : ''}
+      <div class="field"><label>Notes for the operator <span class="hint">(optional)</span></label><textarea class="review-notes" rows="2"></textarea></div>
+      <div class="btn-row">
+        <button class="btn review-ok">OK</button>
+        <button class="btn secondary review-okbut">OK, but...</button>
+        <button class="btn danger review-fail">Fail</button>
+      </div>
     </div>`).join('');
-  if (manage) {
-    box.querySelectorAll('[data-id]').forEach(card => {
-      const t = rows.find(r => String(r.id) === card.dataset.id);
-      card.querySelector('.task-done-redo')?.addEventListener('click', async () => {
-        State.taskPrefill = {
-          title: `${t.title} (redo - admin rejected)`,
-          description: t.review_notes ? `Admin rejected the previous attempt. Note: ${t.review_notes}` : 'Admin rejected the previous attempt.',
-          document_id: t.document_id,
-          document_pages: t.document_pages,
-        };
-        await renderTasksView(document.getElementById('main'));
-      });
-      card.querySelector('.task-done-delete')?.addEventListener('click', async () => {
-        if (!confirm('Delete this completed task permanently?')) return;
-        await withStatus(sb.from('tasks').delete().eq('id', card.dataset.id), 'Deleting...');
-        await renderTasksView(document.getElementById('main'));
-      });
+  box.querySelectorAll('[data-id]').forEach(card => {
+    const id = parseInt(card.dataset.id, 10);
+    const t = rows.find(r => r.id === id);
+    const notes = () => card.querySelector('.review-notes').value.trim() || null;
+    card.querySelector('.review-open-file')?.addEventListener('click', async () => {
+      const docRows = await withStatus(sb.rpc('get_review_document', { p_document_id: t.candidate_document_id }));
+      const draftPath = docRows[0]?.draft_inp_path;
+      if (!draftPath) { alert('No file found for this revision.'); return; }
+      const { data } = await sb.storage.from(BUCKET).createSignedUrl(draftPath, 60);
+      if (data?.signedUrl) window.open(data.signedUrl, '_blank');
     });
+    const submitVerdict = async (verdict, confirmMsg) => {
+      if (confirmMsg && !confirm(confirmMsg)) return;
+      await withStatus(sb.rpc('submit_task_review', { p_task_id: id, p_verdict: verdict, p_notes: notes() }), 'Submitting review...');
+      await renderTasksView(document.getElementById('main'));
+    };
+    card.querySelector('.review-ok').addEventListener('click', () => submitVerdict('ok'));
+    card.querySelector('.review-okbut').addEventListener('click', () => submitVerdict('ok_but'));
+    card.querySelector('.review-fail').addEventListener('click', () => submitVerdict('fail', 'Mark this as failed? The task will close and a new open task will be created for someone else to redo (not the same operator).'));
+  });
+}
+
+// ---------- Publish Tasks: Admin only - a technical step, kept out of Coordinator's reach ----------
+
+async function renderPublishViewBody(body) {
+  body.innerHTML = `
+    <div class="panel"><h2 style="margin-top:0;">Publish queue <span class="hint">— approved by a Revisor, ready to go live</span></h2><div id="tasks-publish-list"></div></div>
+    <div class="panel"><h2 style="margin-top:0;">Documents ready to publish <span class="hint">— task already closed; upload the final PDF and InPage file, then publish</span></h2><div id="tasks-finalize-list"></div></div>`;
+  await refreshPublishQueue();
+  await refreshFinalizeQueue();
+}
+
+async function refreshPublishQueue() {
+  const rows = await withStatus(sb.from('tasks').select('*').eq('status', 'approved').order('reviewed_at'));
+  const box = document.getElementById('tasks-publish-list');
+  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing waiting to be published right now.</div>'; return; }
+  const docTaskIds = rows.filter(t => t.document_id).map(t => t.id);
+  const candidateByTaskId = {};
+  if (docTaskIds.length) {
+    const candidates = await withStatus(sb.from('documents').select('document_id,source_task_id').in('source_task_id', docTaskIds));
+    for (const c of candidates) candidateByTaskId[c.source_task_id] = c.document_id;
   }
+  box.innerHTML = rows.map(t => `
+    <div class="panel" data-id="${t.id}" style="margin-bottom:12px;position:relative;">
+      ${taskIdBadge(t)}
+      <b>${esc(t.title)}</b> ${t.review_verdict === 'ok_but' ? '<span class="chat-tag">OK, but...</span>' : ''}
+      ${docLine(t)}
+      ${t.review_notes ? `<p class="hint">Revisor's note: ${esc(t.review_notes)}</p>` : ''}
+      ${candidateByTaskId[t.id] ? '<div class="btn-row"><button class="btn secondary task-publish-open-file">Open corrected file</button></div>' : ''}
+      <div class="btn-row">
+        <button class="btn task-publish-btn">Publish</button>
+        <button class="btn danger task-reject-btn">Reject</button>
+      </div>
+    </div>`).join('');
+  box.querySelectorAll('[data-id]').forEach(card => {
+    const id = parseInt(card.dataset.id, 10);
+    card.querySelector('.task-publish-open-file')?.addEventListener('click', () => downloadDraftFile(candidateByTaskId[id]));
+    card.querySelector('.task-publish-btn').addEventListener('click', async () => {
+      if (!confirm('Close this task? The operator gets the credits/reputation the Revisor\'s verdict implied. The document itself isn\'t live yet - you\'ll prepare the final PDF and publish it separately, from "Documents ready to publish" below.')) return;
+      await withStatus(sb.rpc('admin_decide_task', { p_task_id: id, p_decision: 'publish', p_note: null }), 'Closing task...');
+      await renderTasksView(document.getElementById('main'));
+    });
+    card.querySelector('.task-reject-btn').addEventListener('click', async () => {
+      const note = prompt('Why are you rejecting this, despite the Revisor\'s verdict? This closes the task with the same penalty as a fail - you can create a fresh task on the same document afterward from Team overview.');
+      if (note === null) return;
+      if (!note.trim()) { alert('Please enter a reason.'); return; }
+      await withStatus(sb.rpc('admin_decide_task', { p_task_id: id, p_decision: 'reject', p_note: note.trim() }), 'Rejecting...');
+      await renderTasksView(document.getElementById('main'));
+    });
+  });
+}
+
+// Second, separate Admin step (after admin_decide_task('publish') already closed the task and
+// awarded credits): documents sitting at 'pending_publish' still need the final PDF - and
+// ideally the final InPage file, uploaded to Drive - before finalize_document_publish() makes
+// them live. Deliberately decoupled from the Publish queue above (2026-08-31 session decision):
+// closing the task shouldn't be blocked on the PDF being ready yet.
+async function refreshFinalizeQueue() {
+  const rows = await withStatus(sb.from('documents').select('*').eq('workflow_status', 'pending_publish').order('document_id'));
+  const box = document.getElementById('tasks-finalize-list');
+  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing waiting to be finalized right now.</div>'; return; }
+  box.innerHTML = rows.map(d => `
+    <div class="panel" data-id="${d.document_id}" style="margin-bottom:12px;">
+      <b>${esc(d.title)}</b> <span class="hint">Document #${esc(d.document_id)}</span>
+      <div class="btn-row"><button class="btn secondary finalize-download-draft">Download draft file</button></div>
+      <div class="field-grid" style="max-width:520px;">
+        <div class="field"><label>Final PDF ${d.storage_path ? '(uploaded)' : ''}</label><input type="file" class="finalize-pdf-input" accept=".pdf"></div>
+        <div class="field"><label>Final .INP for Drive ${d.renamed_inp_file_name ? '(uploaded)' : ''}</label><input type="file" class="finalize-inp-input" accept=".inp,.doc,.docx"></div>
+      </div>
+      <div class="btn-row"><button class="btn finalize-publish-btn">Publish</button></div>
+    </div>`).join('');
+  box.querySelectorAll('[data-id]').forEach(card => {
+    const id = parseInt(card.dataset.id, 10);
+    const d = rows.find(r => r.document_id === id);
+    card.querySelector('.finalize-download-draft').addEventListener('click', () => downloadDraftFile(id));
+    card.querySelector('.finalize-pdf-input').addEventListener('change', async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const baseName = computeFileName({ document_id: id, title: d.title });
+      const finalName = await uniqueFileName(baseName, id);
+      await withStatus(sb.storage.from(BUCKET).upload(finalName, file, { upsert: true }), 'Uploading PDF...');
+      await withStatus(sb.from('documents').update({ storage_path: finalName, file_name: finalName }).eq('document_id', id), 'Saving...');
+      await renderTasksView(document.getElementById('main'));
+    });
+    card.querySelector('.finalize-inp-input').addEventListener('change', async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const token = await getDriveAccessToken();
+        const driveFileName = `${id}-${file.name}`;
+        await uploadInpToGDrive(driveFileName, file, token);
+        await withStatus(sb.from('documents').update({ renamed_inp_file_name: driveFileName }).eq('document_id', id), 'Saving...');
+        await renderTasksView(document.getElementById('main'));
+      } catch (err) {
+        alert('Could not upload to Google Drive: ' + err.message);
+      }
+    });
+    card.querySelector('.finalize-publish-btn').addEventListener('click', async () => {
+      if (!d.storage_path) { if (!confirm('No final PDF uploaded yet - publish anyway?')) return; }
+      await withStatus(sb.rpc('finalize_document_publish', { p_document_id: id }), 'Publishing document...');
+      await renderTasksView(document.getElementById('main'));
+    });
+  });
 }
 
 // ---------- Overdue / reassignment notifications ----------
