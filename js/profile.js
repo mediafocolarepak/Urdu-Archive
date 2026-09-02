@@ -5,7 +5,7 @@
 // reviewed. Deliberately does not import from collaboration.js (project convention: modules
 // only import from core.js), so the skill-chip rendering is duplicated here in small form.
 
-import { sb, State, esc, withStatus, labelOf } from './core.js?v=20260902162439';
+import { sb, State, esc, withStatus, labelOf } from './core.js?v=20260902164558';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -45,7 +45,7 @@ export async function renderMyProfileView(main) {
         <div class="field"><label>Role</label><div style="font-size:13.5px;padding:4px 0;">${esc(ROLE_LABEL[role] || role)}</div></div>
         <div class="field"><label>Qualifications</label><div style="font-size:13.5px;padding:4px 0;">${myQualLabels.map(esc).join(', ') || '—'}</div></div>
       </div>
-      <div class="subpanel" id="profile-editable"></div>
+      ${role === 'operator' ? '<div class="subpanel" id="profile-editable"></div>' : ''}
       <div class="subpanel" style="margin-top:16px;">
         <h3>Change my password</h3>
         <div class="field-grid wide">
@@ -57,7 +57,9 @@ export async function renderMyProfileView(main) {
       </div>
     </div>`;
 
-  renderEditable(document.getElementById('profile-editable'), profile, skillList, storedSkills, otherSkills, user.id, main);
+  if (role === 'operator') {
+    renderEditable(document.getElementById('profile-editable'), profile, skillList, storedSkills, otherSkills, user.id, main);
+  }
   wireChangePassword();
 }
 
