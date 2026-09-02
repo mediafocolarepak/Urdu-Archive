@@ -116,8 +116,30 @@ export async function readPdfPageCountDebug(doc) {
     return pages != null ? { pages, detail: null } : { pages: null, detail: `storage_path "${doc.storage_path}" - pdf.js could not parse the file` };
   }
   if (!doc.file_name) return { pages: null, detail: 'no storage_path and no file_name on record' };
-  const blob = await fetchGDriveFileBlob(GDRIVE_FOLDER_ID, doc.file_name);
-  if (!blob) return { pages: null, detail: `not found on Drive by file_name "${doc.file_name}"` };
+  // Duplicated from fetchGDriveFileBlob rather than reusing it - that helper swallows the
+  // Drive API's error object (quota, permissions, an API key restricted to the wrong domain)
+  // and reports it identically to a genuine "no file with this name", which is exactly the
+  // ambiguity this debug path exists to resolve.
+  const q = `name='${doc.file_name.replace(/'/g, "\\'")}' and '${GDRIVE_FOLDER_ID}' in parents and trashed=false`;
+  const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&key=${GDRIVE_API_KEY}`;
+  let listData;
+  try {
+    const listRes = await fetch(listUrl);
+    listData = await listRes.json();
+  } catch (e) {
+    return { pages: null, detail: `Drive lookup for "${doc.file_name}" - network error: ${e.message}` };
+  }
+  if (listData.error) return { pages: null, detail: `Drive lookup for "${doc.file_name}" - API error: ${listData.error.message}` };
+  const fileId = listData.files?.[0]?.id;
+  if (!fileId) return { pages: null, detail: `not found on Drive by file_name "${doc.file_name}"` };
+  let blob = null;
+  try {
+    const mediaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${GDRIVE_API_KEY}`);
+    if (mediaRes.ok) blob = await mediaRes.blob();
+    else return { pages: null, detail: `found "${doc.file_name}" on Drive, but downloading it failed (${mediaRes.status})` };
+  } catch (e) {
+    return { pages: null, detail: `found "${doc.file_name}" on Drive, but downloading it failed: ${e.message}` };
+  }
   const pages = await readPdfPageCountFromBlob(blob);
   return pages != null ? { pages, detail: null } : { pages: null, detail: `found "${doc.file_name}" on Drive, but pdf.js could not parse it` };
 }
