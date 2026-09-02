@@ -1,4 +1,4 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCount } from './core.js?v=20260902164558';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug } from './core.js?v=20260902165344';
 
 // ---------- Users ----------
 
@@ -153,14 +153,14 @@ async function runBackfillPageCounts() {
   for (const doc of rows) {
     if (backfillStopRequested) break;
     try {
-      const n = await readPdfPageCount(doc);
+      const { pages: n, detail } = await readPdfPageCountDebug(doc);
       if (n != null) {
         const { error } = await sb.from('documents').update({ pages: n }).eq('document_id', doc.document_id);
         if (error) throw error;
         ok++;
       } else {
         failed++;
-        log.insertAdjacentHTML('beforeend', `<div>#${esc(doc.document_id)} ${esc(doc.title)} — no PDF found.</div>`);
+        log.insertAdjacentHTML('beforeend', `<div>#${esc(doc.document_id)} ${esc(doc.title)} — ${esc(detail)}</div>`);
       }
     } catch (err) {
       failed++;

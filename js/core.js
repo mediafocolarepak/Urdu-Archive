@@ -101,6 +101,27 @@ export async function readPdfPageCount(doc) {
   return readPdfPageCountFromBlob(blob);
 }
 
+// Same as readPdfPageCount, but reports WHERE it looked and why it gave up - used only by the
+// Options -> Maintenance backfill tool, where "no PDF found" alone isn't enough to tell a
+// missing storage_path from a Drive filename mismatch from a corrupt PDF pdf.js can't parse.
+export async function readPdfPageCountDebug(doc) {
+  if (!window.pdfjsLib) return { pages: null, detail: 'pdf.js did not load' };
+  if (doc.storage_path) {
+    const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(doc.storage_path, 60);
+    if (error || !data?.signedUrl) return { pages: null, detail: `storage_path "${doc.storage_path}" - could not sign a URL` };
+    let res;
+    try { res = await fetch(data.signedUrl); } catch (e) { return { pages: null, detail: `storage_path "${doc.storage_path}" - network error: ${e.message}` }; }
+    if (!res.ok) return { pages: null, detail: `storage_path "${doc.storage_path}" - fetch failed (${res.status})` };
+    const pages = await readPdfPageCountFromBlob(await res.blob());
+    return pages != null ? { pages, detail: null } : { pages: null, detail: `storage_path "${doc.storage_path}" - pdf.js could not parse the file` };
+  }
+  if (!doc.file_name) return { pages: null, detail: 'no storage_path and no file_name on record' };
+  const blob = await fetchGDriveFileBlob(GDRIVE_FOLDER_ID, doc.file_name);
+  if (!blob) return { pages: null, detail: `not found on Drive by file_name "${doc.file_name}"` };
+  const pages = await readPdfPageCountFromBlob(blob);
+  return pages != null ? { pages, detail: null } : { pages: null, detail: `found "${doc.file_name}" on Drive, but pdf.js could not parse it` };
+}
+
 export async function downloadInpFromGDrive(fileName) {
   await findAndOpenInGDrive(GDRIVE_INP_FOLDER_ID, fileName, 'the Google Drive "INPAGE Original Document" folder');
 }
