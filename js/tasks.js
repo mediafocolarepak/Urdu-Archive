@@ -7,7 +7,7 @@
 // un'operazione tecnica). RLS impedisce di toccare un task preso da qualcun altro (vedi
 // 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel vincolo, non lo sostituiscono.
 
-import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName } from './core.js?v=20260902141721';
+import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName } from './core.js?v=20260902144002';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -99,16 +99,14 @@ async function renderStoreView(body, manage) {
   let sortDesc = true;
 
   body.innerHTML = `
-    <div class="btn-row" style="justify-content:space-between;align-items:flex-end;flex-wrap:wrap;">
-      <div class="field-grid" style="margin:0;">
-        <div class="field"><label>Category</label><select id="store-category">${optionsHtml(State.optionListsByName.task_category || [], '', true)}</select></div>
-        <div class="field"><label>Min credits</label><input id="store-mincredits" type="number" min="0" style="width:110px;"></div>
-        <div class="field"><label>Order</label><button class="btn secondary" id="store-sort-btn">Newest first</button></div>
-      </div>
-      ${manage ? '<button class="btn" id="store-new-task-btn">+ New task</button>' : ''}
+    <div class="field-grid" style="align-items:flex-end;">
+      <div class="field"><label>Category</label><select id="store-category">${optionsHtml(State.optionListsByName.task_category || [], '', true)}</select></div>
+      <div class="field"><label>Min credits</label><input id="store-mincredits" type="number" min="0" style="width:110px;"></div>
+      <div class="field"><label>Order</label><button class="btn secondary" id="store-sort-btn">Newest first</button></div>
+      ${manage ? '<div class="field"><label>&nbsp;</label><button class="btn" id="store-new-task-btn">+ New task</button></div>' : ''}
     </div>
     <div class="grid-wrap" style="margin-top:12px;"><table class="grid">
-      <thead><tr><th>ID</th><th>Title</th><th>Category</th><th>Credits</th><th>Posted</th><th></th></tr></thead>
+      <thead><tr><th>ID</th><th>Posted</th><th>Category</th><th>Credits</th><th>Title</th><th></th></tr></thead>
       <tbody id="store-rows"></tbody>
     </table></div>`;
 
@@ -123,10 +121,10 @@ async function renderStoreView(body, manage) {
     tbody.innerHTML = filtered.map(t => `
       <tr data-id="${t.id}">
         <td>#${esc(t.id)}</td>
-        <td>${esc(t.title)}${t.document_id ? ` <span class="hint">Doc #${esc(t.document_id)}</span>` : ''}</td>
+        <td>${relativeDate(t.created_at)}</td>
         <td>${esc(labelOf(State.optionListsByName.task_category || [], t.category)) || '—'}</td>
         <td>${t.credits != null ? esc(t.credits) : '—'}</td>
-        <td>${relativeDate(t.created_at)}</td>
+        <td>${esc(t.title)}${t.document_id ? ` <span class="hint">Doc #${esc(t.document_id)}</span>` : ''}</td>
         <td><button class="btn secondary store-claim-btn" style="padding:4px 12px;">Claim</button></td>
       </tr>`).join('');
     tbody.querySelectorAll('.store-claim-btn').forEach(btn => {
