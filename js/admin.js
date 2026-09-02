@@ -1,4 +1,4 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken } from './core.js?v=20260902171205';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken } from './core.js?v=20260902172915';
 
 // ---------- Users ----------
 
@@ -149,10 +149,21 @@ async function runBackfillPageCounts() {
 
   // The Drive half of this needs an OAuth token, not just the public API key - unauthenticated
   // byte downloads (alt=media) are blocked by CORS, see readPdfPageCountDebug. Fetched once
-  // up front (may show Google's consent prompt) and reused for the whole run rather than
-  // re-requested per document.
+  // up front (may show Google's consent prompt, possibly in a popup window - check for one if
+  // this seems stuck) and reused for the whole run rather than re-requested per document.
+  // Guarded with a timeout: Google's token client silently never calls back at all (no
+  // resolve, no reject) if its popup gets blocked, which otherwise hangs this indefinitely
+  // with no feedback beyond the Stop button already showing.
+  progress.textContent = 'Requesting Google Drive access - check for a popup window if this takes more than a few seconds...';
   let accessToken = null;
-  try { accessToken = await getDriveAccessToken(); } catch (e) { log.insertAdjacentHTML('beforeend', `<div>Could not get Google Drive access: ${esc(e.message)} - documents will only be readable from Supabase Storage this run.</div>`); }
+  try {
+    accessToken = await Promise.race([
+      getDriveAccessToken(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out waiting for Google Drive access - a popup may have been blocked. Allow popups for this site and try again.')), 20000)),
+    ]);
+  } catch (e) {
+    log.insertAdjacentHTML('beforeend', `<div>Could not get Google Drive access: ${esc(e.message)} - documents will only be readable from Supabase Storage this run.</div>`);
+  }
 
   const rows = await withStatus(sb.from('documents').select('document_id,title,file_name,storage_path').is('pages', null).neq('media_type', 'VID').order('document_id'));
   let done = 0, ok = 0, failed = 0;
