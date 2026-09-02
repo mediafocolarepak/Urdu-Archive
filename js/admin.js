@@ -1,4 +1,4 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug } from './core.js?v=20260902170432';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken } from './core.js?v=20260902171205';
 
 // ---------- Users ----------
 
@@ -147,13 +147,20 @@ async function runBackfillPageCounts() {
   stopBtn.style.display = 'inline-block';
   log.innerHTML = '';
 
+  // The Drive half of this needs an OAuth token, not just the public API key - unauthenticated
+  // byte downloads (alt=media) are blocked by CORS, see readPdfPageCountDebug. Fetched once
+  // up front (may show Google's consent prompt) and reused for the whole run rather than
+  // re-requested per document.
+  let accessToken = null;
+  try { accessToken = await getDriveAccessToken(); } catch (e) { log.insertAdjacentHTML('beforeend', `<div>Could not get Google Drive access: ${esc(e.message)} - documents will only be readable from Supabase Storage this run.</div>`); }
+
   const rows = await withStatus(sb.from('documents').select('document_id,title,file_name,storage_path').is('pages', null).neq('media_type', 'VID').order('document_id'));
   let done = 0, ok = 0, failed = 0;
   progress.textContent = `0 / ${rows.length}`;
   for (const doc of rows) {
     if (backfillStopRequested) break;
     try {
-      const { pages: n, detail } = await readPdfPageCountDebug(doc);
+      const { pages: n, detail } = await readPdfPageCountDebug(doc, accessToken);
       if (n != null) {
         const { error } = await sb.from('documents').update({ pages: n }).eq('document_id', doc.document_id);
         if (error) throw error;

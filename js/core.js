@@ -104,7 +104,7 @@ export async function readPdfPageCount(doc) {
 // Same as readPdfPageCount, but reports WHERE it looked and why it gave up - used only by the
 // Options -> Maintenance backfill tool, where "no PDF found" alone isn't enough to tell a
 // missing storage_path from a Drive filename mismatch from a corrupt PDF pdf.js can't parse.
-export async function readPdfPageCountDebug(doc) {
+export async function readPdfPageCountDebug(doc, accessToken) {
   if (!window.pdfjsLib) return { pages: null, detail: 'pdf.js did not load' };
   if (doc.storage_path) {
     const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(doc.storage_path, 60);
@@ -116,30 +116,18 @@ export async function readPdfPageCountDebug(doc) {
     return pages != null ? { pages, detail: null } : { pages: null, detail: `storage_path "${doc.storage_path}" - pdf.js could not parse the file` };
   }
   if (!doc.file_name) return { pages: null, detail: 'no storage_path and no file_name on record' };
-  // Duplicated from fetchGDriveFileBlob rather than reusing it - that helper swallows the
-  // Drive API's error object (quota, permissions, an API key restricted to the wrong domain)
-  // and reports it identically to a genuine "no file with this name", which is exactly the
-  // ambiguity this debug path exists to resolve.
-  const q = `name='${doc.file_name.replace(/'/g, "\\'")}' and '${GDRIVE_FOLDER_ID}' in parents and trashed=false`;
-  const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&key=${GDRIVE_API_KEY}`;
-  let listData;
+  if (!accessToken) return { pages: null, detail: 'no Google Drive access token - Admin needs to grant Drive access first' };
+  // OAuth Bearer, not the bare API key: `alt=media` (the actual byte download, as opposed to
+  // the file-metadata search) is blocked by CORS when called unauthenticated - confirmed
+  // 2026-09-02 from the browser's own CORS error, which the unauthenticated path had been
+  // silently swallowing as a plain "not found" until this debug path exposed it.
+  let blob;
   try {
-    const listRes = await fetch(listUrl);
-    listData = await listRes.json();
+    blob = await fetchGDriveFileBlobAuthed(GDRIVE_FOLDER_ID, doc.file_name, accessToken);
   } catch (e) {
-    return { pages: null, detail: `Drive lookup for "${doc.file_name}" - network error: ${e.message}` };
+    return { pages: null, detail: `Drive lookup for "${doc.file_name}" - ${e.message}` };
   }
-  if (listData.error) return { pages: null, detail: `Drive lookup for "${doc.file_name}" - API error: ${listData.error.message}` };
-  const fileId = listData.files?.[0]?.id;
-  if (!fileId) return { pages: null, detail: `not found on Drive by file_name "${doc.file_name}"` };
-  let blob = null;
-  try {
-    const mediaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${GDRIVE_API_KEY}`);
-    if (mediaRes.ok) blob = await mediaRes.blob();
-    else return { pages: null, detail: `found "${doc.file_name}" on Drive, but downloading it failed (${mediaRes.status})` };
-  } catch (e) {
-    return { pages: null, detail: `found "${doc.file_name}" on Drive, but downloading it failed: ${e.message}` };
-  }
+  if (!blob) return { pages: null, detail: `not found on Drive by file_name "${doc.file_name}"` };
   const pages = await readPdfPageCountFromBlob(blob);
   return pages != null ? { pages, detail: null } : { pages: null, detail: `found "${doc.file_name}" on Drive, but pdf.js could not parse it` };
 }
@@ -209,6 +197,28 @@ async function driveFindFileId(folderId, fileName, accessToken) {
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
   return data.files && data.files[0] ? data.files[0].id : null;
+}
+
+// Downloads a Drive file's raw bytes with an OAuth Bearer token instead of the bare API key.
+// The API-key-only equivalent (fetchGDriveFileBlob below) hits a CORS wall on `alt=media` -
+// Google's servers don't send Access-Control-Allow-Origin for that endpoint when called
+// unauthenticated, confirmed 2026-09-02 (readPdfPageCountDebug's diagnostics surfaced the
+// browser's CORS error, which the unauthenticated path had been silently swallowing as a
+// plain "not found"). An OAuth Bearer request doesn't have that problem - same as the
+// existing upload path (driveUploadOrReplace) already relies on. Only wired into the
+// Maintenance backfill tool (Admin-only) for now, not into the general readPdfPageCount below
+// - that one runs for any Operator/Coordinator opening "Create Task" or the editor, and this
+// app's Drive OAuth client is in Google Cloud "Testing" mode, so only whitelisted test-user
+// Google accounts can grant it. Wiring OAuth into that broader path would surface a Google
+// consent prompt (or a silent rejection) to people who have no reason to see one.
+export async function fetchGDriveFileBlobAuthed(folderId, fileName, accessToken) {
+  const fileId = await driveFindFileId(folderId, fileName, accessToken);
+  if (!fileId) return null;
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) return null;
+  return res.blob();
 }
 
 // Uploads `blob` as `fileName` into Drive folder `folderId`, overwriting an existing file of
