@@ -67,6 +67,22 @@ async function fetchGDriveFileBlob(folderId, fileName) {
   }
 }
 
+// Counts the pages of a PDF Blob/File with pdf.js. Returns null (never throws) on any failure
+// - callers should fall back to letting the person type the page count in by hand. Shared by
+// readPdfPageCount below (fetches the blob from Storage/Drive first) and by anything that
+// already holds the raw file locally (e.g. Bulk Import, reading straight off disk before the
+// file is ever uploaded anywhere).
+export async function readPdfPageCountFromBlob(blob) {
+  if (!window.pdfjsLib || !blob) return null;
+  try {
+    const buf = await blob.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    return pdf.numPages;
+  } catch {
+    return null;
+  }
+}
+
 // Reads a document's PDF (Supabase Storage first, then the Google Drive archive folder as
 // fallback - same precedence as downloadVersion in docdetail.js) and counts its pages with
 // pdf.js. Returns null (never throws) on any failure - callers should fall back to letting
@@ -82,13 +98,7 @@ export async function readPdfPageCount(doc) {
   }
   if (!blob) blob = await fetchGDriveFileBlob(GDRIVE_FOLDER_ID, doc.file_name);
   if (!blob) return null;
-  try {
-    const buf = await blob.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-    return pdf.numPages;
-  } catch {
-    return null;
-  }
+  return readPdfPageCountFromBlob(blob);
 }
 
 export async function downloadInpFromGDrive(fileName) {

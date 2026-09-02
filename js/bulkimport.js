@@ -4,7 +4,7 @@
 // (by title similarity against what's already catalogued) are still detected, but only
 // reported afterwards in the summary, not used to block or pre-exclude anything.
 
-import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore } from './core.js?v=20260902153222';
+import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob } from './core.js?v=20260902162439';
 
 export function titleFromFilename(name) {
   const noExt = name.replace(/\.[a-z0-9]+$/i, '');
@@ -134,15 +134,19 @@ async function scanAndImport() {
   for (const r of plan) {
     try {
       const workId = await createWorkFor(r.title);
+      const file = await r.entry.getFile();
+      // Read the page count straight off the local file, before it's renamed/moved anywhere -
+      // at this point it isn't in Supabase Storage or Google Drive yet, so the usual
+      // readPdfPageCount (which looks a document up by storage_path/file_name) can't find it.
+      const pages = batchMediaType === 'VID' ? null : await readPdfPageCountFromBlob(file);
       await withStatus(sb.from('documents').insert({
         document_id: r.document_id, title: r.title, workflow_status: 'ENTR',
         catalog_date: today(), ref_date: r.ref_date, ref_period: r.ref_period,
-        file_name: r.newFileName, legacy_migrated: false, work_id: workId,
+        file_name: r.newFileName, legacy_migrated: false, work_id: workId, pages,
         source: batchSource || null, operator: batchOperator || null, language: batchLang || null,
         media_type: batchMediaType, collection: batchCollection || null,
         original_inp_file_name: r.original_inp_file_name, original_doc_file_name: r.original_doc_file_name,
       }));
-      const file = await r.entry.getFile();
       const newHandle = await dirHandle.getFileHandle(r.newFileName, { create: true });
       const writable = await newHandle.createWritable();
       await writable.write(await file.arrayBuffer());

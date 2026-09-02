@@ -1,4 +1,4 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS } from './core.js?v=20260902153222';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCount } from './core.js?v=20260902162439';
 
 // ---------- Users ----------
 
@@ -109,10 +109,69 @@ export async function renderOptionsView(main) {
     <div class="panel">
       <h2>Task reputation tiers <span class="hint">— reputation deltas by task size (base credits)</span></h2>
       <div id="reptiers-editor"></div>
+    </div>
+    <div class="panel">
+      <h2>Maintenance <span class="hint">— one-off data cleanup tools</span></h2>
+      <div>
+        <p class="hint">Reads each document's PDF (Supabase Storage, or Google Drive as a fallback) with the same reader used elsewhere in the app, and saves its page count if it's still missing. Runs one document at a time in this tab - keep it open while it works. Safe to stop and resume later: it always skips documents that already have a page count.</p>
+        <div class="btn-row">
+          <button class="btn" id="backfill-start-btn">Backfill page counts</button>
+          <button class="btn secondary" id="backfill-stop-btn" style="display:none;">Stop</button>
+        </div>
+        <p id="backfill-progress" class="hint"></p>
+        <div id="backfill-log" style="max-height:200px;overflow:auto;font-size:12px;"></div>
+      </div>
     </div>`;
   document.getElementById('opt-list-select').addEventListener('change', e => { State.optionsSelectedList = e.target.value; renderOptionsEditor(); });
   await renderOptionsEditor();
   await renderReputationTiersEditor();
+  wireBackfillPageCounts();
+}
+
+// ---------- Maintenance: backfill documents.pages from the PDF for records missing it ----------
+
+let backfillStopRequested = false;
+
+function wireBackfillPageCounts() {
+  document.getElementById('backfill-start-btn').addEventListener('click', runBackfillPageCounts);
+  document.getElementById('backfill-stop-btn').addEventListener('click', () => { backfillStopRequested = true; });
+}
+
+async function runBackfillPageCounts() {
+  backfillStopRequested = false;
+  const startBtn = document.getElementById('backfill-start-btn');
+  const stopBtn = document.getElementById('backfill-stop-btn');
+  const progress = document.getElementById('backfill-progress');
+  const log = document.getElementById('backfill-log');
+  startBtn.style.display = 'none';
+  stopBtn.style.display = 'inline-block';
+  log.innerHTML = '';
+
+  const rows = await withStatus(sb.from('documents').select('document_id,title,file_name,storage_path').is('pages', null).neq('media_type', 'VID').order('document_id'));
+  let done = 0, ok = 0, failed = 0;
+  progress.textContent = `0 / ${rows.length}`;
+  for (const doc of rows) {
+    if (backfillStopRequested) break;
+    try {
+      const n = await readPdfPageCount(doc);
+      if (n != null) {
+        const { error } = await sb.from('documents').update({ pages: n }).eq('document_id', doc.document_id);
+        if (error) throw error;
+        ok++;
+      } else {
+        failed++;
+        log.insertAdjacentHTML('beforeend', `<div>#${esc(doc.document_id)} ${esc(doc.title)} — no PDF found.</div>`);
+      }
+    } catch (err) {
+      failed++;
+      log.insertAdjacentHTML('beforeend', `<div>#${esc(doc.document_id)} ${esc(doc.title)} — ${esc(err.message)}</div>`);
+    }
+    done++;
+    progress.textContent = `${done} / ${rows.length} (${ok} saved, ${failed} skipped)${backfillStopRequested ? ' — stopped, safe to resume.' : ''}`;
+  }
+  if (!backfillStopRequested) progress.textContent += ' — done.';
+  startBtn.style.display = 'inline-block';
+  stopBtn.style.display = 'none';
 }
 
 async function renderReputationTiersEditor() {
