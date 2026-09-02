@@ -7,7 +7,7 @@
 // un'operazione tecnica). RLS impedisce di toccare un task preso da qualcun altro (vedi
 // 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel vincolo, non lo sostituiscono.
 
-import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName } from './core.js?v=20260902144002';
+import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName } from './core.js?v=20260902151023';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -72,6 +72,7 @@ export async function renderTasksView(main) {
   if (manage) tabs.push({ id: 'team', label: 'Team overview' });
   if (isRevisor) tabs.push({ id: 'review', label: 'Review Tasks' });
   if (admin) tabs.push({ id: 'publish', label: 'Publish Tasks' });
+  if (admin) tabs.push({ id: 'withdrawn', label: 'Withdrawn Tasks' });
   if (!tabs.some(t => t.id === currentView)) currentView = 'store';
 
   main.innerHTML = `
@@ -85,16 +86,17 @@ export async function renderTasksView(main) {
   }));
 
   const body = document.getElementById('tasks-body');
-  if (currentView === 'store') await renderStoreView(body, manage);
+  if (currentView === 'store') await renderStoreView(body, manage, admin);
   else if (currentView === 'mine') await renderMineView(body, user);
   else if (currentView === 'team') await renderTeamView(body);
   else if (currentView === 'review') await renderReviewViewBody(body);
   else if (currentView === 'publish') await renderPublishViewBody(body);
+  else if (currentView === 'withdrawn') await renderWithdrawnView(body);
 }
 
 // ---------- Tasks Store: public, same for every role - free tasks to claim ----------
 
-async function renderStoreView(body, manage) {
+async function renderStoreView(body, manage, admin) {
   const rows = await withStatus(sb.from('tasks').select('*').eq('status', 'open').order('created_at', { ascending: false }));
   let sortDesc = true;
 
@@ -106,7 +108,7 @@ async function renderStoreView(body, manage) {
       ${manage ? '<div class="field"><label>&nbsp;</label><button class="btn" id="store-new-task-btn">+ New task</button></div>' : ''}
     </div>
     <div class="grid-wrap" style="margin-top:12px;"><table class="grid">
-      <thead><tr><th>ID</th><th>Posted</th><th>Category</th><th>Credits</th><th>Title</th><th></th></tr></thead>
+      <thead><tr><th>ID</th><th>Posted</th><th>Category</th><th>Credits</th><th>Title</th><th colspan="${admin ? 2 : 1}"></th></tr></thead>
       <tbody id="store-rows"></tbody>
     </table></div>`;
 
@@ -126,11 +128,21 @@ async function renderStoreView(body, manage) {
         <td>${t.credits != null ? esc(t.credits) : '—'}</td>
         <td>${esc(t.title)}${t.document_id ? ` <span class="hint">Doc #${esc(t.document_id)}</span>` : ''}</td>
         <td><button class="btn secondary store-claim-btn" style="padding:4px 12px;">Claim</button></td>
+        ${admin ? '<td><button class="btn danger store-withdraw-btn" style="padding:4px 12px;">Withdraw</button></td>' : ''}
       </tr>`).join('');
     tbody.querySelectorAll('.store-claim-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.closest('tr').dataset.id;
         openClaimPopup(filtered.find(x => String(x.id) === id));
+      });
+    });
+    tbody.querySelectorAll('.store-withdraw-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.closest('tr').dataset.id;
+        const t = filtered.find(x => String(x.id) === id);
+        if (!confirm(`Withdraw "${t.title}" from the Store? It moves to Withdrawn Tasks, where it can be re-enabled later.`)) return;
+        await withStatus(sb.from('tasks').update({ status: 'withdrawn' }).eq('id', id), 'Withdrawing...');
+        await renderTasksView(document.getElementById('main'));
       });
     });
   }
@@ -733,6 +745,28 @@ async function refreshFinalizeQueue() {
     card.querySelector('.finalize-publish-btn').addEventListener('click', async () => {
       if (!d.storage_path) { if (!confirm('No final PDF uploaded yet - publish anyway?')) return; }
       await withStatus(sb.rpc('finalize_document_publish', { p_document_id: id }), 'Publishing document...');
+      await renderTasksView(document.getElementById('main'));
+    });
+  });
+}
+
+// ---------- Withdrawn Tasks: Admin only - open tasks pulled off the Store, re-enable-able ----------
+
+async function renderWithdrawnView(body) {
+  const rows = await withStatus(sb.from('tasks').select('*').eq('status', 'withdrawn').order('created_at', { ascending: false }));
+  if (!rows.length) { body.innerHTML = '<div class="empty-msg">Nothing withdrawn right now.</div>'; return; }
+  body.innerHTML = rows.map(t => `
+    <div class="panel" data-id="${t.id}" style="margin-bottom:12px;position:relative;">
+      ${taskIdBadge(t)}
+      <b>${esc(t.title)}</b>
+      ${docLine(t)}
+      ${t.description ? `<p>${esc(t.description)}</p>` : ''}
+      <div class="btn-row"><button class="btn secondary withdrawn-reenable-btn">Re-enable in Store</button></div>
+    </div>`).join('');
+  body.querySelectorAll('[data-id]').forEach(card => {
+    card.querySelector('.withdrawn-reenable-btn').addEventListener('click', async () => {
+      await withStatus(sb.from('tasks').update({ status: 'open' }).eq('id', card.dataset.id), 'Re-enabling...');
+      currentView = 'store';
       await renderTasksView(document.getElementById('main'));
     });
   });
