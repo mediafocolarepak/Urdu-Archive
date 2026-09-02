@@ -7,7 +7,7 @@
 // un'operazione tecnica). RLS impedisce di toccare un task preso da qualcun altro (vedi
 // 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel vincolo, non lo sostituiscono.
 
-import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName } from './core.js?v=20260902151023';
+import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName } from './core.js?v=20260902153222';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -73,6 +73,7 @@ export async function renderTasksView(main) {
   if (isRevisor) tabs.push({ id: 'review', label: 'Review Tasks' });
   if (admin) tabs.push({ id: 'publish', label: 'Publish Tasks' });
   if (admin) tabs.push({ id: 'withdrawn', label: 'Withdrawn Tasks' });
+  if (admin) tabs.push({ id: 'budget', label: 'Budget' });
   if (!tabs.some(t => t.id === currentView)) currentView = 'store';
 
   main.innerHTML = `
@@ -92,6 +93,7 @@ export async function renderTasksView(main) {
   else if (currentView === 'review') await renderReviewViewBody(body);
   else if (currentView === 'publish') await renderPublishViewBody(body);
   else if (currentView === 'withdrawn') await renderWithdrawnView(body);
+  else if (currentView === 'budget') await renderBudgetView(body);
 }
 
 // ---------- Tasks Store: public, same for every role - free tasks to claim ----------
@@ -769,6 +771,80 @@ async function renderWithdrawnView(body) {
       currentView = 'store';
       await renderTasksView(document.getElementById('main'));
     });
+  });
+}
+
+// ---------- Budget: Admin only - a top-up ledger, plus a live breakdown of committed credits ----------
+// Budget = sum(budget_ledger.amount) - an append-only log of top-ups, never a single
+// overwritable number. Used/available is computed live from tasks.credits by status, so
+// Withdraw/Reject free up availability automatically (they're simply excluded here) with no
+// reversal entries needed.
+
+const BUDGET_COMMITTED_STATUSES = ['open', 'claimed', 'submitted', 'approved', 'published'];
+
+async function renderBudgetView(body) {
+  const [ledgerRows, taskRows] = await Promise.all([
+    withStatus(sb.from('budget_ledger').select('*').order('created_at', { ascending: false })),
+    withStatus(sb.from('tasks').select('credits,status').in('status', BUDGET_COMMITTED_STATUSES)),
+  ]);
+  const budget = ledgerRows.reduce((sum, r) => sum + r.amount, 0);
+  const sumFor = statuses => taskRows.filter(t => statuses.includes(t.status)).reduce((sum, t) => sum + (t.credits || 0), 0);
+  const openCredits = sumFor(['open']);
+  const inProgressCredits = sumFor(['claimed', 'submitted']);
+  const toRedeemCredits = sumFor(['approved']);
+  const redeemedCredits = sumFor(['published']);
+  const used = openCredits + inProgressCredits + toRedeemCredits + redeemedCredits;
+  const available = budget - used;
+
+  const tile = (label, value) => `<div class="field"><label>${label}</label><div style="font-size:20px;font-weight:600;">${esc(value)}</div></div>`;
+  body.innerHTML = `
+    <div class="panel">
+      <div class="field-grid">
+        ${tile('Budget', budget)}
+        ${tile('Available', available)}
+        ${tile('Posted, not claimed', openCredits)}
+        ${tile('Claimed, in progress', inProgressCredits)}
+        ${tile('Approved, to redeem', toRedeemCredits)}
+        ${tile('Redeemed', redeemedCredits)}
+      </div>
+    </div>
+    <div class="btn-row"><button class="btn" id="budget-add-funds-btn">Add funds</button></div>
+    <h3>Top-up history</h3>
+    <div class="grid-wrap"><table class="grid">
+      <thead><tr><th>Date</th><th>Amount</th><th>Note</th><th>Added by</th></tr></thead>
+      <tbody>${ledgerRows.length ? ledgerRows.map(r => `
+        <tr><td>${esc((r.created_at || '').slice(0, 10))}</td><td>${esc(r.amount)}</td><td>${esc(r.note) || '—'}</td><td>${esc(r.created_by_email) || '—'}</td></tr>
+      `).join('') : '<tr><td colspan="4" class="empty-msg">No top-ups recorded yet.</td></tr>'}</tbody>
+    </table></div>`;
+
+  document.getElementById('budget-add-funds-btn').addEventListener('click', openAddFundsPopup);
+}
+
+function openAddFundsPopup() {
+  document.getElementById('add-funds-popup')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'add-funds-popup';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:2100;background:rgba(20,16,10,.55);display:flex;align-items:center;justify-content:center;overflow:auto;padding:24px 16px;';
+  overlay.innerHTML = '<div class="panel" style="max-width:420px;width:100%;margin:0;"></div>';
+  document.body.appendChild(overlay);
+  const panel = overlay.querySelector('.panel');
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  panel.innerHTML = `
+    <h2 style="margin-top:0;">Add funds</h2>
+    <div class="field"><label>Amount <span class="hint">(credits)</span></label><input id="funds-amount" type="number" min="1"></div>
+    <div class="field"><label>Note <span class="hint">(optional)</span></label><input id="funds-note"></div>
+    <div class="btn-row"><button class="btn" id="funds-confirm">Add</button><button class="btn secondary" id="funds-cancel">Cancel</button></div>`;
+  panel.querySelector('#funds-cancel').addEventListener('click', close);
+  panel.querySelector('#funds-confirm').addEventListener('click', async () => {
+    const amount = parseInt(panel.querySelector('#funds-amount').value, 10);
+    if (!amount || amount <= 0) { alert('Please enter a positive amount.'); return; }
+    const { data: { user } } = await sb.auth.getUser();
+    await withStatus(sb.from('budget_ledger').insert({
+      amount, note: panel.querySelector('#funds-note').value.trim() || null, created_by_email: user.email,
+    }), 'Adding funds...');
+    close();
+    await renderTasksView(document.getElementById('main'));
   });
 }
 
