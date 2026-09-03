@@ -7,7 +7,7 @@ import {
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail,
-} from './core.js?v=20260903095247';
+} from './core.js?v=20260903114431';
 
 // Categories that gate visibility/assignment to a specific qualification - duplicated from the
 // same constant in tasks.js (project convention: modules only import from core.js, never each
@@ -431,7 +431,6 @@ async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
       ${selectField('Media type', 'media_type', doc.media_type, State.mediaTypes)}
       ${selectField('Source', 'source', doc.source, State.sources)}
       ${selectField('Operator', 'operator', doc.operator, State.operators)}
-      ${textField('Physical box', 'physical_box', doc.physical_box)}
       ${textField('Episode number', 'episode_number', doc.episode_number)}
       ${textField('Bible verse', 'bible_verse', doc.bible_verse)}
       <div class="field"><label>Pages</label>
@@ -691,7 +690,6 @@ export async function renderTrackingSheet(id) {
         <tr><th>Operator</th><td>${esc(labelOf(State.operators, doc.operator))}</td></tr>
         <tr><th>Reference date / period</th><td>${esc(doc.ref_date)} ${esc(doc.ref_period)}</td></tr>
         <tr><th>File name</th><td>${esc(doc.file_name)}</td></tr>
-        <tr><th>Physical box</th><td>${esc(doc.physical_box)}</td></tr>
       </table>
       <h3 style="margin-bottom:6px;">Process Registry</h3>
       <table>

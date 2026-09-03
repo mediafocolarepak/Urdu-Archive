@@ -1,4 +1,4 @@
-import { sb, State, esc, labelOf, optionsHtml, withStatusCount } from './core.js?v=20260903095247';
+import { sb, State, esc, labelOf, optionsHtml, withStatusCount } from './core.js?v=20260903114431';
 
 export function renderReportsView(main) {
   main.innerHTML = `
@@ -57,11 +57,11 @@ async function generateFilteredReport() {
 
   const body = rows.map(r => `<tr><td>${esc(r.document_id)}</td><td>${esc(r.title)}</td><td>${esc(labelOf(State.categories, r.category))}</td>
     <td>${esc(labelOf(State.authors, r.author))}</td><td>${(r.recipient || []).map(c => labelOf(State.recipients, c)).join(', ')}</td>
-    <td>${esc(r.ref_date)}</td><td>${esc(labelOf(State.statuses, r.workflow_status))}</td><td>${esc(r.physical_box)}</td></tr>`).join('');
+    <td>${esc(r.ref_date)}</td><td>${esc(labelOf(State.statuses, r.workflow_status))}</td></tr>`).join('');
   area.innerHTML = `<div class="report-view">
     <h2>Filtered Document Report</h2>
     <div class="hint" style="margin-bottom:8px;">Total documents: ${count}</div>
-    <table><thead><tr><th>ID</th><th>Title (EN)</th><th>Category</th><th>Author</th><th>Recipient(s)</th><th>Ref. date</th><th>Workflow status</th><th>Physical box</th></tr></thead>
+    <table><thead><tr><th>ID</th><th>Title (EN)</th><th>Category</th><th>Author</th><th>Recipient(s)</th><th>Ref. date</th><th>Workflow status</th></tr></thead>
     <tbody>${body}</tbody></table>
   </div>`;
 }
