@@ -4,7 +4,7 @@
 // (by title similarity against what's already catalogued) are still detected, but only
 // reported afterwards in the summary, not used to block or pre-exclude anything.
 
-import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob } from './core.js?v=20260903093951';
+import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob } from './core.js?v=20260903094326';
 
 export function titleFromFilename(name) {
   const noExt = name.replace(/\.[a-z0-9]+$/i, '');
@@ -51,7 +51,7 @@ export async function renderBulkImportView(main) {
   main.innerHTML = `
     <div class="panel">
       <h2>Bulk Import</h2>
-      <p class="hint">Pick a local folder of files to catalogue in one go. Each file gets a new catalogue number and its own Document. Category/author/topic are left for you to fill in afterwards from the Dashboard. There is one confirmation before anything is written or renamed - after that, every file in the folder is imported.</p>
+      <p class="hint">Pick a local folder of files to catalogue in one go. Each file gets a new catalogue number and its own Document. Category/author/topic are left for you to fill in afterwards from the Dashboard. There is one confirmation before anything is written or renamed - after that, every file in the folder is imported. Renamed copies are written into a "renamed" subfolder (created automatically) and the originals removed - the two are never left side by side.</p>
       ${supported ? '' : '<div class="empty-msg">This feature needs Chrome or Edge (it uses a browser API to read and rename local files that Firefox/Safari do not support).</div>'}
       ${supported ? `
       <div class="field-grid" style="max-width:600px;">
@@ -123,10 +123,16 @@ async function scanAndImport() {
     };
   });
 
-  if (!confirm(`Import ${plan.length} file(s) and rename them on disk? This cannot be easily undone.`)) {
+  if (!confirm(`Import ${plan.length} file(s) and move renamed copies into a "renamed" subfolder? This cannot be easily undone.`)) {
     body.innerHTML = '';
     return;
   }
+
+  // Renamed copies go into a subfolder, not next to the originals - writing a brand new file
+  // right in the same directory an original is about to be deleted from is exactly what
+  // triggers Chromium's "state changed since it was read from disk" error on the delete (see
+  // 2026-09-03 session notes), and separating them avoids it rather than just retrying around it.
+  const outDirHandle = await dirHandle.getDirectoryHandle('renamed', { create: true });
 
   body.innerHTML = '<div class="empty-msg">Importing…</div>';
   let imported = 0, failed = 0;
@@ -152,16 +158,13 @@ async function scanAndImport() {
         original_inp_file_name: r.original_inp_file_name, original_doc_file_name: r.original_doc_file_name,
       }));
       inserted = true;
-      const newHandle = await dirHandle.getFileHandle(r.newFileName, { create: true });
+      const newHandle = await outDirHandle.getFileHandle(r.newFileName, { create: true });
       const writable = await newHandle.createWritable();
       await writable.write(await file.arrayBuffer());
       await writable.close();
       newFileWritten = true;
-      // Deleting the OLD file right after writing the new one is the step that actually throws
-      // this - a Chromium quirk (the directory's cached state goes stale the moment a sibling
-      // file is created/written) rather than anything about the file itself, and it's usually
-      // transient: a couple of retries with a short pause clear it. Windows/antivirus briefly
-      // locking the just-written file can produce the same symptom.
+      // A couple of retries with a short pause, in case Windows/antivirus is still briefly
+      // holding the original file right after it was read above.
       let removed = false, lastErr;
       for (let attempt = 0; attempt < 3 && !removed; attempt++) {
         if (attempt > 0) await new Promise(res => setTimeout(res, 400));
@@ -172,12 +175,12 @@ async function scanAndImport() {
       imported++;
     } catch (e) {
       failed++;
-      // The rename is two separate disk operations (write the new file, then delete the old
-      // one) plus a catalogue insert before either - if it fails partway, undo whatever
-      // completed so a retry starts clean instead of hitting a real duplicate-key error, or
-      // leaving a written-but-uncatalogued duplicate file, next time.
+      // The rename is two separate disk operations (write the new file into "renamed/", then
+      // delete the old one) plus a catalogue insert before either - if it fails partway, undo
+      // whatever completed so a retry starts clean instead of hitting a real duplicate-key
+      // error, or leaving a written-but-uncatalogued duplicate file, next time.
       if (newFileWritten) {
-        try { await dirHandle.removeEntry(r.newFileName); } catch {}
+        try { await outDirHandle.removeEntry(r.newFileName); } catch {}
       }
       if (inserted) {
         await sb.from('documents').delete().eq('document_id', r.document_id);
