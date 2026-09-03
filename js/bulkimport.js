@@ -4,7 +4,7 @@
 // (by title similarity against what's already catalogued) are still detected, but only
 // reported afterwards in the summary, not used to block or pre-exclude anything.
 
-import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob } from './core.js?v=20260903094326';
+import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob } from './core.js?v=20260903094656';
 
 export function titleFromFilename(name) {
   const noExt = name.replace(/\.[a-z0-9]+$/i, '');
@@ -143,7 +143,13 @@ async function scanAndImport() {
     let newFileWritten = false;
     try {
       const workId = await createWorkFor(r.title);
-      const file = await r.entry.getFile();
+      // Re-resolve the file by name right before reading it, rather than trusting r.entry - that
+      // handle was captured during the initial folder scan, well before the "Import N files?"
+      // confirmation the person had to act on, and a stale handle is exactly what throws
+      // Chromium's "state changed since it was read from disk" (confirmed 2026-09-03: it was
+      // failing before any write ever reached the new "renamed" subfolder, i.e. right here).
+      const freshHandle = await dirHandle.getFileHandle(r.originalName);
+      const file = await freshHandle.getFile();
       // Read the page count straight off the local file, before it's renamed/moved anywhere -
       // at this point it isn't in Supabase Storage or Google Drive yet, so the usual
       // readPdfPageCount (which looks a document up by storage_path/file_name) can't find it.
