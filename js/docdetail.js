@@ -7,7 +7,7 @@ import {
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail,
-} from './core.js?v=20260903085533';
+} from './core.js?v=20260903085741';
 
 // Categories that gate visibility/assignment to a specific qualification - duplicated from the
 // same constant in tasks.js (project convention: modules only import from core.js, never each
@@ -555,8 +555,15 @@ async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
       // since it never needs to fetch the file back from anywhere. Only overwrites what's in
       // the form if the read actually succeeds, so a manual entry the person already typed
       // (or a "Read from file" result on the OLD file) isn't clobbered by a read failure.
+      const readPagesStatus = document.getElementById('doc-read-pages-status');
       const readPages = await readPdfPageCountFromBlob(fileInput.files[0]);
-      if (readPages != null) vals.pages = readPages;
+      if (readPages != null) {
+        vals.pages = readPages;
+        box.querySelector('[data-f="pages"]').value = readPages;
+        readPagesStatus.textContent = `Read ${readPages} page${readPages === 1 ? '' : 's'} from the uploaded file.`;
+      } else {
+        readPagesStatus.textContent = 'Could not read the page count from the uploaded file automatically - enter it by hand if needed.';
+      }
       await withStatus(sb.storage.from(BUCKET).upload(finalName, fileInput.files[0], { upsert: true }), 'Uploading file...');
       storagePath = finalName;
       vals.file_name = finalName;

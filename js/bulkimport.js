@@ -4,7 +4,7 @@
 // (by title similarity against what's already catalogued) are still detected, but only
 // reported afterwards in the summary, not used to block or pre-exclude anything.
 
-import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob } from './core.js?v=20260903085533';
+import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob } from './core.js?v=20260903085741';
 
 export function titleFromFilename(name) {
   const noExt = name.replace(/\.[a-z0-9]+$/i, '');
@@ -131,6 +131,7 @@ async function scanAndImport() {
   body.innerHTML = '<div class="empty-msg">Importing…</div>';
   let imported = 0, failed = 0;
   const errors = [];
+  const pageReadFailures = [];
   for (const r of plan) {
     try {
       const workId = await createWorkFor(r.title);
@@ -139,6 +140,7 @@ async function scanAndImport() {
       // at this point it isn't in Supabase Storage or Google Drive yet, so the usual
       // readPdfPageCount (which looks a document up by storage_path/file_name) can't find it.
       const pages = batchMediaType === 'VID' ? null : await readPdfPageCountFromBlob(file);
+      if (pages == null && batchMediaType !== 'VID') pageReadFailures.push(r);
       await withStatus(sb.from('documents').insert({
         document_id: r.document_id, title: r.title, workflow_status: 'ENTR',
         catalog_date: today(), ref_date: r.ref_date, ref_period: r.ref_period,
@@ -166,5 +168,7 @@ async function scanAndImport() {
       ${duplicates.length ? `<div class="hint" style="margin-top:8px;">${duplicates.length} file(s) looked similar to something already catalogued - worth a check:</div>
         <ul>${duplicates.map(d => `<li>${esc(d.originalName)} - similar to #${esc(d.duplicateOf.document_id)} "${esc(d.duplicateOf.title)}"</li>`).join('')}</ul>` : ''}
       ${errors.length ? `<div class="hint" style="margin-top:8px;">Failed:</div><ul>${errors.map(e => `<li>${esc(e.name)}: ${esc(e.message)}</li>`).join('')}</ul>` : ''}
+      ${pageReadFailures.length ? `<div class="hint" style="margin-top:8px;">Catalogued, but the page count could not be read automatically - enter it by hand from the Dashboard:</div>
+        <ul>${pageReadFailures.map(r => `<li>#${esc(r.document_id)} ${esc(r.title)}</li>`).join('')}</ul>` : ''}
     </div>`;
 }
