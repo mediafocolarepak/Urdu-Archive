@@ -3,7 +3,7 @@
 // which now live in the `help_pages` table (51_help_pages.sql) instead of external Claude
 // Artifacts. Admin can edit/save them in place (raw HTML source) from this same view.
 
-import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20260903114431';
+import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20260903125140';
 
 let helpPagesCache = null;
 const helpView = { slug: null, editing: false };

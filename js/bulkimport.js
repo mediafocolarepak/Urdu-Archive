@@ -4,7 +4,7 @@
 // (by title similarity against what's already catalogued) are still detected, but only
 // reported afterwards in the summary, not used to block or pre-exclude anything.
 
-import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob } from './core.js?v=20260903114431';
+import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob } from './core.js?v=20260903125140';
 
 export function titleFromFilename(name) {
   const noExt = name.replace(/\.[a-z0-9]+$/i, '');
@@ -160,10 +160,19 @@ async function scanAndImport() {
         catalog_date: today(), ref_date: r.ref_date, ref_period: r.ref_period,
         file_name: r.newFileName, legacy_migrated: false, work_id: workId, pages,
         source: batchSource || null, operator: batchOperator || null, language: batchLang || null,
-        media_type: batchMediaType, collection: batchCollection || null,
+        media_type: batchMediaType,
         original_inp_file_name: r.original_inp_file_name, original_doc_file_name: r.original_doc_file_name,
       }));
       inserted = true;
+      // Collections are a many-to-many join in document_collections, which is what the document
+      // editor, the Dashboard filter and Match Review all read. Writing them to a column on
+      // documents instead (as this did until migration 67) made every bulk-imported document
+      // invisible to all three. No rollback needed for this row: the delete below takes the
+      // document with it, and the foreign key cascades.
+      if (batchCollection) {
+        await withStatus(sb.from('document_collections')
+          .insert({ document_id: r.document_id, collection_code: batchCollection }));
+      }
       const newHandle = await outDirHandle.getFileHandle(r.newFileName, { create: true });
       const writable = await newHandle.createWritable();
       await writable.write(await file.arrayBuffer());

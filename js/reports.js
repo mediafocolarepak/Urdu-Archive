@@ -1,4 +1,4 @@
-import { sb, State, esc, labelOf, optionsHtml, withStatusCount } from './core.js?v=20260903114431';
+import { sb, State, esc, labelOf, optionsHtml, withStatus, withStatusCount } from './core.js?v=20260903125140';
 
 export function renderReportsView(main) {
   main.innerHTML = `
@@ -45,7 +45,12 @@ async function generateFilteredReport() {
   if (mainTopic) q = q.eq('main_topic', mainTopic);
   if (author) q = q.eq('author', author);
   if (status) q = q.eq('workflow_status', status);
-  if (collection) q = q.eq('collection', collection);
+  // Collections are many-to-many (document_collections) - documents has no collection column.
+  // Resolving the ids first keeps this a server-side filter, so `count` stays truthful.
+  if (collection) {
+    const matches = await withStatus(sb.from('document_collections').select('document_id').eq('collection_code', collection));
+    q = q.in('document_id', matches.map(m => m.document_id));
+  }
   if (source) q = q.eq('source', source);
   if (recipient) q = q.overlaps('recipient', [recipient]);
   if (from) q = q.gte('ref_date', from);
