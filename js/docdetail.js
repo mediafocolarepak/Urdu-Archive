@@ -7,7 +7,7 @@ import {
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail,
-} from './core.js?v=20260903085741';
+} from './core.js?v=20260903093511';
 
 // Categories that gate visibility/assignment to a specific qualification - duplicated from the
 // same constant in tasks.js (project convention: modules only import from core.js, never each

@@ -4,7 +4,7 @@
 // (by title similarity against what's already catalogued) are still detected, but only
 // reported afterwards in the summary, not used to block or pre-exclude anything.
 
-import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob } from './core.js?v=20260903085741';
+import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob } from './core.js?v=20260903093511';
 
 export function titleFromFilename(name) {
   const noExt = name.replace(/\.[a-z0-9]+$/i, '');
@@ -133,6 +133,7 @@ async function scanAndImport() {
   const errors = [];
   const pageReadFailures = [];
   for (const r of plan) {
+    let inserted = false;
     try {
       const workId = await createWorkFor(r.title);
       const file = await r.entry.getFile();
@@ -149,6 +150,13 @@ async function scanAndImport() {
         media_type: batchMediaType, collection: batchCollection || null,
         original_inp_file_name: r.original_inp_file_name, original_doc_file_name: r.original_doc_file_name,
       }));
+      inserted = true;
+      // The rename-on-disk below is a separate step from the catalogue insert above - if it
+      // fails partway (a Chromium "state changed since read from disk" error, most often a
+      // cloud-sync client like OneDrive touching the file mid-operation, is the usual cause),
+      // the document would otherwise be left catalogued but pointing at a file that was never
+      // actually renamed/moved. Roll the insert back so a retry starts clean instead of hitting
+      // a real duplicate-key error on this same document_id next time.
       const newHandle = await dirHandle.getFileHandle(r.newFileName, { create: true });
       const writable = await newHandle.createWritable();
       await writable.write(await file.arrayBuffer());
@@ -157,7 +165,13 @@ async function scanAndImport() {
       imported++;
     } catch (e) {
       failed++;
-      errors.push({ name: r.originalName, message: e.message });
+      if (inserted) {
+        await sb.from('documents').delete().eq('document_id', r.document_id);
+      }
+      const hint = e.name === 'InvalidStateError' || /state.*changed since it was read/i.test(e.message)
+        ? ' (the file may be a cloud-sync placeholder - e.g. OneDrive "Files On-Demand" - not fully downloaded yet; try again after making sure it\'s available offline)'
+        : '';
+      errors.push({ name: r.originalName, message: e.message + hint });
     }
   }
 
