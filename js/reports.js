@@ -1,4 +1,4 @@
-import { sb, State, esc, labelOf, optionsHtml, withStatusCount } from './core.js?v=20260903093511';
+import { sb, State, esc, labelOf, optionsHtml, withStatusCount } from './core.js?v=20260903093951';
 
 export function renderReportsView(main) {
   main.innerHTML = `

@@ -4,7 +4,7 @@
 // (by title similarity against what's already catalogued) are still detected, but only
 // reported afterwards in the summary, not used to block or pre-exclude anything.
 
-import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob } from './core.js?v=20260903093511';
+import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob } from './core.js?v=20260903093951';
 
 export function titleFromFilename(name) {
   const noExt = name.replace(/\.[a-z0-9]+$/i, '');
@@ -134,6 +134,7 @@ async function scanAndImport() {
   const pageReadFailures = [];
   for (const r of plan) {
     let inserted = false;
+    let newFileWritten = false;
     try {
       const workId = await createWorkFor(r.title);
       const file = await r.entry.getFile();
@@ -151,20 +152,33 @@ async function scanAndImport() {
         original_inp_file_name: r.original_inp_file_name, original_doc_file_name: r.original_doc_file_name,
       }));
       inserted = true;
-      // The rename-on-disk below is a separate step from the catalogue insert above - if it
-      // fails partway (a Chromium "state changed since read from disk" error, most often a
-      // cloud-sync client like OneDrive touching the file mid-operation, is the usual cause),
-      // the document would otherwise be left catalogued but pointing at a file that was never
-      // actually renamed/moved. Roll the insert back so a retry starts clean instead of hitting
-      // a real duplicate-key error on this same document_id next time.
       const newHandle = await dirHandle.getFileHandle(r.newFileName, { create: true });
       const writable = await newHandle.createWritable();
       await writable.write(await file.arrayBuffer());
       await writable.close();
-      await dirHandle.removeEntry(r.originalName);
+      newFileWritten = true;
+      // Deleting the OLD file right after writing the new one is the step that actually throws
+      // this - a Chromium quirk (the directory's cached state goes stale the moment a sibling
+      // file is created/written) rather than anything about the file itself, and it's usually
+      // transient: a couple of retries with a short pause clear it. Windows/antivirus briefly
+      // locking the just-written file can produce the same symptom.
+      let removed = false, lastErr;
+      for (let attempt = 0; attempt < 3 && !removed; attempt++) {
+        if (attempt > 0) await new Promise(res => setTimeout(res, 400));
+        try { await dirHandle.removeEntry(r.originalName); removed = true; }
+        catch (e) { lastErr = e; }
+      }
+      if (!removed) throw lastErr;
       imported++;
     } catch (e) {
       failed++;
+      // The rename is two separate disk operations (write the new file, then delete the old
+      // one) plus a catalogue insert before either - if it fails partway, undo whatever
+      // completed so a retry starts clean instead of hitting a real duplicate-key error, or
+      // leaving a written-but-uncatalogued duplicate file, next time.
+      if (newFileWritten) {
+        try { await dirHandle.removeEntry(r.newFileName); } catch {}
+      }
       if (inserted) {
         await sb.from('documents').delete().eq('document_id', r.document_id);
       }
