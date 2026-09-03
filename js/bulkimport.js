@@ -4,7 +4,7 @@
 // (by title similarity against what's already catalogued) are still detected, but only
 // reported afterwards in the summary, not used to block or pre-exclude anything.
 
-import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob } from './core.js?v=20260903094656';
+import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob } from './core.js?v=20260903095247';
 
 export function titleFromFilename(name) {
   const noExt = name.replace(/\.[a-z0-9]+$/i, '');
@@ -51,7 +51,7 @@ export async function renderBulkImportView(main) {
   main.innerHTML = `
     <div class="panel">
       <h2>Bulk Import</h2>
-      <p class="hint">Pick a local folder of files to catalogue in one go. Each file gets a new catalogue number and its own Document. Category/author/topic are left for you to fill in afterwards from the Dashboard. There is one confirmation before anything is written or renamed - after that, every file in the folder is imported. Renamed copies are written into a "renamed" subfolder (created automatically) and the originals removed - the two are never left side by side.</p>
+      <p class="hint">Pick a local folder of files to catalogue in one go. Each file gets a new catalogue number and its own Document. Category/author/topic are left for you to fill in afterwards from the Dashboard. There is one confirmation before anything is written or renamed - after that, every file in the folder is imported. Renamed copies are written into a "renamed" subfolder (created automatically) and the originals removed - the two are never left side by side. Use a folder on an internal HDD/SSD, not a USB flash drive or a cloud-sync folder - both can make file renaming fail partway through.</p>
       ${supported ? '' : '<div class="empty-msg">This feature needs Chrome or Edge (it uses a browser API to read and rename local files that Firefox/Safari do not support).</div>'}
       ${supported ? `
       <div class="field-grid" style="max-width:600px;">
@@ -191,8 +191,11 @@ async function scanAndImport() {
       if (inserted) {
         await sb.from('documents').delete().eq('document_id', r.document_id);
       }
+      // Confirmed 2026-09-03: a USB flash drive reliably triggers this - copy the folder to an
+      // internal HDD/SSD first and it goes away. A cloud-sync placeholder (OneDrive "Files
+      // On-Demand" and the like) is the other known cause, so still worth checking too.
       const hint = e.name === 'InvalidStateError' || /state.*changed since it was read/i.test(e.message)
-        ? ' (the file may be a cloud-sync placeholder - e.g. OneDrive "Files On-Demand" - not fully downloaded yet; try again after making sure it\'s available offline)'
+        ? ' (this usually means the folder is on a USB flash drive, or the file is a cloud-sync placeholder not fully downloaded yet - copy the folder to an internal HDD/SSD first and try again)'
         : '';
       errors.push({ name: r.originalName, message: e.message + hint });
     }
