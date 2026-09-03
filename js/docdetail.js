@@ -6,8 +6,8 @@ import {
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete, isCoordinator, isAdmin,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
-  readPdfPageCount, getDisplayNameByEmail,
-} from './core.js?v=20260902172915';
+  readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail,
+} from './core.js?v=20260903085533';
 
 // Categories that gate visibility/assignment to a specific qualification - duplicated from the
 // same constant in tasks.js (project convention: modules only import from core.js, never each
@@ -550,6 +550,13 @@ async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
       if (storagePath && storagePath !== finalName) {
         await sb.storage.from(BUCKET).remove([storagePath]);
       }
+      // Auto-read the page count straight off the picked file - same technique as Bulk Import,
+      // and avoids the Google Drive alt=media CORS wall entirely (see 2026-09-02 session notes)
+      // since it never needs to fetch the file back from anywhere. Only overwrites what's in
+      // the form if the read actually succeeds, so a manual entry the person already typed
+      // (or a "Read from file" result on the OLD file) isn't clobbered by a read failure.
+      const readPages = await readPdfPageCountFromBlob(fileInput.files[0]);
+      if (readPages != null) vals.pages = readPages;
       await withStatus(sb.storage.from(BUCKET).upload(finalName, fileInput.files[0], { upsert: true }), 'Uploading file...');
       storagePath = finalName;
       vals.file_name = finalName;
