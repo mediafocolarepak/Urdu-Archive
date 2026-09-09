@@ -8,7 +8,7 @@
 // raw .inp binary directly (locates the content block via fixed byte markers, then maps
 // each InPage glyph code to its Unicode Arabic/Urdu codepoint), so no InPage clipboard
 // step is needed. Rewritten here as a pure function instead of relying on globals.
-import { canWrite, esc, getDriveAccessToken, driveUploadOrReplace } from './core.js?v=20260909152718';
+import { sb, canWrite, isAdmin, esc, withStatus, getDriveAccessToken, driveUploadOrReplace } from './core.js?v=20260909164501';
 
 const DEFAULT_OPTIONS = {
   urdu: true,          // Urdu glyph variants (ک ی ہ ھ ں...) vs. plain Arabic ones
@@ -447,7 +447,8 @@ export async function renderInPageConverterView(main) {
       </div>
       <p class="hint">Uploads the original .inp and the generated .docx, overwriting any existing file with the same name in that folder. The PDF is not uploaded automatically — save it from the print dialog (Generate PDF above) into the same folder yourself.</p>
       <div class="hint" id="ipc-drive-status"></div>
-    </div>`;
+    </div>
+    ${isAdmin() ? bulkTextImportPanel() : ''}`;
 
   const fileInput = document.getElementById('ipc-file');
   const preview = document.getElementById('ipc-preview');
@@ -522,4 +523,288 @@ export async function renderInPageConverterView(main) {
       driveBtn.disabled = false;
     }
   });
+
+  if (isAdmin()) wireBulkTextImport();
+}
+
+// ---------- Bulk Urdu text import (Admin only) ----------
+// Fills document_texts (migration 68) from a folder of .inp files, converting them with the
+// same inPageBytesToUnicode above - so what lands in the database is exactly what the single-
+// file converter in this tab produces, not a separate offline pipeline that could drift.
+//
+// It runs in two halves on purpose. "Analyse" reads and converts everything and shows what it
+// WOULD do, without touching the database; only then does Import write. A bulk load that
+// starts writing on the first click is a load you cannot review, and this one touches the
+// whole archive at once.
+//
+// Deliberately NOT a one-off script: new .inp files keep arriving from the typists, so the
+// tool that loads them belongs in the app rather than on someone's disk.
+
+function bulkTextImportPanel() {
+  return `
+    <div class="panel">
+      <h2>Bulk Urdu text import <span class="hint">— Admin only, fills the searchable text of the archive</span></h2>
+      <p class="hint">Converts a whole folder of .inp files and stores the Urdu text against the matching
+        documents, which is what makes in-app reading and full-text search possible. Files are matched to
+        documents by their original InPage filename, exactly as recorded in the archive
+        (<i>original_inp_file_name</i> / <i>renamed_inp_file_name</i>). Nothing is written until you press
+        Import, and text that somebody has already reviewed is never overwritten.</p>
+      <div class="field">
+        <label>InPage folder — subfolders are included</label>
+        <input type="file" id="bti-files" multiple webkitdirectory directory>
+        <div class="hint">Pick the top folder of the InPage archive; anything that isn't a .inp file is ignored.</div>
+      </div>
+      <div class="field" style="display:flex;flex-wrap:wrap;gap:6px 24px;">
+        <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:12.5px;">
+          <input type="checkbox" id="bti-overwrite"> Replace text that is already stored (never touches reviewed text)
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:12.5px;">
+          <input type="checkbox" id="bti-include-suspect"> Include suspect conversions (very short, or little Urdu)
+        </label>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="bti-analyse">Analyse</button>
+        <button class="btn" id="bti-import" disabled>Import</button>
+        <button class="btn secondary" id="bti-stop" style="display:none;">Stop</button>
+      </div>
+      <p id="bti-progress" class="hint"></p>
+      <div id="bti-summary"></div>
+      <div id="bti-log" style="max-height:260px;overflow:auto;font-size:12px;"></div>
+    </div>`;
+}
+
+// Same tolerant key on both sides of the match: case, accents, punctuation and the leading
+// zeros of the catalogue number all differ between the filenames on disk and the names recorded
+// in the archive ("02-Giving..." in the database vs "002-Giving....inp" on disk).
+function textKey(name) {
+  return String(name).toLowerCase().replace(/\.inp$/, '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')   // accenti, scritti come escape: sono invisibili
+    .replace(/[^a-z0-9]/g, '')
+    .replace(/^0+/, '');
+}
+// renamed_inp_file_name carries a "<id>-ALE-" / "<id>-STE-" prefix added during the 2026-08-31
+// file work; the part after it is the historical name that matches what is on disk.
+function stripIdPrefix(name) {
+  const m = String(name).match(/^\d+-(?:ALE|STE)-(.*)$/);
+  return m ? m[1] : String(name);
+}
+// Leading catalogue number, used only as a fallback and only together with the date below.
+// NB: never run this through a path helper - the recorded names contain dates with slashes
+// ("347-Linkup-10/1/1997"), which a basename() would chop.
+function catalogueNumber(name) {
+  const m = String(name).match(/^(\d{1,4})[^\d]/);
+  return m ? m[1] : null;
+}
+// Every date in the string, normalised to ddmmyy so that 10.01.97 and 10/1/1997 compare equal.
+function dateStamps(name) {
+  return (String(name).match(/(\d{1,4})[.\-/ =]+(\d{1,2})[.\-/ =]+(\d{2,4})/g) || [])
+    .map(x => x.split(/[.\-/ =]+/).map(n => n.length === 4 ? n.slice(2) : n.padStart(2, '0')).join(''));
+}
+function urduShare(text) {
+  const t = text.replace(/\s/g, '');
+  if (!t.length) return 0;
+  let n = 0;
+  for (const ch of t) { const c = ch.codePointAt(0); if (c >= 0x0600 && c <= 0x06FF) n++; }
+  return n / t.length;
+}
+
+// Legge una tabella intera a pagine di 1000, che e' il tetto che PostgREST applica in silenzio
+// a una select senza range.
+async function fetchAllRows(table, columns) {
+  const PAGE = 1000;
+  const all = [];
+  for (let from = 0; ; from += PAGE) {
+    const page = await withStatus(sb.from(table).select(columns).order('document_id').range(from, from + PAGE - 1),
+      `Reading ${table} (${all.length})...`);
+    all.push(...page);
+    if (page.length < PAGE) return all;
+  }
+}
+
+let btiRows = [];
+let btiStopRequested = false;
+
+function wireBulkTextImport() {
+  document.getElementById('bti-analyse').addEventListener('click', analyseBulkTextImport);
+  document.getElementById('bti-import').addEventListener('click', runBulkTextImport);
+  document.getElementById('bti-stop').addEventListener('click', () => { btiStopRequested = true; });
+  // Le due caselle cambiano quante righe verranno scritte: il riepilogo e il pulsante devono
+  // seguirle subito, altrimenti mostrerebbero il conteggio di prima della spunta.
+  for (const id of ['bti-overwrite', 'bti-include-suspect']) {
+    document.getElementById(id).addEventListener('change', () => {
+      if (!btiRows.length) return;
+      renderBulkAnalysis();
+      document.getElementById('bti-import').disabled = plannedBulkRows().length === 0;
+    });
+  }
+}
+
+async function analyseBulkTextImport() {
+  const files = [...document.getElementById('bti-files').files].filter(f => f.name.toLowerCase().endsWith('.inp'));
+  const progress = document.getElementById('bti-progress');
+  const summary = document.getElementById('bti-summary');
+  const log = document.getElementById('bti-log');
+  const importBtn = document.getElementById('bti-import');
+  importBtn.disabled = true;
+  summary.innerHTML = '';
+  log.innerHTML = '';
+  btiRows = [];
+  if (!files.length) { alert('Choose a folder containing .inp files first.'); return; }
+
+  // The whole archive's naming, in one go: short rows, cheaper and far less fragile than asking
+  // the database once per file. Paged on purpose - PostgREST caps a plain select at 1000 rows
+  // and says nothing about it, and documents is well past that: without paging, every document
+  // beyond the first thousand would silently come back as "no matching document".
+  progress.textContent = 'Reading the archive index...';
+  const docs = await fetchAllRows('documents', 'document_id,original_inp_file_name,renamed_inp_file_name,en_title,title');
+  const existing = await fetchAllRows('document_texts', 'document_id,reviewed');
+  const reviewedIds = new Set(existing.filter(r => r.reviewed).map(r => r.document_id));
+  const storedIds = new Set(existing.map(r => r.document_id));
+
+  const byKey = new Map();       // nome normalizzato -> [documenti]
+  const byNumber = new Map();    // numero di catalogo -> [documenti]
+  for (const d of docs) {
+    for (const raw of [d.original_inp_file_name, d.renamed_inp_file_name && stripIdPrefix(d.renamed_inp_file_name)]) {
+      if (!raw) continue;
+      const k = textKey(raw);
+      if (k) { if (!byKey.has(k)) byKey.set(k, []); if (!byKey.get(k).includes(d)) byKey.get(k).push(d); }
+      const n = catalogueNumber(raw);
+      if (n) { if (!byNumber.has(n)) byNumber.set(n, []); if (!byNumber.get(n).includes(d)) byNumber.get(n).push({ doc: d, raw }); }
+    }
+  }
+
+  const claimed = new Map();     // document_id -> nome del file che se l'e' gia' preso
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    if (i % 25 === 0) { progress.textContent = `Converting ${i} / ${files.length}...`; await new Promise(r => setTimeout(r)); }
+    // name = solo il nome, ed e' quello su cui si aggancia; path = il percorso dentro la
+    // cartella scelta, che si registra come provenienza e si mostra nei problemi (le stesse
+    // trascrizioni compaiono in piu' sottocartelle: senza percorso non si capisce quale sia).
+    const row = { name: f.name, path: f.webkitRelativePath || f.name, file: f };
+    try {
+      row.text = inPageBytesToUnicode(new Uint8Array(await f.arrayBuffer()), {});
+    } catch (e) {
+      row.status = 'failed'; row.note = e.message; btiRows.push(row); continue;
+    }
+    row.chars = row.text.length;
+    row.urdu = urduShare(row.text);
+    row.suspect = row.chars < 200 || row.urdu < 0.55;
+
+    // 1) match sul nome; 2) ripiego sul numero di catalogo, ma solo se anche la data coincide -
+    // il numero da solo aggancerebbe documenti diversi che iniziano per le stesse cifre.
+    let hit = byKey.get(textKey(f.name)) || [];
+    if (!hit.length) {
+      const cands = (byNumber.get(catalogueNumber(f.name)) || []).filter(c => {
+        const a = dateStamps(f.name), b = dateStamps(c.raw);
+        return a.length && b.length && a.some(x => b.includes(x));
+      });
+      hit = cands.map(c => c.doc);
+      if (hit.length) row.viaNumber = true;
+    }
+    if (!hit.length) { row.status = 'nomatch'; btiRows.push(row); continue; }
+    if (hit.length > 1) { row.status = 'ambiguous'; row.docs = hit; btiRows.push(row); continue; }
+
+    const doc = hit[0];
+    row.doc = doc;
+    if (claimed.has(doc.document_id)) { row.status = 'duplicate'; row.note = claimed.get(doc.document_id); btiRows.push(row); continue; }
+    if (reviewedIds.has(doc.document_id)) { row.status = 'reviewed'; btiRows.push(row); continue; }
+    row.status = storedIds.has(doc.document_id) ? 'stored' : 'new';
+    claimed.set(doc.document_id, f.name);
+    btiRows.push(row);
+  }
+
+  renderBulkAnalysis();
+  progress.textContent = `Analysed ${files.length} file(s). Nothing has been written yet.`;
+  importBtn.disabled = plannedBulkRows().length === 0;
+}
+
+// Quali righe verranno scritte, date le due caselle. Unico punto che decide: la tabella di
+// riepilogo, il pulsante e il ciclo di scrittura leggono tutti da qui, cosi' non possono
+// raccontare tre cose diverse.
+function plannedBulkRows() {
+  const overwrite = document.getElementById('bti-overwrite')?.checked;
+  const includeSuspect = document.getElementById('bti-include-suspect')?.checked;
+  return btiRows.filter(r =>
+    (r.status === 'new' || (r.status === 'stored' && overwrite))
+    && (!r.suspect || includeSuspect));
+}
+
+function renderBulkAnalysis() {
+  const count = s => btiRows.filter(r => r.status === s).length;
+  const planned = plannedBulkRows();
+  const suspectPlanned = planned.filter(r => r.suspect).length;
+  document.getElementById('bti-summary').innerHTML = `
+    <div class="grid-wrap"><table class="grid">
+      <thead><tr><th>Outcome</th><th>Files</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>New text to store</td><td>${count('new')}</td><td class="hint">no text held for that document yet</td></tr>
+        <tr><td>Already stored</td><td>${count('stored')}</td><td class="hint">${document.getElementById('bti-overwrite').checked ? 'will be replaced' : 'skipped unless you tick Replace'}</td></tr>
+        <tr><td>Reviewed — never touched</td><td>${count('reviewed')}</td><td class="hint">somebody has checked this text by hand</td></tr>
+        <tr><td>No matching document</td><td>${count('nomatch')}</td><td class="hint">filename not recorded in the archive</td></tr>
+        <tr><td>Ambiguous</td><td>${count('ambiguous')}</td><td class="hint">the name matches more than one document</td></tr>
+        <tr><td>Duplicate of another file</td><td>${count('duplicate')}</td><td class="hint">same document already taken by an earlier file</td></tr>
+        <tr><td>Conversion failed</td><td>${count('failed')}</td><td class="hint">not a readable .inp</td></tr>
+      </tbody>
+    </table></div>
+    <p class="hint" style="margin-top:8px;"><b>${planned.length}</b> file(s) will be written${suspectPlanned ? `, of which <b>${suspectPlanned}</b> flagged as suspect` : ''}.
+      Everything imported here is stored as an unverified automatic transcription until somebody reviews it.</p>`;
+
+  const problems = btiRows.filter(r => ['nomatch', 'ambiguous', 'duplicate', 'failed'].includes(r.status) || r.suspect);
+  document.getElementById('bti-log').innerHTML = problems.length
+    ? `<div class="hint" style="margin-top:6px;">Needs a human eye (${problems.length}):</div>` + problems.map(r => {
+      const why = r.status === 'nomatch' ? 'no matching document'
+        : r.status === 'ambiguous' ? 'matches #' + r.docs.map(d => d.document_id).join(', #')
+          : r.status === 'duplicate' ? 'that document was already taken by ' + r.note
+            : r.status === 'failed' ? r.note
+              : `suspect: ${r.chars} chars, ${(r.urdu * 100).toFixed(0)}% Urdu`;
+      return `<div>${esc(r.path)} — ${esc(why)}</div>`;
+    }).join('')
+    : '';
+}
+
+async function runBulkTextImport() {
+  const planned = plannedBulkRows();
+  if (!planned.length) return;
+  if (!confirm(`Store the Urdu text of ${planned.length} document(s)?\n\nText already reviewed by hand is never touched.`)) return;
+
+  btiStopRequested = false;
+  const importBtn = document.getElementById('bti-import');
+  const analyseBtn = document.getElementById('bti-analyse');
+  const stopBtn = document.getElementById('bti-stop');
+  const progress = document.getElementById('bti-progress');
+  const log = document.getElementById('bti-log');
+  importBtn.disabled = true; analyseBtn.disabled = true; stopBtn.style.display = 'inline-block';
+
+  const { data: { user } } = await sb.auth.getUser();
+  // Written in batches: one request per document would be ~1000 round trips, one single request
+  // would be a ~19 MB body. body_norm and char_count are generated columns - sending them would
+  // be rejected - and `reviewed` is left out on purpose so that replacing a stored text cannot
+  // silently reset somebody's review flag.
+  const BATCH = 20;
+  let done = 0, saved = 0, failed = 0;
+  for (let i = 0; i < planned.length && !btiStopRequested; i += BATCH) {
+    const chunk = planned.slice(i, i + BATCH);
+    const payload = chunk.map(r => ({
+      document_id: r.doc.document_id,
+      body: r.text,
+      source: 'inpage',
+      source_file: r.path,
+      updated_by_email: user?.email || null,
+    }));
+    try {
+      const { error } = await sb.from('document_texts').upsert(payload, { onConflict: 'document_id' });
+      if (error) throw error;
+      saved += chunk.length;
+    } catch (err) {
+      failed += chunk.length;
+      log.insertAdjacentHTML('beforeend', `<div>Batch starting at ${esc(chunk[0].path)} failed — ${esc(err.message)}</div>`);
+    }
+    done += chunk.length;
+    progress.textContent = `${done} / ${planned.length} (${saved} stored, ${failed} failed)${btiStopRequested ? ' — stopped, safe to run again.' : ''}`;
+    await new Promise(r => setTimeout(r, 60));
+  }
+
+  stopBtn.style.display = 'none';
+  analyseBtn.disabled = false;
+  progress.textContent = `Finished: ${saved} stored, ${failed} failed${btiStopRequested ? ' (stopped early)' : ''}. Re-run Analyse to see the new state.`;
 }
