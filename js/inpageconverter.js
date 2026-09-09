@@ -8,7 +8,7 @@
 // raw .inp binary directly (locates the content block via fixed byte markers, then maps
 // each InPage glyph code to its Unicode Arabic/Urdu codepoint), so no InPage clipboard
 // step is needed. Rewritten here as a pure function instead of relying on globals.
-import { canWrite, esc, getDriveAccessToken, driveUploadOrReplace } from './core.js?v=20260903125140';
+import { canWrite, esc, getDriveAccessToken, driveUploadOrReplace } from './core.js?v=20260909152718';
 
 const DEFAULT_OPTIONS = {
   urdu: true,          // Urdu glyph variants (ک ی ہ ھ ں...) vs. plain Arabic ones
@@ -40,6 +40,11 @@ function findStartPosition(b) {
   const i = findStartMarker(b, 0);
   return i === -1 ? -1 : i + 14;
 }
+// A content block shorter than this can't be a real document - see findEndPosition below.
+// 2000 is comfortably above the largest genuine short block seen in the local archive
+// (a few hundred bytes of heading) and far below the smallest real document.
+const MIN_CONTENT_BLOCK_BYTES = 2000;
+
 function findEndPosition(b, startP) {
   let normalEnd = -1;
   for (let i = startP; i <= b.length - 1; i++) {
@@ -55,8 +60,19 @@ function findEndPosition(b, startP) {
   // *before* the real end marker. When that happens, stop there instead - otherwise the
   // decoded output ends up with a garbage tail (unmapped binary rendered as literal
   // "-XX" hex) followed by the entire document a second time.
+  //
+  // But that only holds when the first block is a whole document. Plenty of files put
+  // several start markers a few dozen bytes apart - those are consecutive text frames of
+  // one layout, not a repeat - and stopping at the first of them threw the document away:
+  // 290-God is Love-Chiara-Gen 2-74.inp (69 KB) has its second marker 32 bytes after the
+  // first and decoded to 10 characters instead of 17,853. Requiring the first block to be
+  // at least MIN_CONTENT_BLOCK_BYTES long tells the two cases apart. Measured over all
+  // 1365 .inp files in the local archive (2026-09-09): 54 files gain text, 40 of them
+  // recovering from near-empty to a full document at 97-99% Urdu characters, and no file
+  // loses a single line - so the 1992-era duplicate case stays protected.
   const secondStart = findStartMarker(b, startP + 1);
-  if (secondStart !== -1 && (normalEnd === -1 || secondStart < normalEnd)) return secondStart;
+  if (secondStart !== -1 && secondStart - startP >= MIN_CONTENT_BLOCK_BYTES
+      && (normalEnd === -1 || secondStart < normalEnd)) return secondStart;
   return normalEnd !== -1 ? normalEnd : b.length;
 }
 function toHexPairs(bytes, start, length) {
