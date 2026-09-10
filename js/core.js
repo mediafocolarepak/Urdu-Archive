@@ -749,6 +749,14 @@ export async function nameMapForEmails(emails) {
   return map;
 }
 
+// Same postability rule as document_is_postable() in 71_boards.sql - a client-side echo so a
+// "+ Board" button doesn't appear only to have the insert rejected by RLS; that policy remains
+// the real gate. Keep the two in sync. Lives here (not in docdetail.js) because myspace.js needs
+// it too, and modules only import from core.js, never from each other.
+export function isDocPostable(doc) {
+  return doc.language === 'URD' && (doc.workflow_status == null || ['APPR', 'STOR', 'published'].includes(doc.workflow_status));
+}
+
 // Shared popup for a board post - used by docdetail.js's "+ Board" (post with a document) and
 // boards.js's "+ New post" (free post). Lives here, not in either of them, because those two
 // modules can't import each other (project convention: modules import only from core.js).

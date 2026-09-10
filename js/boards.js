@@ -5,7 +5,7 @@
 import {
   sb, State, esc, withStatus, canReviewApplications, getDisplayNameByEmail,
   openBoardPostPopup, likeSafe, DEFAULT_BOARD_FOR_MEMBERSHIP,
-} from './core.js?v=20260910140007';
+} from './core.js?v=20260910160815';
 
 export async function renderBoardsView(main) {
   const { data: { user } } = await sb.auth.getUser();

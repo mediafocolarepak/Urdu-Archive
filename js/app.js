@@ -1,21 +1,21 @@
-import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260910140007';
-import { renderDashboardView } from './dashboard.js?v=20260910140007';
-import { renderReportsView } from './reports.js?v=20260910140007';
-import { renderHayatView } from './hayatindex.js?v=20260910140007';
-import { renderMatchReviewView } from './matchreview.js?v=20260910140007';
-import { renderBulkImportView } from './bulkimport.js?v=20260910140007';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260910140007';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260910140007';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260910140007';
-import { renderHayatEditorView } from './hayateditor.js?v=20260910140007';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260910140007';
-import { renderUserGuideView } from './userguide.js?v=20260910140007';
-import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260910140007';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260910140007';
-import { renderMyProfileView } from './profile.js?v=20260910140007';
-import { renderMySpaceView } from './myspace.js?v=20260910140007';
-import { renderBoardsView } from './boards.js?v=20260910140007';
-import { registerServiceWorker } from './pwa-register.js?v=20260910140007';
+import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260910160815';
+import { renderDashboardView } from './dashboard.js?v=20260910160815';
+import { renderReportsView } from './reports.js?v=20260910160815';
+import { renderHayatView } from './hayatindex.js?v=20260910160815';
+import { renderMatchReviewView } from './matchreview.js?v=20260910160815';
+import { renderBulkImportView } from './bulkimport.js?v=20260910160815';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260910160815';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260910160815';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260910160815';
+import { renderHayatEditorView } from './hayateditor.js?v=20260910160815';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260910160815';
+import { renderUserGuideView } from './userguide.js?v=20260910160815';
+import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260910160815';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260910160815';
+import { renderMyProfileView } from './profile.js?v=20260910160815';
+import { renderMySpaceView } from './myspace.js?v=20260910160815';
+import { renderBoardsView } from './boards.js?v=20260910160815';
+import { registerServiceWorker } from './pwa-register.js?v=20260910160815';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.

@@ -7,7 +7,7 @@
 // un'operazione tecnica). RLS impedisce di toccare un task preso da qualcun altro (vedi
 // 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel vincolo, non lo sostituiscono.
 
-import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName } from './core.js?v=20260910140007';
+import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName } from './core.js?v=20260910160815';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -417,7 +417,18 @@ async function uploadCorrectedFile(task, file) {
   }
 }
 
+// Overdue tasks first (oldest due date on top), then current tasks (soonest due date on top) -
+// both groups sorted the same way, ascending by due date, just split by isOverdue().
+function sortMineActive(rows) {
+  return [...rows].sort((a, b) => {
+    const overdueDiff = (isOverdue(b) ? 1 : 0) - (isOverdue(a) ? 1 : 0);
+    if (overdueDiff !== 0) return overdueDiff;
+    return (a.due_date || '') < (b.due_date || '') ? -1 : (a.due_date || '') > (b.due_date || '') ? 1 : 0;
+  });
+}
+
 function renderMineActiveList(rows, candidateByTaskId) {
+  rows = sortMineActive(rows);
   const box = document.getElementById('mine-active-list');
   if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing in progress. Check Tasks Store to claim one.</div>'; return; }
   box.innerHTML = rows.map(t => {

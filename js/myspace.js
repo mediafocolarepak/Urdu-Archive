@@ -2,11 +2,11 @@
 // PROJECT_HANDOFF_v15.md). Personal and private: each user only ever sees their own favorites,
 // enforced by RLS on user_favorites, not by anything in this module.
 
-import { sb, State, esc, labelOf, withStatus } from './core.js?v=20260910140007';
+import { sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup } from './core.js?v=20260910160815';
 
 export async function renderMySpaceView(main) {
   const rows = await withStatus(sb.from('user_favorites')
-    .select('document_id,created_at,documents(document_id,en_title,ur_title,author,category,ref_date,place)')
+    .select('document_id,created_at,documents(document_id,en_title,ur_title,author,category,ref_date,place,language,workflow_status,recipient)')
     .order('created_at', { ascending: false }));
 
   main.innerHTML = `
@@ -16,21 +16,27 @@ export async function renderMySpaceView(main) {
     </div>`;
 
   const cardsBox = document.getElementById('myspace-cards');
+  const docsById = {};
   cardsBox.innerHTML = rows.map(r => {
     const doc = r.documents;
     if (!doc) return '';
+    docsById[doc.document_id] = doc;
     const title = esc(doc.en_title) || '<span class="hint">(no title)</span>';
+    const canAddToBoard = State.myBoards.size > 0 && isDocPostable(doc);
     return `<div class="dash-card" data-id="${esc(doc.document_id)}">
       <div class="dash-card-title">${title}</div>
       ${doc.ur_title ? `<div dir="auto">${esc(doc.ur_title)}</div>` : ''}
       <div class="dash-card-meta">#${esc(doc.document_id)} &middot; ${esc(labelOf(State.authors, doc.author))} &middot; ${esc(doc.place)} &middot; ${esc(labelOf(State.categories, doc.category))}</div>
-      <div class="btn-row" style="margin:6px 0 0;"><button class="btn secondary" data-remove="${esc(doc.document_id)}">Remove</button></div>
+      <div class="btn-row" style="margin:6px 0 0;">
+        <button class="btn secondary" data-remove="${esc(doc.document_id)}">Remove</button>
+        ${canAddToBoard ? `<button class="btn secondary" data-addboard="${esc(doc.document_id)}">+ Board</button>` : ''}
+      </div>
     </div>`;
   }).join('') || '<div class="empty-msg">Nothing saved yet — use ☆ Save on any document in the Dashboard.</div>';
 
   cardsBox.querySelectorAll('.dash-card').forEach(card => {
     card.addEventListener('click', e => {
-      if (e.target.dataset.remove) return;
+      if (e.target.dataset.remove || e.target.dataset.addboard) return;
       State.selectedDocId = card.dataset.id;
       window.__renderTab('dashboard');
     });
@@ -43,6 +49,13 @@ export async function renderMySpaceView(main) {
       await withStatus(sb.from('user_favorites').delete().eq('user_id', user.id).eq('document_id', docId));
       State.myFavorites.delete(docId);
       renderMySpaceView(main);
+    });
+  });
+  cardsBox.querySelectorAll('[data-addboard]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const doc = docsById[btn.dataset.addboard];
+      openBoardPostPopup({ doc, onSaved: () => {} });
     });
   });
 }
