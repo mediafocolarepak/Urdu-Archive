@@ -18,6 +18,9 @@ let expandedChapters = new Set();
 let enrolleesOpen = false;
 // Which of the two chat channels are expanded - in-memory only, resets when switching paths.
 let chatOpen = { students: false, formatori: false };
+// Which quizzes have their manage/take panel expanded (by quiz id) - resets when switching paths.
+let quizManageOpen = new Set();
+let quizTakeOpen = new Set();
 
 export async function renderFormationView(main) {
   if (State.formationSelectedPathId) await renderPathDetail(main, State.formationSelectedPathId);
@@ -50,6 +53,8 @@ async function renderCatalog(main) {
     State.formationSelectedPathId = parseInt(el.dataset.openPath, 10);
     expandedChapters = new Set();
     chatOpen = { students: false, formatori: false };
+    quizManageOpen = new Set();
+    quizTakeOpen = new Set();
     renderFormationView(main);
   }));
 
@@ -202,6 +207,29 @@ async function renderPathDetail(main, pathId) {
   // Formatori notes: works even in draft, deliberately - see 75_formation_chat.sql.
   const canSeeFormatoriChat = State.isFormatore || canReviewApplications();
 
+  // Quiz/attestato (Fase D): riservati, non "sempre pubblici" come i post - vedi
+  // 76_formation_quizzes.sql. canTakeQuiz ricalca canSeeStudentsChat (iscritto o proprietario),
+  // ma senza il vincolo "solo se pubblicato": il proprietario deve poter provare il proprio
+  // quiz anche mentre il percorso e' ancora in bozza.
+  const canManageQuiz = canEdit;
+  const canTakeQuiz = isEnrolled || canEdit;
+  let quizzes = [], passedQuizIds = new Set(), latestAttemptByQuiz = {}, myCertificate = null;
+  if (canManageQuiz || canTakeQuiz) {
+    quizzes = await withStatus(sb.from('formation_quizzes').select('*').eq('path_id', pathId));
+    const quizIds = quizzes.map(q => q.id);
+    const myAttempts = quizIds.length
+      ? await withStatus(sb.from('formation_quiz_attempts').select('quiz_id,passed,score_percent').eq('user_id', user.id).in('quiz_id', quizIds).order('submitted_at', { ascending: false }))
+      : [];
+    for (const a of myAttempts) {
+      if (a.passed) passedQuizIds.add(a.quiz_id);
+      if (!latestAttemptByQuiz[a.quiz_id]) latestAttemptByQuiz[a.quiz_id] = a;  // rows already newest-first
+    }
+    myCertificate = await withStatus(sb.from('formation_certificates').select('*').eq('path_id', pathId).eq('user_id', user.id).maybeSingle());
+  }
+  const finalQuiz = quizzes.find(q => q.kind === 'final') || null;
+  const quizByModule = {}; for (const q of quizzes.filter(q => q.kind === 'module')) quizByModule[q.module_id] = q;
+  const quizCtx = { canManage: canManageQuiz, canTake: canTakeQuiz, passedQuizIds, latestAttemptByQuiz, quizByModule };
+
   main.innerHTML = `
     <div class="panel">
       <div class="btn-row" style="justify-content:space-between;">
@@ -235,10 +263,15 @@ async function renderPathDetail(main, pathId) {
       </div>` : ''}
       ${chatSectionHtml('students', 'Discussion', canSeeStudentsChat)}
       ${chatSectionHtml('formatori', 'Formatori notes (visible only to formatori)', canSeeFormatoriChat)}
+      ${myCertificate ? `<div class="hint" style="margin-top:10px;">&#127891; Certificate earned on ${esc((myCertificate.issued_at || '').slice(0, 10))} &middot; code ${esc(myCertificate.certificate_code)}</div>` : ''}
+      ${(canManageQuiz || canTakeQuiz) ? `<div style="margin-top:10px;">
+        <div class="hint" style="margin-bottom:4px;">Final exam</div>
+        ${quizBlockHtml('final', null, finalQuiz, quizCtx)}
+      </div>` : ''}
       <hr style="margin:16px 0;">
       <div id="fp-tree">
         ${canEdit ? '<div class="btn-row" style="margin-bottom:10px;"><button class="btn" id="fp-add-year">+ Add year</button></div>' : ''}
-        ${years.length ? years.map(y => renderYearBlock(y, modulesOf(y.id), chaptersOf, postsOf, canEdit)).join('') : '<div class="empty-msg">No years yet.</div>'}
+        ${years.length ? years.map(y => renderYearBlock(y, modulesOf(y.id), chaptersOf, postsOf, canEdit, quizCtx)).join('') : '<div class="empty-msg">No years yet.</div>'}
       </div>
     </div>`;
 
@@ -301,6 +334,7 @@ async function renderPathDetail(main, pathId) {
 
   wireChatSection(main, pathId, 'students', canSeeStudentsChat);
   wireChatSection(main, pathId, 'formatori', canSeeFormatoriChat);
+  wireQuizActions(main, pathId, quizzes);
 
   wireTreeActions(main, pathId, years, modules, chapters, posts, canEdit);
 }
@@ -355,7 +389,7 @@ async function refreshChatThread(main, pathId, channel) {
   });
 }
 
-function renderYearBlock(y, modules, chaptersOf, postsOf, canEdit) {
+function renderYearBlock(y, modules, chaptersOf, postsOf, canEdit, quizCtx) {
   return `
   <div class="panel" style="margin-bottom:10px;" data-year-block="${y.id}">
     <div class="btn-row" style="justify-content:space-between;">
@@ -367,11 +401,11 @@ function renderYearBlock(y, modules, chaptersOf, postsOf, canEdit) {
         <button class="btn danger" data-delete-year="${y.id}" style="padding:2px 8px;">Delete</button>
       </div>` : ''}
     </div>
-    ${modules.length ? modules.map(m => renderModuleBlock(m, chaptersOf(m.id), postsOf, canEdit)).join('') : '<div class="hint">No modules yet.</div>'}
+    ${modules.length ? modules.map(m => renderModuleBlock(m, chaptersOf(m.id), postsOf, canEdit, quizCtx)).join('') : '<div class="hint">No modules yet.</div>'}
   </div>`;
 }
 
-function renderModuleBlock(m, chapters, postsOf, canEdit) {
+function renderModuleBlock(m, chapters, postsOf, canEdit, quizCtx) {
   return `
   <div style="margin:10px 0 10px 12px;" data-module-block="${m.id}">
     <div class="btn-row" style="justify-content:space-between;">
@@ -385,8 +419,204 @@ function renderModuleBlock(m, chapters, postsOf, canEdit) {
       </div>` : ''}
     </div>
     ${m.description ? `<div class="hint" dir="auto">${esc(m.description)}</div>` : ''}
+    ${(quizCtx.canManage || quizCtx.canTake) ? quizBlockHtml('module', m.id, quizCtx.quizByModule[m.id], quizCtx) : ''}
     ${chapters.length ? chapters.map(c => renderChapterBlock(c, postsOf(c.id), canEdit)).join('') : '<div class="hint">No chapters yet.</div>'}
   </div>`;
+}
+
+// ---------- Quiz & certificate (Fase D) ----------
+
+function quizBlockHtml(kind, moduleId, quiz, quizCtx) {
+  const { canManage, canTake, passedQuizIds, latestAttemptByQuiz } = quizCtx;
+  const noun = kind === 'final' ? 'final exam' : 'quiz';
+  if (!quiz) {
+    return canManage
+      ? `<div class="hint" style="margin:4px 0;"><span style="cursor:pointer;text-decoration:underline;" data-create-quiz="1" data-kind="${kind}" data-module-id="${moduleId || ''}">+ Add ${noun}</span></div>`
+      : `<div class="hint" style="margin:4px 0;">No ${noun} yet.</div>`;
+  }
+  const passed = passedQuizIds.has(quiz.id);
+  const latest = latestAttemptByQuiz[quiz.id];
+  const manageOpen = quizManageOpen.has(quiz.id);
+  const takeOpen = quizTakeOpen.has(quiz.id);
+  return `
+    <div style="margin:6px 0;padding:8px;border:1px dashed var(--accent-soft);border-radius:6px;">
+      <div class="btn-row" style="justify-content:space-between;flex-wrap:wrap;">
+        <div dir="auto"><strong>${esc(quiz.title)}</strong> <span class="hint">(pass ${quiz.pass_threshold_percent}%)</span>
+          ${passed ? ' <span class="hint">&check; Passed</span>' : (latest ? ` <span class="hint">Last score: ${latest.score_percent}%</span>` : '')}
+        </div>
+        <div class="btn-row">
+          ${canManage ? `<button class="btn secondary" data-manage-quiz="${quiz.id}" style="padding:2px 8px;">${manageOpen ? 'Close' : 'Manage'}</button>` : ''}
+          ${canTake ? `<button class="btn secondary" data-take-quiz="${quiz.id}" style="padding:2px 8px;">${takeOpen ? 'Close' : (passed ? 'Retake' : 'Take quiz')}</button>` : ''}
+        </div>
+      </div>
+      ${manageOpen ? `<div id="fp-quiz-manage-${quiz.id}" style="margin-top:8px;">Loading...</div>` : ''}
+      ${takeOpen ? `<div id="fp-quiz-take-${quiz.id}" style="margin-top:8px;">Loading...</div>` : ''}
+    </div>`;
+}
+
+function openQuizMetaPopup({ title, quiz = null, onSaved }) {
+  document.getElementById('fp-quizmeta-popup')?.remove();
+  const backdrop = document.createElement('div');
+  backdrop.id = 'fp-quizmeta-popup';
+  backdrop.className = 'overlay-backdrop';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel" style="max-width:400px;">
+      <h2 style="margin-top:0;">${esc(title)}</h2>
+      <div class="field"><label>Title</label><input id="fqm-title" value="${esc(quiz ? quiz.title : '')}"></div>
+      <div class="field"><label>Pass threshold (%)</label><input id="fqm-threshold" type="number" min="1" max="100" value="${quiz ? quiz.pass_threshold_percent : 70}"></div>
+      <div class="btn-row" style="justify-content:flex-end;">
+        <button class="btn secondary" id="fqm-cancel">Cancel</button>
+        <button class="btn" id="fqm-save">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+  document.getElementById('fqm-cancel').addEventListener('click', () => backdrop.remove());
+  document.getElementById('fqm-save').addEventListener('click', () => {
+    const t = document.getElementById('fqm-title').value.trim();
+    const pct = parseInt(document.getElementById('fqm-threshold').value, 10);
+    if (!t) { alert('Title is required.'); return; }
+    if (!Number.isFinite(pct) || pct < 1 || pct > 100) { alert('Pass threshold must be a number between 1 and 100.'); return; }
+    backdrop.remove();
+    onSaved({ title: t, pass_threshold_percent: pct });
+  });
+}
+
+function openQuestionPopup({ quizId, question = null, sequence = 0, onSaved }) {
+  document.getElementById('fp-question-popup')?.remove();
+  const backdrop = document.createElement('div');
+  backdrop.id = 'fp-question-popup';
+  backdrop.className = 'overlay-backdrop';
+  const optionsText = question ? question.options.join('\n') : '';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel">
+      <h2 style="margin-top:0;">${question ? 'Edit question' : 'New question'}</h2>
+      <div class="field"><label>Question</label><textarea id="fq-text" dir="auto" rows="2">${esc(question ? question.question_text : '')}</textarea></div>
+      <div class="field"><label>Options <span class="hint">(one per line, at least 2)</span></label><textarea id="fq-options" dir="auto" rows="5">${esc(optionsText)}</textarea></div>
+      <div class="field"><label>Correct option number <span class="hint">(1, 2, 3...)</span></label><input id="fq-correct" type="number" min="1" value="${question ? question.correct_index + 1 : 1}"></div>
+      <div class="btn-row" style="justify-content:flex-end;">
+        <button class="btn secondary" id="fq-cancel">Cancel</button>
+        <button class="btn" id="fq-save">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+  document.getElementById('fq-cancel').addEventListener('click', () => backdrop.remove());
+  document.getElementById('fq-save').addEventListener('click', async () => {
+    const question_text = document.getElementById('fq-text').value.trim();
+    const options = document.getElementById('fq-options').value.split('\n').map(s => s.trim()).filter(Boolean);
+    const correctNum = parseInt(document.getElementById('fq-correct').value, 10);
+    if (!question_text) { alert('Question text is required.'); return; }
+    if (options.length < 2) { alert('At least 2 options are required.'); return; }
+    if (!Number.isFinite(correctNum) || correctNum < 1 || correctNum > options.length) { alert('Correct option number must be within the option list.'); return; }
+    const row = { question_text, options, correct_index: correctNum - 1 };
+    if (question) await withStatus(sb.from('formation_quiz_questions').update(row).eq('id', question.id), 'Saving...');
+    else await withStatus(sb.from('formation_quiz_questions').insert({ quiz_id: quizId, sequence_number: sequence, ...row }), 'Saving...');
+    backdrop.remove();
+    if (onSaved) onSaved();
+  });
+}
+
+async function renderQuizManagePanel(main, pathId, quiz) {
+  const box = document.getElementById(`fp-quiz-manage-${quiz.id}`);
+  if (!box) return;
+  const questions = await withStatus(sb.from('formation_quiz_questions').select('*').eq('quiz_id', quiz.id).order('sequence_number').order('id'));
+  box.innerHTML = `
+    <div class="btn-row" style="justify-content:flex-end;margin-bottom:6px;">
+      <button class="btn secondary" data-edit-quiz-meta="1" style="padding:2px 8px;">Edit title/threshold</button>
+      <button class="btn danger" data-delete-quiz="1" style="padding:2px 8px;">Delete quiz</button>
+    </div>
+    ${questions.length ? questions.map((q, i) => `
+      <div style="padding:6px 0;border-top:1px solid var(--accent-soft);">
+        <div dir="auto"><strong>${i + 1}.</strong> ${esc(q.question_text)}</div>
+        <div class="hint">${q.options.map((o, idx) => `${idx === q.correct_index ? '&check; ' : ''}${esc(o)}`).join(' &middot; ')}</div>
+        <div class="btn-row" style="margin-top:2px;">
+          <button class="btn secondary" data-edit-question="${q.id}" style="padding:2px 6px;">Edit</button>
+          <button class="btn danger" data-delete-question="${q.id}" style="padding:2px 6px;">Delete</button>
+        </div>
+      </div>`).join('') : '<div class="hint">No questions yet.</div>'}
+    <div class="btn-row" style="margin-top:8px;"><button class="btn secondary" data-add-question="1">+ Add question</button></div>`;
+
+  box.querySelector('[data-edit-quiz-meta]').addEventListener('click', () => {
+    openQuizMetaPopup({ title: 'Edit quiz', quiz, onSaved: async fields => {
+      await withStatus(sb.from('formation_quizzes').update(fields).eq('id', quiz.id), 'Saving...');
+      renderPathDetail(main, pathId);
+    } });
+  });
+  box.querySelector('[data-delete-quiz]').addEventListener('click', async () => {
+    if (!confirm('Delete this quiz and all its questions and attempts? This cannot be undone.')) return;
+    await withStatus(sb.from('formation_quizzes').delete().eq('id', quiz.id), 'Deleting...');
+    renderPathDetail(main, pathId);
+  });
+  box.querySelector('[data-add-question]').addEventListener('click', () => {
+    openQuestionPopup({ quizId: quiz.id, sequence: questions.length, onSaved: () => renderPathDetail(main, pathId) });
+  });
+  box.querySelectorAll('[data-edit-question]').forEach(el => el.addEventListener('click', () => {
+    const q = questions.find(x => x.id === parseInt(el.dataset.editQuestion, 10));
+    openQuestionPopup({ quizId: quiz.id, question: q, onSaved: () => renderPathDetail(main, pathId) });
+  }));
+  box.querySelectorAll('[data-delete-question]').forEach(el => el.addEventListener('click', async () => {
+    if (!confirm('Delete this question?')) return;
+    await withStatus(sb.from('formation_quiz_questions').delete().eq('id', el.dataset.deleteQuestion), 'Deleting...');
+    renderPathDetail(main, pathId);
+  }));
+}
+
+async function renderQuizTakePanel(main, pathId, quiz) {
+  const box = document.getElementById(`fp-quiz-take-${quiz.id}`);
+  if (!box) return;
+  const questions = await withStatus(sb.rpc('formation_quiz_for_taking', { qid: quiz.id }));
+  if (!questions.length) { box.innerHTML = '<div class="hint">This quiz has no questions yet.</div>'; return; }
+  box.innerHTML = questions.map((q, i) => `
+    <div style="margin-bottom:10px;">
+      <div dir="auto"><strong>${i + 1}.</strong> ${esc(q.question_text)}</div>
+      ${q.options.map((o, idx) => `
+        <label style="display:block;text-transform:none;font-size:13px;padding:2px 0;">
+          <input type="radio" name="fq-answer-${q.question_id}" value="${idx}" style="width:auto;"> ${esc(o)}
+        </label>`).join('')}
+    </div>`).join('')
+    + `<div class="btn-row"><button class="btn" id="fp-quiz-submit-${quiz.id}">Submit</button></div>
+       <div id="fp-quiz-result-${quiz.id}" class="hint" style="margin-top:6px;"></div>`;
+
+  document.getElementById(`fp-quiz-submit-${quiz.id}`).addEventListener('click', async () => {
+    const answers = {};
+    questions.forEach(q => {
+      const checked = box.querySelector(`input[name="fq-answer-${q.question_id}"]:checked`);
+      if (checked) answers[q.question_id] = parseInt(checked.value, 10);
+    });
+    const [result] = await withStatus(sb.rpc('submit_formation_quiz_attempt', { qid: quiz.id, answers }), 'Submitting...');
+    const resultBox = document.getElementById(`fp-quiz-result-${quiz.id}`);
+    resultBox.textContent = `Score: ${result.score_percent}% - ${result.passed ? 'Passed ✓' : 'Not passed yet - you can try again.'}`;
+    setTimeout(() => renderPathDetail(main, pathId), 1400);
+  });
+}
+
+function wireQuizActions(main, pathId, quizzes) {
+  document.querySelectorAll('[data-create-quiz]').forEach(el => el.addEventListener('click', () => {
+    const kind = el.dataset.kind;
+    const moduleId = el.dataset.moduleId ? parseInt(el.dataset.moduleId, 10) : null;
+    openQuizMetaPopup({
+      title: kind === 'final' ? 'New final exam' : 'New quiz',
+      onSaved: async fields => {
+        await withStatus(sb.from('formation_quizzes').insert({ path_id: pathId, module_id: moduleId, kind, ...fields }), 'Saving...');
+        renderPathDetail(main, pathId);
+      },
+    });
+  }));
+  document.querySelectorAll('[data-manage-quiz]').forEach(el => el.addEventListener('click', () => {
+    const qid = parseInt(el.dataset.manageQuiz, 10);
+    if (quizManageOpen.has(qid)) quizManageOpen.delete(qid); else quizManageOpen.add(qid);
+    renderPathDetail(main, pathId);
+  }));
+  document.querySelectorAll('[data-take-quiz]').forEach(el => el.addEventListener('click', () => {
+    const qid = parseInt(el.dataset.takeQuiz, 10);
+    if (quizTakeOpen.has(qid)) quizTakeOpen.delete(qid); else quizTakeOpen.add(qid);
+    renderPathDetail(main, pathId);
+  }));
+  quizzes.forEach(q => {
+    if (quizManageOpen.has(q.id)) renderQuizManagePanel(main, pathId, q);
+    if (quizTakeOpen.has(q.id)) renderQuizTakePanel(main, pathId, q);
+  });
 }
 
 function renderChapterBlock(c, posts, canEdit) {

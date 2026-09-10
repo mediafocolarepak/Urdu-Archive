@@ -22,10 +22,11 @@ let editing = false;
 export async function renderMyProfileView(main) {
   main.innerHTML = '<div class="empty-msg">Loading...</div>';
   const { data: { user } } = await sb.auth.getUser();
-  const [roleRows, profileRows, qualRows] = await Promise.all([
+  const [roleRows, profileRows, qualRows, certRows] = await Promise.all([
     withStatus(sb.from('user_roles').select('role').eq('user_id', user.id)),
     withStatus(sb.from('user_profiles').select('*').eq('user_id', user.id)),
     withStatus(sb.from('user_qualifications').select('qualification_code').eq('user_id', user.id)),
+    withStatus(sb.from('formation_certificates').select('*, formation_paths(title)').eq('user_id', user.id).order('issued_at', { ascending: false })),
   ]);
   const role = roleRows[0]?.role || 'user';
   const profile = profileRows[0] || {};
@@ -45,6 +46,10 @@ export async function renderMyProfileView(main) {
         <div class="field"><label>Role</label><div style="font-size:13.5px;padding:4px 0;">${esc(ROLE_LABEL[role] || role)}</div></div>
         <div class="field"><label>Qualifications</label><div style="font-size:13.5px;padding:4px 0;">${myQualLabels.map(esc).join(', ') || '—'}</div></div>
       </div>
+      ${certRows.length ? `<div class="subpanel" style="margin-top:16px;">
+        <h3>My Certificates</h3>
+        ${certRows.map(c => `<div class="hint" style="padding:2px 0;">&#127891; <span dir="auto">${esc(c.formation_paths?.title) || 'Formation path'}</span> &middot; ${esc((c.issued_at || '').slice(0, 10))} &middot; code ${esc(c.certificate_code)}</div>`).join('')}
+      </div>` : ''}
       ${role === 'operator' ? '<div class="subpanel" id="profile-editable"></div>' : ''}
       <div class="subpanel" style="margin-top:16px;">
         <h3>Change my password</h3>
