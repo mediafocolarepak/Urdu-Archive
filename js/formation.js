@@ -10,12 +10,14 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, optionsHtml, labelOf, today } from './core.js?v=20260911000344';
+import { sb, State, esc, withStatus, canReviewApplications, optionsHtml, labelOf, today, nameMapForEmails } from './core.js?v=20260911000344';
 
 // Which chapters are expanded in the tree - in-memory only, resets when switching paths.
 let expandedChapters = new Set();
 // Whether the "Who's enrolled?" list is expanded - in-memory only, resets when switching paths.
 let enrolleesOpen = false;
+// Which of the two chat channels are expanded - in-memory only, resets when switching paths.
+let chatOpen = { students: false, formatori: false };
 
 export async function renderFormationView(main) {
   if (State.formationSelectedPathId) await renderPathDetail(main, State.formationSelectedPathId);
@@ -47,6 +49,7 @@ async function renderCatalog(main) {
   document.querySelectorAll('[data-open-path]').forEach(el => el.addEventListener('click', () => {
     State.formationSelectedPathId = parseInt(el.dataset.openPath, 10);
     expandedChapters = new Set();
+    chatOpen = { students: false, formatori: false };
     renderFormationView(main);
   }));
 
@@ -192,6 +195,12 @@ async function renderPathDetail(main, pathId) {
   }
   const isEnrolled = myEnrollment && !myEnrollment.withdrawn_at;
   const deadlinePassed = path.enrollment_deadline && path.enrollment_deadline < today();
+  // Discussion (students channel): only makes sense once the path is actually published (that's
+  // when enrollment - and so a cohort to talk to - exists); the owner can still see it in draft
+  // via canEdit, matching formation_chat_messages' RLS (owner always qualifies for their channel).
+  const canSeeStudentsChat = path.status === 'published' && (isEnrolled || canEdit);
+  // Formatori notes: works even in draft, deliberately - see 75_formation_chat.sql.
+  const canSeeFormatoriChat = State.isFormatore || canReviewApplications();
 
   main.innerHTML = `
     <div class="panel">
@@ -224,6 +233,8 @@ async function renderPathDetail(main, pathId) {
         ${path.status !== 'published' ? '<button class="btn secondary" id="fp-publish">Publish</button>' : '<button class="btn secondary" id="fp-archive">Archive</button>'}
         <button class="btn danger" id="fp-delete-path">Delete path</button>
       </div>` : ''}
+      ${chatSectionHtml('students', 'Discussion', canSeeStudentsChat)}
+      ${chatSectionHtml('formatori', 'Formatori notes (visible only to formatori)', canSeeFormatoriChat)}
       <hr style="margin:16px 0;">
       <div id="fp-tree">
         ${canEdit ? '<div class="btn-row" style="margin-bottom:10px;"><button class="btn" id="fp-add-year">+ Add year</button></div>' : ''}
@@ -288,7 +299,60 @@ async function renderPathDetail(main, pathId) {
     });
   }
 
+  wireChatSection(main, pathId, 'students', canSeeStudentsChat);
+  wireChatSection(main, pathId, 'formatori', canSeeFormatoriChat);
+
   wireTreeActions(main, pathId, years, modules, chapters, posts, canEdit);
+}
+
+// ---------- Chat (Fase C) ----------
+
+function chatSectionHtml(channel, label, canAccess) {
+  if (!canAccess) return '';
+  const isOpen = chatOpen[channel];
+  return `
+    <div style="margin-top:10px;">
+      <span style="cursor:pointer;text-decoration:underline;font-weight:600;" data-toggle-chat="${channel}">${isOpen ? '&#9662;' : '&#9656;'} ${esc(label)}</span>
+      ${isOpen ? `<div style="margin-top:8px;">
+        <div class="chat-thread" id="fp-chat-thread-${channel}"></div>
+        <div class="field"><textarea id="fp-chat-input-${channel}" rows="2" dir="auto" placeholder="Write a message..."></textarea></div>
+        <div class="btn-row" style="justify-content:flex-end;"><button class="btn" id="fp-chat-send-${channel}">Send</button></div>
+      </div>` : ''}
+    </div>`;
+}
+
+function wireChatSection(main, pathId, channel, canAccess) {
+  if (!canAccess) return;
+  const toggle = document.querySelector(`[data-toggle-chat="${channel}"]`);
+  if (toggle) toggle.addEventListener('click', () => {
+    chatOpen[channel] = !chatOpen[channel];
+    renderPathDetail(main, pathId);
+  });
+  if (chatOpen[channel]) refreshChatThread(main, pathId, channel);
+}
+
+async function refreshChatThread(main, pathId, channel) {
+  const { data: { user } } = await sb.auth.getUser();
+  const rows = await withStatus(sb.from('formation_chat_messages').select('*').eq('path_id', pathId).eq('channel', channel).order('created_at'));
+  const nameMap = await nameMapForEmails(rows.map(r => r.user_email));
+  const box = document.getElementById(`fp-chat-thread-${channel}`);
+  if (!box) return;
+  box.innerHTML = rows.length
+    ? rows.map(r => `
+      <div class="chat-bubble ${r.user_id === user.id ? 'from-user' : 'from-admin'}">
+        <div class="chat-meta">${esc(nameMap[r.user_email] || r.user_email)} &middot; ${esc((r.created_at || '').slice(0, 16).replace('T', ' '))}</div>
+        <div dir="auto">${esc(r.message_text)}</div>
+      </div>`).join('')
+    : '<div class="empty-msg">No messages yet.</div>';
+  box.scrollTop = box.scrollHeight;
+
+  document.getElementById(`fp-chat-send-${channel}`).addEventListener('click', async () => {
+    const input = document.getElementById(`fp-chat-input-${channel}`);
+    const text = input.value.trim();
+    if (!text) return;
+    await withStatus(sb.from('formation_chat_messages').insert({ path_id: pathId, channel, message_text: text, user_email: user.email }), 'Sending...');
+    renderPathDetail(main, pathId);
+  });
 }
 
 function renderYearBlock(y, modules, chaptersOf, postsOf, canEdit) {
