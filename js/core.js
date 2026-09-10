@@ -278,6 +278,8 @@ export const State = {
   optionListsByName: {},  // option_lists rows grouped by list_name, as [code,label] pairs - generic lookup used by SessionCache/combobox
   hayatEditorEdition: '',
   taskPrefill: null,  // { title, description, document_id, document_pages } - set by chat.js's "Create task" button, consumed once by tasks.js's new-task form
+  isFormatore: false,  // true if I personally have a board_editors row somewhere - see boot(); mirrors is_any_formatore() server-side, used to gate "+ New formation path" and "My paths"
+  formationSelectedPathId: null,
 };
 
 export const DASH_ROW_LIMIT = 5000;
@@ -287,7 +289,7 @@ export const DASH_SORTABLE = { document_id: 'ID', title: 'Title (EN)', original_
 // two keep their fixed, CHECK-constrained vocabularies (see 15_versions_editors_schema.sql),
 // while the Hayat Editor's Autore/Argomento comboboxes are free-typing - a new value there
 // must never risk violating the documents table's constraints on author/main_topic.
-export const OPTION_LIST_NAMES = ['category', 'author', 'main_topic', 'recipient', 'language', 'workflow_status', 'media_type', 'source', 'collection', 'quality', 'operator', 'hayat_author', 'hayat_argomento', 'membership_type', 'task_category', 'operator_qualification', 'collaboration_skill', 'report_type', 'extra_credit_reason', 'board'];
+export const OPTION_LIST_NAMES = ['category', 'author', 'main_topic', 'recipient', 'language', 'workflow_status', 'media_type', 'source', 'collection', 'quality', 'operator', 'hayat_author', 'hayat_argomento', 'membership_type', 'task_category', 'operator_qualification', 'collaboration_skill', 'report_type', 'extra_credit_reason', 'board', 'formation_audience'];
 export const OPTION_LIST_LABELS = {
   category: 'Category', author: 'Author', main_topic: 'Main topic', recipient: 'Recipient',
   language: 'Language', workflow_status: 'Workflow status', media_type: 'Media type',
@@ -299,6 +301,7 @@ export const OPTION_LIST_LABELS = {
   report_type: 'Report a Problem: report type',
   extra_credit_reason: 'Task: extra credits reason',
   board: 'Formation boards',
+  formation_audience: 'Formation paths: target audience',
 };
 
 // Pre-selection of the board from a document's recipient (suggestion, not a constraint).
@@ -666,6 +669,11 @@ async function showApp(session, renderDashboardTab) {
     const { data: editorRows } = await sb.from('board_editors').select('board_code');
     State.myBoards = new Set((editorRows || []).map(r => r.board_code));
   }
+  // Unlike myBoards above (which for Coordinator/Admin holds every board, editor or not), this
+  // is always my own actual board_editors membership - the client-side mirror of the server's
+  // is_any_formatore(), used to gate formation-path creation and the "My paths" section.
+  const { data: myEditorRows } = await sb.from('board_editors').select('board_code').eq('user_id', session.user.id);
+  State.isFormatore = (myEditorRows || []).length > 0;
   const { data: profileRows } = await sb.from('user_profiles').select('membership_type').eq('user_id', session.user.id);
   State.myMembershipType = (profileRows && profileRows[0] && profileRows[0].membership_type) || null;
 

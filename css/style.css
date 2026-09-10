@@ -246,7 +246,7 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
   display: flex; align-items: center; justify-content: center;
   z-index: 1000; padding: 20px;
 }
-.overlay-panel { max-width: 480px; width: 100%; }
+.overlay-panel { max-width: 480px; width: 100%; max-height: 90vh; overflow-y: auto; }
 .overlay-message { white-space: pre-wrap; font-size: 13.5px; line-height: 1.6; margin: 8px 0 4px; }
 
 /* ---------- Chat / messages ---------- */

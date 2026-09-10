@@ -251,11 +251,11 @@ create policy "formation_posts_write" on public.formation_posts
 -- 9. Lista opzioni per l'utenza del percorso - stesso meccanismo generico di 06_option_lists.sql.
 -- Valori di partenza, editabili da Options come tutte le altre liste.
 insert into option_lists (list_name, code, label, sort_order) values
-  ('formation_audience', 'GA', 'Giovani animatori', 1),
+  ('formation_audience', 'GA', 'Young leaders', 1),
   ('formation_audience', 'GEN2', 'Gen2', 2),
   ('formation_audience', 'GEN3', 'Gen3', 3),
-  ('formation_audience', 'FOCL', 'Focolarini in formazione', 4),
-  ('formation_audience', 'ALTR', 'Altro', 5)
+  ('formation_audience', 'FOCL', 'Focolarini in training', 4),
+  ('formation_audience', 'ALTR', 'Other', 5)
 on conflict (list_name, code) do update set label = excluded.label, sort_order = excluded.sort_order;
 
 -- 10. Verifica.

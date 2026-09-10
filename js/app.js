@@ -15,6 +15,7 @@ import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260910212
 import { renderMyProfileView } from './profile.js?v=20260910212728';
 import { renderMySpaceView } from './myspace.js?v=20260910212728';
 import { renderBoardsView } from './boards.js?v=20260910212728';
+import { renderFormationView } from './formation.js?v=20260910212728';
 import { registerServiceWorker } from './pwa-register.js?v=20260910212728';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
@@ -31,6 +32,7 @@ function getTabs() {
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'myspace', label: 'My Space' },
     { id: 'boards', label: 'Boards' },
+    { id: 'formation', label: 'Formation Paths' },
   ];
   // Plain Users get a minimal read-only set: browse (Dashboard) and a quick way to flag a
   // problem, right up front as the second tab - Print Reports/Hayat Index are cataloguing
@@ -84,6 +86,7 @@ function renderTab(id) {
   if (id === 'dashboard') renderDashboardView(main);
   else if (id === 'myspace') renderMySpaceView(main);
   else if (id === 'boards') renderBoardsView(main);
+  else if (id === 'formation') renderFormationView(main);
   else if (id === 'reports') renderReportsView(main);
   else if (id === 'hayat') renderHayatView(main);
   else if (id === 'users') renderUsersView(main);
