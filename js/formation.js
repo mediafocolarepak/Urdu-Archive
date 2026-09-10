@@ -3,7 +3,7 @@
 // solo titolo+testo libero (niente collegamento a un documento, a differenza di board_posts)
 // per contenere lo scope di questa prima passata - vedi discussione in chat del 10/09/2026.
 
-import { sb, State, esc, withStatus, canReviewApplications, optionsHtml, labelOf } from './core.js?v=20260910212728';
+import { sb, State, esc, withStatus, canReviewApplications, optionsHtml, labelOf } from './core.js?v=20260910235125';
 
 // Which chapters are expanded in the tree - in-memory only, resets when switching paths.
 let expandedChapters = new Set();
