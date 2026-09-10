@@ -5,7 +5,15 @@
 import {
   sb, State, esc, withStatus, canReviewApplications, getDisplayNameByEmail,
   openBoardPostPopup, likeSafe, DEFAULT_BOARD_FOR_MEMBERSHIP,
-} from './core.js?v=20260910160815';
+} from './core.js?v=20260910163647';
+
+// Fase 2 (PROJECT_HANDOFF_v16.md): a readable preview of the document's Urdu text, from
+// document_texts, right in the post - instead of a bare link out of the app. Plain substring,
+// same idea as search_document_texts()'s snippet, just longer and not search-anchored.
+function textPreview(body, maxChars = 280) {
+  const trimmed = (body || '').trim();
+  return trimmed.length > maxChars ? trimmed.slice(0, maxChars).trim() + '…' : trimmed;
+}
 
 export async function renderBoardsView(main) {
   const { data: { user } } = await sb.auth.getUser();
@@ -15,6 +23,8 @@ export async function renderBoardsView(main) {
   const docIds = [...new Set(posts.filter(p => p.document_id != null).map(p => p.document_id))];
   const docs = docIds.length ? await withStatus(sb.from('documents').select('document_id,en_title,ur_title').in('document_id', docIds)) : [];
   const docById = {}; for (const d of docs) docById[d.document_id] = d;
+  const texts = docIds.length ? await withStatus(sb.from('document_texts').select('document_id,body,reviewed').in('document_id', docIds)) : [];
+  const textById = {}; for (const t of texts) textById[t.document_id] = t;
 
   const allBoards = State.optionListsByName.board || [];
   const postCountByBoard = {};
@@ -50,21 +60,20 @@ export async function renderBoardsView(main) {
     renderBoardsView(main);
   }));
 
-  renderPostsForBoard(active, posts.filter(p => p.board_code === active), docById, myEmail, main);
+  renderPostsForBoard(active, posts.filter(p => p.board_code === active), docById, textById, myEmail, main);
 
   if (canReviewApplications()) {
     renderEditorsPanel(document.getElementById('board-editors-panel'), allBoards, active);
   }
 }
 
-function renderPostsForBoard(boardCode, posts, docById, myEmail, main) {
+function renderPostsForBoard(boardCode, posts, docById, textById, myEmail, main) {
   const box = document.getElementById('board-posts');
   const canPost = State.myBoards.has(boardCode);
-  const names = {}; // filled in below, async
 
   box.innerHTML = `
     ${canPost ? '<div class="btn-row" style="margin-bottom:10px;"><button class="btn" id="board-new-post">+ New post</button></div>' : ''}
-    <div id="board-posts-list">${posts.map(p => renderPostCard(p, docById[p.document_id], myEmail)).join('') || '<div class="empty-msg">No posts on this board yet.</div>'}</div>`;
+    <div id="board-posts-list">${posts.map(p => renderPostCard(p, docById[p.document_id], textById[p.document_id], myEmail)).join('') || '<div class="empty-msg">No posts on this board yet.</div>'}</div>`;
 
   if (canPost) {
     document.getElementById('board-new-post').addEventListener('click', () => openBoardPostPopup({
@@ -83,7 +92,7 @@ function renderPostsForBoard(boardCode, posts, docById, myEmail, main) {
   wirePostActions(posts, docById, myEmail, main);
 }
 
-function renderPostCard(p, doc, myEmail) {
+function renderPostCard(p, doc, text, myEmail) {
   const canEditThis = canReviewApplications() || (p.posted_by_email === myEmail && State.myBoards.has(p.board_code));
   return `
     <div class="panel board-post" data-id="${p.id}">
@@ -95,6 +104,7 @@ function renderPostCard(p, doc, myEmail) {
       ${doc ? `<div class="field" style="margin-top:8px;">
         <label>Document</label>
         <div style="font-size:13px;">#${esc(doc.document_id)} &middot; ${esc(doc.en_title) || '<span class="hint">(no title)</span>'}${doc.ur_title ? ` / <span dir="auto">${esc(doc.ur_title)}</span>` : ''}</div>
+        ${text ? `<div class="board-doc-preview" dir="auto">${esc(textPreview(text.body))}</div>${!text.reviewed ? '<div class="hint">Unverified automatic transcription</div>' : ''}` : ''}
         <button class="btn secondary" data-open-doc="${esc(doc.document_id)}" style="margin-top:4px;">Open</button>
       </div>` : ''}
       <div class="btn-row" style="margin-top:8px;">

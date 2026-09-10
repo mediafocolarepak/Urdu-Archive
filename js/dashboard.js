@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260910160815';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260910160815';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260910163647';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260910163647';
 
 export async function renderDashboardView(main) {
   // Operator shares the simplified read/search-only Dashboard layout with User - their write
@@ -19,7 +19,7 @@ export async function renderDashboardView(main) {
     <div class="panel">
       <h2>Dashboard <span class="count-badge" id="dash-count"></span></h2>
       <div class="searchbar">
-        <input id="dash-search" placeholder="Search by title or tags..." value="${esc(State.dashFilters.search)}">
+        <input id="dash-search" placeholder="Search by title, tags, or Urdu text..." value="${esc(State.dashFilters.search)}">
         ${canWrite() && !isUser ? '<button class="btn" id="dash-new">+ New document</button>' : ''}
       </div>
       <div class="field-grid" style="margin-bottom:10px;">
@@ -76,12 +76,22 @@ export async function renderDashboardView(main) {
   await renderDocDetail(State.selectedDocId);
 }
 
-function buildDashQuery(selectAll) {
+// Fase 2 (PROJECT_HANDOFF_v16.md): the search box now also reaches into the Urdu body text
+// (document_texts, migration 68), not just titles and tags. search_document_texts() does its
+// own normalization (yeh/kaf/heh forms, diacritics - see 68_document_texts.sql) so it finds
+// matches a plain ilike on the raw text would silently miss; it can't be folded into the same
+// .or() as the title/tag ilike below because it reads a different table, so it runs first as a
+// separate query and its document_ids are added as one more branch of that same .or().
+async function buildDashQuery(selectAll) {
   let q = sb.from('documents').select(selectAll ? '*' : 'document_id,category,author,main_topic,recipient,title,original_title,en_title,place,ref_date,pending_deletion,is_preferred');
   const f = State.dashFilters;
   if (f.search && f.search.trim()) {
-    const like = likeSafe(f.search.trim());
-    q = q.or(`title.ilike.${like},original_title.ilike.${like},ur_title.ilike.${like},en_title.ilike.${like},secondary_tags.ilike.${like}`);
+    const term = f.search.trim();
+    const like = likeSafe(term);
+    const textMatches = await withStatus(sb.rpc('search_document_texts', { q: term, lim: 2000 }), 'Searching text...');
+    const textIds = [...new Set(textMatches.map(m => m.document_id))];
+    const idsClause = textIds.length ? `,document_id.in.(${textIds.join(',')})` : '';
+    q = q.or(`title.ilike.${like},original_title.ilike.${like},ur_title.ilike.${like},en_title.ilike.${like},secondary_tags.ilike.${like}${idsClause}`);
   }
   if (f.idSearch && f.idSearch.trim()) {
     const idNum = parseInt(f.idSearch.trim(), 10);
@@ -120,7 +130,7 @@ export async function refreshDashGrid() {
   if (!grid) return;
   const isUser = State.currentRole === 'user' || State.currentRole === 'operator';
   const cols = isUser ? DASH_SORTABLE_USER : DASH_SORTABLE;
-  let rows = await withStatus(buildDashQuery(false).order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Searching...');
+  let rows = await withStatus((await buildDashQuery(false)).order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Searching...');
   rows = await filterByCollection(rows);
   document.getElementById('dash-count').textContent = rows.length;
   const arrow = (col) => col !== State.dashSort.col ? '' : (State.dashSort.asc ? ' &uarr;' : ' &darr;');
@@ -175,7 +185,7 @@ function csvEscape(v) {
 }
 
 async function exportDashboardCsv() {
-  let rows = await withStatus(buildDashQuery(true).order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Exporting...');
+  let rows = await withStatus((await buildDashQuery(true)).order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Exporting...');
   rows = await filterByCollection(rows);
   if (!rows.length) { alert('No documents match the current filters.'); return; }
   const columns = Object.keys(rows[0]);

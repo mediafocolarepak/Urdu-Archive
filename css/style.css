@@ -215,6 +215,10 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
 .board-pill.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; border-color: var(--accent); }
 .board-post { margin: 0 0 12px; }
 .board-post-body { white-space: pre-wrap; line-height: 1.8; font-size: 15px; margin-top: 6px; }
+.board-doc-preview {
+  white-space: pre-wrap; line-height: 1.6; font-size: 13.5px; margin-top: 6px;
+  max-height: 110px; overflow: hidden;
+}
 
 .searchbar { display: flex; gap: 8px; margin-bottom: 10px; }
 .searchbar input { flex: 1; }
