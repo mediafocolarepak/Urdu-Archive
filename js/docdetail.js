@@ -32,7 +32,26 @@ function renderDocSummary(doc) {
   return lines.map(l => `<div>${l}</div>`).join('');
 }
 
-export function renderDocDetailConsultation(box, doc, workSiblings, docCollections, canEdit) {
+// The urdu body text (document_texts, migration 68) - not part of `documents`, so it needs its
+// own query, always run alongside the summary fetch in renderDocDetail below. A text not yet
+// reviewed is labelled as an unverified automatic transcription, per the warning already
+// written into 68_document_texts.sql when the table was created: presenting machine-converted
+// text as authoritative before a human has read it would be worse than not showing it at all.
+function renderDocTextBox(text) {
+  if (!text) return '';
+  const chars = text.char_count || (text.body || '').length;
+  return `
+    <div class="field">
+      <div class="btn-row" style="justify-content:space-between;align-items:center;">
+        <label style="margin:0;">Text <span class="hint">(${chars.toLocaleString()} characters)</span></label>
+        <span style="cursor:pointer;text-decoration:underline;font-size:12.5px;" id="doc-text-toggle">Show</span>
+      </div>
+      ${!text.reviewed ? '<div class="hint" style="color:var(--danger, #b3261e);">Unverified automatic transcription - not yet reviewed by a human.</div>' : ''}
+      <div id="doc-text-body" dir="auto" style="display:none;white-space:pre-wrap;font-size:14px;line-height:1.8;margin-top:6px;max-height:60vh;overflow-y:auto;">${esc(text.body)}</div>
+    </div>`;
+}
+
+export function renderDocDetailConsultation(box, doc, workSiblings, docCollections, canEdit, text) {
   box.innerHTML = `
     <div class="btn-row" style="justify-content:space-between;align-items:center;margin:0 0 8px;">
       <h3 style="margin:0;">Document #${esc(doc.document_id)}</h3>
@@ -56,11 +75,19 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
       <label>Collections</label>
       <div style="font-size:13px;padding:4px 0;">${renderCollectionsSummary(docCollections)}</div>
     </div>
+    ${renderDocTextBox(text)}
     ${renderWorkSiblingsHtml(workSiblings, doc.document_id, false)}
     ${doc.storage_path ? `<div class="field"><label>File</label><a href="#" id="doc-download">Download</a></div>` : ''}
     ${canEdit ? renderDocTasksBox(doc) : ''}
   `;
   document.getElementById('doc-download-gdrive').addEventListener('click', () => downloadFromGDrive(doc.file_name));
+  const textToggle = document.getElementById('doc-text-toggle');
+  if (textToggle) textToggle.addEventListener('click', () => {
+    const body = document.getElementById('doc-text-body');
+    const isOpen = body.style.display !== 'none';
+    body.style.display = isOpen ? 'none' : 'block';
+    textToggle.textContent = isOpen ? 'Show' : 'Hide';
+  });
   document.getElementById('doc-fav').addEventListener('click', async () => {
     const btn = document.getElementById('doc-fav');
     const { data: { user } } = await sb.auth.getUser();
@@ -366,6 +393,8 @@ export async function renderDocDetail(id, opts = {}) {
   const doc = rows[0];
   const siblings = await fetchWorkSiblings(doc.work_id);
   const docCollections = await getCollectionsForDocument(doc.document_id);
+  const textRows = await withStatus(sb.from('document_texts').select('body,char_count,reviewed').eq('document_id', doc.document_id));
+  const text = textRows[0] || null;
 
   if (opts.legacyFullEdit && canWrite()) {
     renderFullEditForm(box, id, doc, siblings, docCollections, {
@@ -379,7 +408,7 @@ export async function renderDocDetail(id, opts = {}) {
   }
 
   const canEdit = isCoordinator() || isAdmin();
-  renderDocDetailConsultation(box, doc, siblings, docCollections, canEdit);
+  renderDocDetailConsultation(box, doc, siblings, docCollections, canEdit, text);
 }
 
 // Opens the full field editor for a document in a full-screen overlay (Coordinator/Admin only,
