@@ -1,12 +1,21 @@
-// Formation paths (Fase A, migrazione 73): solo gerarchia contenuti e CRUD per il formatore
-// proprietario - niente iscrizione/chatroom/quiz/attestato ancora (Fasi B/C/D). Un post qui e'
-// solo titolo+testo libero (niente collegamento a un documento, a differenza di board_posts)
-// per contenere lo scope di questa prima passata - vedi discussione in chat del 10/09/2026.
+// Formation paths (Fase A: gerarchia contenuti, migrazione 73 - Fase B: iscrizione, migrazione
+// 74). Chatroom/quiz/attestato ancora non costruiti (Fasi C/D). Un post qui e' solo titolo+testo
+// libero (niente collegamento a un documento, a differenza di board_posts) per contenere lo
+// scope della prima passata - vedi discussione in chat del 10/09/2026.
+//
+// Iscrizione (Fase B): "Enroll" e' visibile solo su un percorso pubblicato, e solo prima della
+// scadenza (se impostata) - il vero controllo e' server-side in enroll_in_formation_path()
+// (74_formation_enrollments.sql), questo e' solo per non mostrare un bottone che fallirebbe.
+// Il ritiro non ha invece nessuna scadenza. Il conteggio e' pubblico; l'elenco nominativo
+// (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
+// del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, optionsHtml, labelOf } from './core.js?v=20260910235125';
+import { sb, State, esc, withStatus, canReviewApplications, optionsHtml, labelOf, today } from './core.js?v=20260910235125';
 
 // Which chapters are expanded in the tree - in-memory only, resets when switching paths.
 let expandedChapters = new Set();
+// Whether the "Who's enrolled?" list is expanded - in-memory only, resets when switching paths.
+let enrolleesOpen = false;
 
 export async function renderFormationView(main) {
   if (State.formationSelectedPathId) await renderPathDetail(main, State.formationSelectedPathId);
@@ -164,12 +173,25 @@ async function renderPathDetail(main, pathId) {
 
   const audienceList = State.optionListsByName.formation_audience || [];
   const canEdit = path.owner_id === user.id || canReviewApplications();
+  const canSeeEnrollees = canEdit;  // owner or Coordinator/Admin - formation_enrollees() checks this itself too
 
   const modulesOf = yearId => modules.filter(m => m.year_id === yearId);
   const chaptersOf = moduleId => chapters.filter(c => c.module_id === moduleId);
   const postsOf = chapterId => posts.filter(p => p.chapter_id === chapterId);
 
   const badge = path.status === 'draft' ? 'Draft' : (path.status === 'archived' ? 'Archived' : 'Published');
+
+  let myEnrollment = null, enrolledCount = 0;
+  if (path.status === 'published') {
+    const [myRow, countRows] = await Promise.all([
+      withStatus(sb.from('formation_enrollments').select('withdrawn_at').eq('path_id', pathId).eq('user_id', user.id).maybeSingle()),
+      withStatus(sb.rpc('formation_enrollment_counts', { path_ids: [pathId] })),
+    ]);
+    myEnrollment = myRow;
+    enrolledCount = (countRows[0] && countRows[0].enrolled_count) || 0;
+  }
+  const isEnrolled = myEnrollment && !myEnrollment.withdrawn_at;
+  const deadlinePassed = path.enrollment_deadline && path.enrollment_deadline < today();
 
   main.innerHTML = `
     <div class="panel">
@@ -185,6 +207,18 @@ async function renderPathDetail(main, pathId) {
         ${path.course_starts_at ? ` &middot; ${esc(path.course_starts_at)} &rarr; ${esc(path.course_ends_at)}` : ''}
         ${path.enrollment_deadline ? ` &middot; Enroll by ${esc(path.enrollment_deadline)}` : ''}
       </div>
+      ${path.status === 'published' ? `
+      <div class="hint" style="margin-top:10px;">
+        ${enrolledCount} enrolled${canSeeEnrollees ? ` &middot; <span style="cursor:pointer;text-decoration:underline;" id="fp-toggle-enrollees">Who?</span>` : ''}
+      </div>
+      <div id="fp-enrollees-list" class="hint" style="display:${enrolleesOpen ? 'block' : 'none'};margin-top:4px;"></div>
+      <div class="btn-row" style="margin-top:6px;">
+        ${isEnrolled
+          ? '<span class="hint">You are enrolled ✓</span><button class="btn secondary" id="fp-withdraw">Withdraw</button>'
+          : (deadlinePassed
+            ? '<span class="hint">Enrollment is closed for this path.</span>'
+            : '<button class="btn" id="fp-enroll">Enroll</button>')}
+      </div>` : ''}
       ${canEdit ? `<div class="btn-row" style="margin-top:10px;">
         <button class="btn secondary" id="fp-edit-details">Edit details</button>
         ${path.status !== 'published' ? '<button class="btn secondary" id="fp-publish">Publish</button>' : '<button class="btn secondary" id="fp-archive">Archive</button>'}
@@ -200,6 +234,30 @@ async function renderPathDetail(main, pathId) {
   document.getElementById('fp-back').addEventListener('click', () => {
     State.formationSelectedPathId = null;
     renderFormationView(main);
+  });
+
+  const enrollBtn = document.getElementById('fp-enroll');
+  if (enrollBtn) enrollBtn.addEventListener('click', async () => {
+    await withStatus(sb.rpc('enroll_in_formation_path', { pid: pathId }), 'Enrolling...');
+    renderPathDetail(main, pathId);
+  });
+  const withdrawBtn = document.getElementById('fp-withdraw');
+  if (withdrawBtn) withdrawBtn.addEventListener('click', async () => {
+    if (!confirm('Withdraw from this path? You will lose access to its chatroom, quizzes and certificate once those are built - the path content itself stays visible.')) return;
+    await withStatus(sb.rpc('withdraw_from_formation_path', { pid: pathId }), 'Withdrawing...');
+    renderPathDetail(main, pathId);
+  });
+  const toggleEnrolleesEl = document.getElementById('fp-toggle-enrollees');
+  if (toggleEnrolleesEl) toggleEnrolleesEl.addEventListener('click', async () => {
+    enrolleesOpen = !enrolleesOpen;
+    const box = document.getElementById('fp-enrollees-list');
+    box.style.display = enrolleesOpen ? 'block' : 'none';
+    if (!enrolleesOpen) return;
+    box.innerHTML = 'Loading...';
+    const rows = await withStatus(sb.rpc('formation_enrollees', { pid: pathId }));
+    box.innerHTML = rows.length
+      ? rows.map(r => `${esc(r.full_name) || esc(r.email)} &middot; ${esc((r.enrolled_at || '').slice(0, 10))}`).join('<br>')
+      : 'Nobody yet.';
   });
 
   if (canEdit) {
