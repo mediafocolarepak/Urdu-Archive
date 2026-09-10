@@ -1,11 +1,16 @@
 // The formation boards (Fase 1, PROJECT_HANDOFF_v15.md): one board per group, where "editors"
 // (named by Coordinator/Admin, per-board via board_editors - see 71_boards.sql) post curated
-// documents or free-standing text, and everyone reads. No comments, no "read" receipts yet.
+// documents or free-standing text, and everyone reads. No comments.
+//
+// "Letto" (72_board_post_reads.sql): marked automatically the moment a post is rendered here -
+// no button to click. Everyone sees a count; only that board's editors and Coordinator/Admin
+// see who, via a security definer function (board_post_readers) that checks the permission
+// itself, the same pattern as is_board_editor()/document_is_postable() in 71_boards.sql.
 
 import {
   sb, State, esc, withStatus, canReviewApplications, getDisplayNameByEmail,
   openBoardPostPopup, likeSafe, DEFAULT_BOARD_FOR_MEMBERSHIP,
-} from './core.js?v=20260910163647';
+} from './core.js?v=20260910193207';
 
 // Fase 2 (PROJECT_HANDOFF_v16.md): a readable preview of the document's Urdu text, from
 // document_texts, right in the post - instead of a bare link out of the app. Plain substring,
@@ -67,18 +72,38 @@ export async function renderBoardsView(main) {
   }
 }
 
-function renderPostsForBoard(boardCode, posts, docById, textById, myEmail, main) {
+async function renderPostsForBoard(boardCode, posts, docById, textById, myEmail, main) {
   const box = document.getElementById('board-posts');
   const canPost = State.myBoards.has(boardCode);
+  const postIds = posts.map(p => p.id);
+
+  const { data: { user } } = await sb.auth.getUser();
+  const [myReadRows, countRows] = await Promise.all([
+    postIds.length ? withStatus(sb.from('board_post_reads').select('post_id').eq('user_id', user.id).in('post_id', postIds)) : [],
+    postIds.length ? withStatus(sb.rpc('board_post_read_counts', { post_ids: postIds })) : [],
+  ]);
+  const myReadSet = new Set(myReadRows.map(r => r.post_id));
+  const countByPost = {}; for (const c of countRows) countByPost[c.post_id] = c.read_count;
+
+  // "Letto" is automatic on viewing: anything not yet in myReadSet is counted right now, so the
+  // checkmark/count are right on this very render, and persisted in the background below rather
+  // than making the view wait on a round trip for something this small.
+  const newlyRead = postIds.filter(id => !myReadSet.has(id));
+  for (const id of newlyRead) { myReadSet.add(id); countByPost[id] = (countByPost[id] || 0) + 1; }
 
   box.innerHTML = `
     ${canPost ? '<div class="btn-row" style="margin-bottom:10px;"><button class="btn" id="board-new-post">+ New post</button></div>' : ''}
-    <div id="board-posts-list">${posts.map(p => renderPostCard(p, docById[p.document_id], textById[p.document_id], myEmail)).join('') || '<div class="empty-msg">No posts on this board yet.</div>'}</div>`;
+    <div id="board-posts-list">${posts.map(p => renderPostCard(p, docById[p.document_id], textById[p.document_id], myEmail, myReadSet.has(p.id), countByPost[p.id] || 0)).join('') || '<div class="empty-msg">No posts on this board yet.</div>'}</div>`;
 
   if (canPost) {
     document.getElementById('board-new-post').addEventListener('click', () => openBoardPostPopup({
       boardCode, onSaved: () => renderBoardsView(main),
     }));
+  }
+
+  if (newlyRead.length) {
+    sb.from('board_post_reads').upsert(newlyRead.map(post_id => ({ post_id, user_id: user.id })), { onConflict: 'post_id,user_id', ignoreDuplicates: true })
+      .then(({ error }) => { if (error) console.error('Could not record "read" for board posts:', error); });
   }
 
   // Resolve author display names after the initial render (avoids one query per post up front).
@@ -92,8 +117,9 @@ function renderPostsForBoard(boardCode, posts, docById, textById, myEmail, main)
   wirePostActions(posts, docById, myEmail, main);
 }
 
-function renderPostCard(p, doc, text, myEmail) {
+function renderPostCard(p, doc, text, myEmail, iRead, readCount) {
   const canEditThis = canReviewApplications() || (p.posted_by_email === myEmail && State.myBoards.has(p.board_code));
+  const canSeeReaders = canReviewApplications() || State.myBoards.has(p.board_code);
   return `
     <div class="panel board-post" data-id="${p.id}">
       <div class="btn-row" style="justify-content:space-between;align-items:flex-start;margin:0 0 4px;">
@@ -107,6 +133,10 @@ function renderPostCard(p, doc, text, myEmail) {
         ${text ? `<div class="board-doc-preview" dir="auto">${esc(textPreview(text.body))}</div>${!text.reviewed ? '<div class="hint">Unverified automatic transcription</div>' : ''}` : ''}
         <button class="btn secondary" data-open-doc="${esc(doc.document_id)}" style="margin-top:4px;">Open</button>
       </div>` : ''}
+      <div class="hint" style="margin-top:6px;">
+        ${readCount} read${iRead ? ' &middot; you read this ✓' : ''}${canSeeReaders ? ` &middot; <span style="cursor:pointer;text-decoration:underline;" data-show-readers="${p.id}">Who?</span>` : ''}
+      </div>
+      <div id="board-readers-${p.id}" class="hint" style="display:none;margin-top:4px;"></div>
       <div class="btn-row" style="margin-top:8px;">
         ${canEditThis ? `<button class="btn secondary" data-edit="${p.id}">Edit</button><button class="btn danger" data-delete="${p.id}">Delete</button>` : ''}
         ${canReviewApplications() ? `<button class="btn secondary" data-pin="${p.id}">${p.pinned ? 'Unpin' : 'Pin'}</button>` : ''}
@@ -115,6 +145,17 @@ function renderPostCard(p, doc, text, myEmail) {
 }
 
 function wirePostActions(posts, docById, myEmail, main) {
+  document.querySelectorAll('[data-show-readers]').forEach(el => el.addEventListener('click', async () => {
+    const id = el.dataset.showReaders;
+    const box = document.getElementById(`board-readers-${id}`);
+    if (box.style.display === 'block') { box.style.display = 'none'; return; }
+    box.style.display = 'block';
+    box.innerHTML = 'Loading...';
+    const rows = await withStatus(sb.rpc('board_post_readers', { pid: parseInt(id, 10) }));
+    box.innerHTML = rows.length
+      ? rows.map(r => `${esc(r.full_name) || esc(r.email)} &middot; ${esc((r.read_at || '').slice(0, 10))}`).join('<br>')
+      : 'Nobody yet.';
+  }));
   document.querySelectorAll('[data-open-doc]').forEach(btn => btn.addEventListener('click', () => {
     State.selectedDocId = btn.dataset.openDoc;
     window.__renderTab('dashboard');
