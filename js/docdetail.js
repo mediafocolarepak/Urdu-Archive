@@ -7,7 +7,9 @@ import {
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail,
-} from './core.js?v=20260909164501';
+} from './core.js?v=20260910103051';
+
+function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
 // Categories that gate visibility/assignment to a specific qualification - duplicated from the
 // same constant in tasks.js (project convention: modules only import from core.js, never each
@@ -36,6 +38,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
       <h3 style="margin:0;">Document #${esc(doc.document_id)}</h3>
       <div class="btn-row" style="margin:0;">
         ${canEdit ? '<button class="btn secondary" id="doc-open-editor">Edit</button>' : ''}
+        <button class="btn secondary" id="doc-fav">${favLabel(doc.document_id)}</button>
         <button class="btn" id="doc-download-gdrive">Open</button>
       </div>
     </div>
@@ -57,6 +60,18 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     ${canEdit ? renderDocTasksBox(doc) : ''}
   `;
   document.getElementById('doc-download-gdrive').addEventListener('click', () => downloadFromGDrive(doc.file_name));
+  document.getElementById('doc-fav').addEventListener('click', async () => {
+    const btn = document.getElementById('doc-fav');
+    const { data: { user } } = await sb.auth.getUser();
+    if (State.myFavorites.has(doc.document_id)) {
+      await withStatus(sb.from('user_favorites').delete().eq('user_id', user.id).eq('document_id', doc.document_id));
+      State.myFavorites.delete(doc.document_id);
+    } else {
+      await withStatus(sb.from('user_favorites').insert({ user_id: user.id, document_id: doc.document_id }));
+      State.myFavorites.add(doc.document_id);
+    }
+    btn.textContent = favLabel(doc.document_id);
+  });
   if (canEdit) {
     document.getElementById('doc-open-editor').addEventListener('click', () => openFullScreenEditor(doc.document_id));
     document.getElementById('doc-create-task').addEventListener('click', () => openCreateTaskPopup(doc, () => refreshDocTasksList(doc)));

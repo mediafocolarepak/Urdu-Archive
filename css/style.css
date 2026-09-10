@@ -194,6 +194,9 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
    #dash-grid table above. Both are always rendered (see dashboard.js) - this query is the
    only thing deciding which one is visible, so there's no JS resize-listener to maintain. */
 .dash-cards { display: none; }
+/* My Space has no wide-table alternative like the Dashboard does, so its card list is always
+   visible - unlike .dash-cards above, which only appears under the 700px breakpoint. */
+#myspace-cards { display: block; }
 @media (max-width: 700px) {
   .dash-grid-wrap { display: none; }
   .dash-cards { display: block; max-height: 70vh; overflow: auto; }

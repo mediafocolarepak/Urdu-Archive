@@ -259,6 +259,7 @@ export const State = {
   mediaTypes: [], sources: [], collections: [], qualities: [], operators: [],
   currentRole: 'user',
   myQualifications: new Set(),  // qualification_code set for the signed-in Operator (empty for other roles)
+  myFavorites: new Set(),  // document_id set of the signed-in user's own "My Space" saves
   appShown: false,
   selectedDocId: null,
   selectedCategoryId: null,
@@ -641,6 +642,9 @@ async function showApp(session, renderDashboardTab) {
     const { data: myQuals } = await sb.from('user_qualifications').select('qualification_code').eq('user_id', session.user.id);
     for (const q of (myQuals || [])) State.myQualifications.add(q.qualification_code);
   }
+
+  const { data: favs } = await sb.from('user_favorites').select('document_id');
+  State.myFavorites = new Set((favs || []).map(f => f.document_id));
 
   await loadOptions();
   renderDashboardTab();
