@@ -260,6 +260,9 @@ export const State = {
   currentRole: 'user',
   myQualifications: new Set(),  // qualification_code set for the signed-in Operator (empty for other roles)
   myFavorites: new Set(),  // document_id set of the signed-in user's own "My Space" saves
+  myBoards: new Set(),  // board_code set the signed-in user can post to (all of them for coordinator/admin)
+  myMembershipType: null,  // user_profiles.membership_type, for the default board to open first
+  boardsSelected: null,  // board_code of the currently open board on the Boards tab, remembered across re-renders
   appShown: false,
   selectedDocId: null,
   selectedCategoryId: null,
@@ -284,7 +287,7 @@ export const DASH_SORTABLE = { document_id: 'ID', title: 'Title (EN)', original_
 // two keep their fixed, CHECK-constrained vocabularies (see 15_versions_editors_schema.sql),
 // while the Hayat Editor's Autore/Argomento comboboxes are free-typing - a new value there
 // must never risk violating the documents table's constraints on author/main_topic.
-export const OPTION_LIST_NAMES = ['category', 'author', 'main_topic', 'recipient', 'language', 'workflow_status', 'media_type', 'source', 'collection', 'quality', 'operator', 'hayat_author', 'hayat_argomento', 'membership_type', 'task_category', 'operator_qualification', 'collaboration_skill', 'report_type', 'extra_credit_reason'];
+export const OPTION_LIST_NAMES = ['category', 'author', 'main_topic', 'recipient', 'language', 'workflow_status', 'media_type', 'source', 'collection', 'quality', 'operator', 'hayat_author', 'hayat_argomento', 'membership_type', 'task_category', 'operator_qualification', 'collaboration_skill', 'report_type', 'extra_credit_reason', 'board'];
 export const OPTION_LIST_LABELS = {
   category: 'Category', author: 'Author', main_topic: 'Main topic', recipient: 'Recipient',
   language: 'Language', workflow_status: 'Workflow status', media_type: 'Media type',
@@ -295,7 +298,15 @@ export const OPTION_LIST_LABELS = {
   collaboration_skill: 'Join the Team: skills',
   report_type: 'Report a Problem: report type',
   extra_credit_reason: 'Task: extra credits reason',
+  board: 'Formation boards',
 };
+
+// Pre-selection of the board from a document's recipient (suggestion, not a constraint).
+export const BOARD_FOR_RECIPIENT = { GEN4: 'GEN4', GEN3: 'GEN3', GEN2: 'GEN2', GMUW: 'GEN2', FAMI: 'FAMI',
+  SACE: 'SACE', VESC: 'SACE', SUOR: 'SACE', VOLU: 'ADUL', FOCL: 'ADUL', UMAN: 'ADUL' };
+// Board opened first, from the membership_type declared at signup. GEN doesn't distinguish
+// age: opens on young people. null = first non-empty board.
+export const DEFAULT_BOARD_FOR_MEMBERSHIP = { GEN: 'GEN2', FOCO: 'ADUL', MARR: 'FAMI', VOLU: 'ADUL', FRND: 'ADUL', SYMP: 'ADUL', OTHR: null };
 
 export async function loadOptions() {
   const rows = await withStatus(sb.from('option_lists').select('*').order('sort_order'));
@@ -647,6 +658,17 @@ async function showApp(session, renderDashboardTab) {
   State.myFavorites = new Set((favs || []).map(f => f.document_id));
 
   await loadOptions();
+
+  State.myBoards = new Set();
+  if (canReviewApplications()) {
+    State.myBoards = new Set((State.optionListsByName.board || []).map(([code]) => code));
+  } else {
+    const { data: editorRows } = await sb.from('board_editors').select('board_code');
+    State.myBoards = new Set((editorRows || []).map(r => r.board_code));
+  }
+  const { data: profileRows } = await sb.from('user_profiles').select('membership_type').eq('user_id', session.user.id);
+  State.myMembershipType = (profileRows && profileRows[0] && profileRows[0].membership_type) || null;
+
   renderDashboardTab();
   await maybeShowSplash();
 }
@@ -725,6 +747,50 @@ export async function nameMapForEmails(emails) {
   const map = {};
   unique.forEach((e, i) => { map[e] = names[i]; });
   return map;
+}
+
+// Shared popup for a board post - used by docdetail.js's "+ Board" (post with a document) and
+// boards.js's "+ New post" (free post). Lives here, not in either of them, because those two
+// modules can't import each other (project convention: modules import only from core.js).
+// { doc } prefills from a document; { boardCode } prefills the board directly; { post } switches
+// this to an edit (update instead of insert).
+export function openBoardPostPopup({ doc = null, boardCode = null, post = null, onSaved } = {}) {
+  document.getElementById('board-post-popup')?.remove();
+  const backdrop = document.createElement('div');
+  backdrop.id = 'board-post-popup';
+  backdrop.className = 'overlay-backdrop';
+  const myBoards = (State.optionListsByName.board || []).filter(([code]) => State.myBoards.has(code));
+  const suggested = post ? post.board_code : (boardCode || (doc && BOARD_FOR_RECIPIENT[(doc.recipient || [])[0]]));
+  const preselect = myBoards.some(([code]) => code === suggested) ? suggested : (myBoards[0] && myBoards[0][0]) || '';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel">
+      <h2 style="margin-top:0;">${post ? 'Edit post' : 'New post'}</h2>
+      <div class="field"><label>Board</label><select id="bp-board">${optionsHtml(myBoards, preselect, false)}</select></div>
+      ${doc ? `<div class="field"><label>Document</label><div style="font-size:13px;padding:4px 0;">#${esc(doc.document_id)} &mdash; ${esc(doc.en_title) || '<span class="hint">(no title)</span>'}</div></div>` : ''}
+      <div class="field"><label>Title</label><input id="bp-title" value="${esc(post ? post.title : (doc ? doc.en_title || '' : ''))}"></div>
+      <div class="field"><label>Text</label><textarea id="bp-body" dir="auto" rows="8">${esc(post ? post.body : '')}</textarea></div>
+      <div class="btn-row" style="justify-content:flex-end;">
+        <button class="btn secondary" id="bp-cancel">Cancel</button>
+        <button class="btn" id="bp-save">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+  document.getElementById('bp-cancel').addEventListener('click', () => backdrop.remove());
+  document.getElementById('bp-save').addEventListener('click', async () => {
+    const board_code = document.getElementById('bp-board').value;
+    const title = document.getElementById('bp-title').value.trim();
+    const body = document.getElementById('bp-body').value.trim();
+    const document_id = doc ? doc.document_id : (post ? post.document_id : null);
+    if (!title) { alert('Title is required.'); return; }
+    if (!document_id && !body) { alert('Either a document or some text is required.'); return; }
+    const { data: { user } } = await sb.auth.getUser();
+    const row = { board_code, document_id, title, body: body || null, posted_by_email: user.email };
+    if (post) await withStatus(sb.from('board_posts').update(row).eq('id', post.id), 'Saving...');
+    else await withStatus(sb.from('board_posts').insert(row), 'Saving...');
+    backdrop.remove();
+    if (onSaved) onSaved();
+  });
 }
 
 // Populates the signup form's membership-type dropdown before login (anon-readable list).

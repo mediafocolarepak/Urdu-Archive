@@ -6,10 +6,17 @@ import {
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete, isCoordinator, isAdmin,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
-  readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail,
-} from './core.js?v=20260910103051';
+  readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup,
+} from './core.js?v=20260910140007';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
+
+// Same postability rule as document_is_postable() in 71_boards.sql - a client-side echo so the
+// button doesn't appear only to have the insert rejected by RLS; that policy remains the real
+// gate. Keep the two in sync.
+function isDocPostable(doc) {
+  return doc.language === 'URD' && (doc.workflow_status == null || ['APPR', 'STOR', 'published'].includes(doc.workflow_status));
+}
 
 // Categories that gate visibility/assignment to a specific qualification - duplicated from the
 // same constant in tasks.js (project convention: modules only import from core.js, never each
@@ -39,6 +46,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
       <div class="btn-row" style="margin:0;">
         ${canEdit ? '<button class="btn secondary" id="doc-open-editor">Edit</button>' : ''}
         <button class="btn secondary" id="doc-fav">${favLabel(doc.document_id)}</button>
+        ${State.myBoards.size > 0 && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-board">+ Board</button>' : ''}
         <button class="btn" id="doc-download-gdrive">Open</button>
       </div>
     </div>
@@ -72,6 +80,9 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     }
     btn.textContent = favLabel(doc.document_id);
   });
+  if (State.myBoards.size > 0 && isDocPostable(doc)) {
+    document.getElementById('doc-add-board').addEventListener('click', () => openBoardPostPopup({ doc, onSaved: () => {} }));
+  }
   if (canEdit) {
     document.getElementById('doc-open-editor').addEventListener('click', () => openFullScreenEditor(doc.document_id));
     document.getElementById('doc-create-task').addEventListener('click', () => openCreateTaskPopup(doc, () => refreshDocTasksList(doc)));

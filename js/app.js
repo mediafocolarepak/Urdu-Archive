@@ -1,20 +1,21 @@
-import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260910103051';
-import { renderDashboardView } from './dashboard.js?v=20260910103051';
-import { renderReportsView } from './reports.js?v=20260910103051';
-import { renderHayatView } from './hayatindex.js?v=20260910103051';
-import { renderMatchReviewView } from './matchreview.js?v=20260910103051';
-import { renderBulkImportView } from './bulkimport.js?v=20260910103051';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260910103051';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260910103051';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260910103051';
-import { renderHayatEditorView } from './hayateditor.js?v=20260910103051';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260910103051';
-import { renderUserGuideView } from './userguide.js?v=20260910103051';
-import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260910103051';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260910103051';
-import { renderMyProfileView } from './profile.js?v=20260910103051';
-import { renderMySpaceView } from './myspace.js?v=20260910103051';
-import { registerServiceWorker } from './pwa-register.js?v=20260910103051';
+import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260910140007';
+import { renderDashboardView } from './dashboard.js?v=20260910140007';
+import { renderReportsView } from './reports.js?v=20260910140007';
+import { renderHayatView } from './hayatindex.js?v=20260910140007';
+import { renderMatchReviewView } from './matchreview.js?v=20260910140007';
+import { renderBulkImportView } from './bulkimport.js?v=20260910140007';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260910140007';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260910140007';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260910140007';
+import { renderHayatEditorView } from './hayateditor.js?v=20260910140007';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260910140007';
+import { renderUserGuideView } from './userguide.js?v=20260910140007';
+import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260910140007';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260910140007';
+import { renderMyProfileView } from './profile.js?v=20260910140007';
+import { renderMySpaceView } from './myspace.js?v=20260910140007';
+import { renderBoardsView } from './boards.js?v=20260910140007';
+import { registerServiceWorker } from './pwa-register.js?v=20260910140007';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -29,6 +30,7 @@ function getTabs() {
   const tabs = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'myspace', label: 'My Space' },
+    { id: 'boards', label: 'Boards' },
   ];
   // Plain Users get a minimal read-only set: browse (Dashboard) and a quick way to flag a
   // problem, right up front as the second tab - Print Reports/Hayat Index are cataloguing
@@ -61,8 +63,8 @@ function getTabs() {
   // Operators work the Tasks queue first and foremost - reorder so Dashboard, Tasks, then
   // the renamed Chat lead the tab bar, with everything else following in its usual order.
   if (isOperator) {
-    const front = ['dashboard', 'myspace', 'tasks', 'chat'].map(id => tabs.find(t => t.id === id)).filter(Boolean);
-    const rest = tabs.filter(t => !['dashboard', 'myspace', 'tasks', 'chat'].includes(t.id));
+    const front = ['dashboard', 'myspace', 'boards', 'tasks', 'chat'].map(id => tabs.find(t => t.id === id)).filter(Boolean);
+    const rest = tabs.filter(t => !['dashboard', 'myspace', 'boards', 'tasks', 'chat'].includes(t.id));
     return [...front, ...rest];
   }
   return tabs;
@@ -81,6 +83,7 @@ function renderTab(id) {
   main.innerHTML = '<div class="empty-msg">Loading...</div>';
   if (id === 'dashboard') renderDashboardView(main);
   else if (id === 'myspace') renderMySpaceView(main);
+  else if (id === 'boards') renderBoardsView(main);
   else if (id === 'reports') renderReportsView(main);
   else if (id === 'hayat') renderHayatView(main);
   else if (id === 'users') renderUsersView(main);
