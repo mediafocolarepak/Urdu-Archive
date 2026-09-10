@@ -16,6 +16,7 @@ import { renderMyProfileView } from './profile.js?v=20260911002814';
 import { renderMySpaceView } from './myspace.js?v=20260911002814';
 import { renderBoardsView } from './boards.js?v=20260911002814';
 import { renderFormationView } from './formation.js?v=20260911002814';
+import { renderRereadView } from './reread.js?v=20260911002814';
 import { registerServiceWorker } from './pwa-register.js?v=20260911002814';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
@@ -52,6 +53,8 @@ function getTabs() {
   }
   if (canReviewApplications()) { tabs.push({ id: 'applications', label: 'Team Applications' }); }
   if (canWrite()) { tabs.push({ id: 'tasks', label: 'Tasks' }); }
+  // Proof Reader qualification (Options -> Operator qualifications), or Coordinator/Admin.
+  if (canReviewApplications() || State.myQualifications.has('PROOF_READER')) { tabs.push({ id: 'reread', label: 'Proofreading' }); }
   if (isAdmin()) { tabs.push({ id: 'users', label: 'Users' }); tabs.push({ id: 'options', label: 'Options' }); tabs.push({ id: 'announcements', label: 'Announcements' }); }
   tabs.push({ id: 'profile', label: 'My Profile' });
   // Users already got their Chat tab up front as "Report a Problem or Suggestion" (see above);
@@ -100,6 +103,7 @@ function renderTab(id) {
   else if (id === 'chat') { canReviewApplications() ? renderAdminMessagesView(main) : renderChatView(main); }
   else if (id === 'applications') renderApplicationsView(main);
   else if (id === 'tasks') renderTasksView(main);
+  else if (id === 'reread') renderRereadView(main);
   else if (id === 'jointeam') renderJoinTeamView(main);
   else if (id === 'profile') renderMyProfileView(main);
   else if (id === 'help') renderUserGuideView(main);
