@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260911002814';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260911002814';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260911004650';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260911004650';
 
 export async function renderDashboardView(main) {
   // Operator shares the simplified read/search-only Dashboard layout with User - their write
