@@ -106,7 +106,11 @@ async function buildDashQuery(selectAll) {
   if (f.recipient) q = q.overlaps('recipient', [f.recipient]);
   if (f.source) q = q.eq('source', f.source);
   if (f.language) q = q.eq('language', f.language);
-  return q;
+  // Wrapped in an object rather than returned bare: a PostgREST query builder is itself
+  // thenable, so an `async function` returning it directly gets unwrapped by the promise
+  // resolution algorithm - callers awaiting buildDashQuery() would get the already-executed
+  // {data, error} result instead of the chainable builder, breaking .order()/.limit() below.
+  return { q };
 }
 
 // Collections are many-to-many now (document_collections), so filtering by them is a
@@ -130,7 +134,7 @@ export async function refreshDashGrid() {
   if (!grid) return;
   const isUser = State.currentRole === 'user' || State.currentRole === 'operator';
   const cols = isUser ? DASH_SORTABLE_USER : DASH_SORTABLE;
-  let rows = await withStatus((await buildDashQuery(false)).order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Searching...');
+  let rows = await withStatus((await buildDashQuery(false)).q.order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Searching...');
   rows = await filterByCollection(rows);
   document.getElementById('dash-count').textContent = rows.length;
   const arrow = (col) => col !== State.dashSort.col ? '' : (State.dashSort.asc ? ' &uarr;' : ' &darr;');
@@ -185,7 +189,7 @@ function csvEscape(v) {
 }
 
 async function exportDashboardCsv() {
-  let rows = await withStatus((await buildDashQuery(true)).order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Exporting...');
+  let rows = await withStatus((await buildDashQuery(true)).q.order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Exporting...');
   rows = await filterByCollection(rows);
   if (!rows.length) { alert('No documents match the current filters.'); return; }
   const columns = Object.keys(rows[0]);
