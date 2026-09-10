@@ -10,7 +10,7 @@
 import {
   sb, State, esc, withStatus, canReviewApplications, getDisplayNameByEmail,
   openBoardPostPopup, likeSafe, DEFAULT_BOARD_FOR_MEMBERSHIP,
-} from './core.js?v=20260911004650';
+} from './core.js?v=20260911005752';
 
 // Fase 2 (PROJECT_HANDOFF_v16.md): a readable preview of the document's Urdu text, from
 // document_texts, right in the post - instead of a bare link out of the app. Plain substring,

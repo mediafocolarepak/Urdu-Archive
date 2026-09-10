@@ -2,7 +2,7 @@
 // PROJECT_HANDOFF_v15.md). Personal and private: each user only ever sees their own favorites,
 // enforced by RLS on user_favorites, not by anything in this module.
 
-import { sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup } from './core.js?v=20260911004650';
+import { sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup } from './core.js?v=20260911005752';
 
 export async function renderMySpaceView(main) {
   const rows = await withStatus(sb.from('user_favorites')
