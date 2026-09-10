@@ -10,7 +10,7 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, optionsHtml, labelOf, today } from './core.js?v=20260910235125';
+import { sb, State, esc, withStatus, canReviewApplications, optionsHtml, labelOf, today } from './core.js?v=20260911000344';
 
 // Which chapters are expanded in the tree - in-memory only, resets when switching paths.
 let expandedChapters = new Set();
