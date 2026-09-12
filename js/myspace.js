@@ -2,7 +2,7 @@
 // PROJECT_HANDOFF_v15.md). Personal and private: each user only ever sees their own favorites,
 // enforced by RLS on user_favorites, not by anything in this module.
 
-import { sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup } from './core.js?v=20260911005752';
+import { sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup, openFormationPostPopup } from './core.js?v=20260911160158';
 
 export async function renderMySpaceView(main) {
   const rows = await withStatus(sb.from('user_favorites')
@@ -23,6 +23,7 @@ export async function renderMySpaceView(main) {
     docsById[doc.document_id] = doc;
     const title = esc(doc.en_title) || '<span class="hint">(no title)</span>';
     const canAddToBoard = State.myBoards.size > 0 && isDocPostable(doc);
+    const canAddToPath = State.isFormatore && isDocPostable(doc);
     return `<div class="dash-card" data-id="${esc(doc.document_id)}">
       <div class="dash-card-title">${title}</div>
       ${doc.ur_title ? `<div dir="auto">${esc(doc.ur_title)}</div>` : ''}
@@ -30,13 +31,14 @@ export async function renderMySpaceView(main) {
       <div class="btn-row" style="margin:6px 0 0;">
         <button class="btn secondary" data-remove="${esc(doc.document_id)}">Remove</button>
         ${canAddToBoard ? `<button class="btn secondary" data-addboard="${esc(doc.document_id)}">+ Board</button>` : ''}
+        ${canAddToPath ? `<button class="btn secondary" data-addpath="${esc(doc.document_id)}">+ Path</button>` : ''}
       </div>
     </div>`;
   }).join('') || '<div class="empty-msg">Nothing saved yet — use ☆ Save on any document in the Dashboard.</div>';
 
   cardsBox.querySelectorAll('.dash-card').forEach(card => {
     card.addEventListener('click', e => {
-      if (e.target.dataset.remove || e.target.dataset.addboard) return;
+      if (e.target.dataset.remove || e.target.dataset.addboard || e.target.dataset.addpath) return;
       State.selectedDocId = card.dataset.id;
       window.__renderTab('dashboard');
     });
@@ -56,6 +58,13 @@ export async function renderMySpaceView(main) {
       e.stopPropagation();
       const doc = docsById[btn.dataset.addboard];
       openBoardPostPopup({ doc, onSaved: () => {} });
+    });
+  });
+  cardsBox.querySelectorAll('[data-addpath]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const doc = docsById[btn.dataset.addpath];
+      openFormationPostPopup({ doc, onSaved: () => {} });
     });
   });
 }

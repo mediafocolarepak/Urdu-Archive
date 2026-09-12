@@ -10,7 +10,14 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, optionsHtml, labelOf, today, nameMapForEmails } from './core.js?v=20260911005752';
+import { sb, State, esc, withStatus, canReviewApplications, optionsHtml, labelOf, today, nameMapForEmails } from './core.js?v=20260911160158';
+
+// A readable preview of a linked document's Urdu text - same idea as boards.js's textPreview()
+// (duplicated rather than shared: project convention is modules import only from core.js).
+function textPreview(body, maxChars = 280) {
+  const trimmed = (body || '').trim();
+  return trimmed.length > maxChars ? trimmed.slice(0, maxChars).trim() + '…' : trimmed;
+}
 
 // Which chapters are expanded in the tree - in-memory only, resets when switching paths.
 let expandedChapters = new Set();
@@ -179,6 +186,17 @@ async function renderPathDetail(main, pathId) {
   const chapterIds = chapters.map(c => c.id);
   const posts = chapterIds.length ? await withStatus(sb.from('formation_posts').select('*').in('chapter_id', chapterIds).order('sequence_number').order('id')) : [];
 
+  // Posts can optionally link an archive document (added via "+ Path" from Dashboard/My Space) -
+  // same doc/text lookup pattern as renderBoardsView in boards.js.
+  const docIds = [...new Set(posts.filter(p => p.document_id != null).map(p => p.document_id))];
+  const docById = {}, textById = {};
+  if (docIds.length) {
+    const docs = await withStatus(sb.from('documents').select('document_id,en_title,ur_title').in('document_id', docIds));
+    for (const d of docs) docById[d.document_id] = d;
+    const texts = await withStatus(sb.from('document_texts').select('document_id,body,reviewed').in('document_id', docIds));
+    for (const t of texts) textById[t.document_id] = t;
+  }
+
   const audienceList = State.optionListsByName.formation_audience || [];
   const canEdit = path.owner_id === user.id || canReviewApplications();
   const canSeeEnrollees = canEdit;  // owner or Coordinator/Admin - formation_enrollees() checks this itself too
@@ -271,7 +289,7 @@ async function renderPathDetail(main, pathId) {
       <hr style="margin:16px 0;">
       <div id="fp-tree">
         ${canEdit ? '<div class="btn-row" style="margin-bottom:10px;"><button class="btn" id="fp-add-year">+ Add year</button></div>' : ''}
-        ${years.length ? years.map(y => renderYearBlock(y, modulesOf(y.id), chaptersOf, postsOf, canEdit, quizCtx)).join('') : '<div class="empty-msg">No years yet.</div>'}
+        ${years.length ? years.map(y => renderYearBlock(y, modulesOf(y.id), chaptersOf, postsOf, canEdit, quizCtx, docById, textById)).join('') : '<div class="empty-msg">No years yet.</div>'}
       </div>
     </div>`;
 
@@ -389,7 +407,7 @@ async function refreshChatThread(main, pathId, channel) {
   });
 }
 
-function renderYearBlock(y, modules, chaptersOf, postsOf, canEdit, quizCtx) {
+function renderYearBlock(y, modules, chaptersOf, postsOf, canEdit, quizCtx, docById, textById) {
   return `
   <div class="panel" style="margin-bottom:10px;" data-year-block="${y.id}">
     <div class="btn-row" style="justify-content:space-between;">
@@ -401,11 +419,11 @@ function renderYearBlock(y, modules, chaptersOf, postsOf, canEdit, quizCtx) {
         <button class="btn danger" data-delete-year="${y.id}" style="padding:2px 8px;">Delete</button>
       </div>` : ''}
     </div>
-    ${modules.length ? modules.map(m => renderModuleBlock(m, chaptersOf(m.id), postsOf, canEdit, quizCtx)).join('') : '<div class="hint">No modules yet.</div>'}
+    ${modules.length ? modules.map(m => renderModuleBlock(m, chaptersOf(m.id), postsOf, canEdit, quizCtx, docById, textById)).join('') : '<div class="hint">No modules yet.</div>'}
   </div>`;
 }
 
-function renderModuleBlock(m, chapters, postsOf, canEdit, quizCtx) {
+function renderModuleBlock(m, chapters, postsOf, canEdit, quizCtx, docById, textById) {
   return `
   <div style="margin:10px 0 10px 12px;" data-module-block="${m.id}">
     <div class="btn-row" style="justify-content:space-between;">
@@ -420,7 +438,7 @@ function renderModuleBlock(m, chapters, postsOf, canEdit, quizCtx) {
     </div>
     ${m.description ? `<div class="hint" dir="auto">${esc(m.description)}</div>` : ''}
     ${(quizCtx.canManage || quizCtx.canTake) ? quizBlockHtml('module', m.id, quizCtx.quizByModule[m.id], quizCtx) : ''}
-    ${chapters.length ? chapters.map(c => renderChapterBlock(c, postsOf(c.id), canEdit)).join('') : '<div class="hint">No chapters yet.</div>'}
+    ${chapters.length ? chapters.map(c => renderChapterBlock(c, postsOf(c.id), canEdit, docById, textById)).join('') : '<div class="hint">No chapters yet.</div>'}
   </div>`;
 }
 
@@ -619,7 +637,7 @@ function wireQuizActions(main, pathId, quizzes) {
   });
 }
 
-function renderChapterBlock(c, posts, canEdit) {
+function renderChapterBlock(c, posts, canEdit, docById, textById) {
   const isOpen = expandedChapters.has(c.id);
   return `
   <div style="margin:8px 0 8px 16px;padding:8px;border:1px solid var(--accent-soft);border-radius:6px;" data-chapter-block="${c.id}">
@@ -633,11 +651,11 @@ function renderChapterBlock(c, posts, canEdit) {
         <button class="btn danger" data-delete-chapter="${c.id}" style="padding:2px 6px;">Delete</button>
       </div>` : ''}
     </div>
-    ${isOpen ? `<div style="margin-top:6px;">${posts.length ? posts.map(p => renderPostRow(p, canEdit)).join('') : '<div class="hint">No posts yet.</div>'}</div>` : ''}
+    ${isOpen ? `<div style="margin-top:6px;">${posts.length ? posts.map(p => renderPostRow(p, canEdit, docById[p.document_id], textById[p.document_id])).join('') : '<div class="hint">No posts yet.</div>'}</div>` : ''}
   </div>`;
 }
 
-function renderPostRow(p, canEdit) {
+function renderPostRow(p, canEdit, doc, text) {
   return `
   <div style="padding:6px 0;border-top:1px solid var(--accent-soft);" data-post-row="${p.id}">
     <div class="btn-row" style="justify-content:space-between;align-items:flex-start;">
@@ -650,6 +668,12 @@ function renderPostRow(p, canEdit) {
       </div>` : ''}
     </div>
     ${p.body ? `<div dir="auto" style="white-space:pre-wrap;">${esc(p.body)}</div>` : ''}
+    ${doc ? `<div class="field" style="margin-top:6px;">
+      <label>Document</label>
+      <div style="font-size:13px;">#${esc(doc.document_id)} &middot; ${esc(doc.en_title) || '<span class="hint">(no title)</span>'}${doc.ur_title ? ` / <span dir="auto">${esc(doc.ur_title)}</span>` : ''}</div>
+      ${text ? `<div class="board-doc-preview" dir="auto">${esc(textPreview(text.body))}</div>${!text.reviewed ? '<div class="hint">Unverified automatic transcription</div>' : ''}` : ''}
+      <button class="btn secondary" data-open-doc="${esc(doc.document_id)}" style="margin-top:4px;">Open</button>
+    </div>` : ''}
   </div>`;
 }
 
@@ -672,6 +696,11 @@ function wireTreeActions(main, pathId, years, modules, chapters, posts, canEdit)
     const id = parseInt(el.dataset.toggleChapter, 10);
     if (expandedChapters.has(id)) expandedChapters.delete(id); else expandedChapters.add(id);
     refresh();
+  }));
+
+  document.querySelectorAll('[data-open-doc]').forEach(btn => btn.addEventListener('click', () => {
+    State.selectedDocId = btn.dataset.openDoc;
+    window.__renderTab('dashboard');
   }));
 
   if (!canEdit) return;

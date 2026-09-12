@@ -809,6 +809,114 @@ export function openBoardPostPopup({ doc = null, boardCode = null, post = null, 
   });
 }
 
+// Shared popup for attaching a document to a formation path chapter - the formation-paths
+// equivalent of openBoardPostPopup above, used by docdetail.js's "+ Path" (Dashboard) and
+// myspace.js's "+ Path" (My Space). Unlike board posts (one fixed board per popup), a path has
+// a year/module/chapter hierarchy the formatore doesn't necessarily have open in front of them,
+// so the popup asks for all four levels with cascading dropdowns instead of assuming context.
+// Lives here, not in formation.js, for the same reason as openBoardPostPopup: docdetail.js and
+// myspace.js can't import from formation.js (project convention: modules import only from
+// core.js). Only lets you pick a path you can actually write to (owner, or Coordinator/Admin) -
+// the real gate is still formation_posts_write's RLS (see 79_formation_post_documents.sql).
+export function openFormationPostPopup({ doc = null, onSaved } = {}) {
+  document.getElementById('fp-add-popup')?.remove();
+  const backdrop = document.createElement('div');
+  backdrop.id = 'fp-add-popup';
+  backdrop.className = 'overlay-backdrop';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel">
+      <h2 style="margin-top:0;">Add to formation path</h2>
+      ${doc ? `<div class="field"><label>Document</label><div style="font-size:13px;padding:4px 0;">#${esc(doc.document_id)} &mdash; ${esc(doc.en_title) || '<span class="hint">(no title)</span>'}</div></div>` : ''}
+      <div class="field"><label>Path</label><select id="fap-path"><option value="">Loading...</option></select></div>
+      <div class="field"><label>Year</label><select id="fap-year" disabled><option value="">Select a path first</option></select></div>
+      <div class="field"><label>Module</label><select id="fap-module" disabled><option value="">Select a year first</option></select></div>
+      <div class="field"><label>Chapter</label><select id="fap-chapter" disabled><option value="">Select a module first</option></select></div>
+      <div class="field"><label>Title</label><input id="fap-title" value="${esc(doc ? doc.en_title || '' : '')}"></div>
+      <div class="field"><label>Text</label><textarea id="fap-body" dir="auto" rows="6"></textarea></div>
+      <div class="hint" id="fap-error"></div>
+      <div class="btn-row" style="justify-content:flex-end;">
+        <button class="btn secondary" id="fap-cancel">Cancel</button>
+        <button class="btn" id="fap-save" disabled>Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+  document.getElementById('fap-cancel').addEventListener('click', () => backdrop.remove());
+
+  const pathSel = document.getElementById('fap-path');
+  const yearSel = document.getElementById('fap-year');
+  const moduleSel = document.getElementById('fap-module');
+  const chapterSel = document.getElementById('fap-chapter');
+  const saveBtn = document.getElementById('fap-save');
+
+  function resetSelect(sel, placeholder) {
+    sel.innerHTML = `<option value="">${placeholder}</option>`;
+    sel.disabled = true;
+  }
+  const updateSaveEnabled = () => { saveBtn.disabled = !chapterSel.value; };
+
+  sb.auth.getUser().then(async ({ data: { user } }) => {
+    const paths = await withStatus(sb.from('formation_paths').select('id,title,owner_id'));
+    const myPaths = paths.filter(p => p.owner_id === user.id || canReviewApplications());
+    if (!myPaths.length) {
+      pathSel.innerHTML = '<option value="">No paths available</option>';
+      document.getElementById('fap-error').textContent = 'You have no formation path to add to yet - create one first in Formation Paths.';
+      return;
+    }
+    pathSel.innerHTML = '<option value="">Select a path...</option>' + myPaths.map(p => `<option value="${p.id}">${esc(p.title)}</option>`).join('');
+  });
+
+  pathSel.addEventListener('change', async () => {
+    resetSelect(yearSel, 'Select a path first');
+    resetSelect(moduleSel, 'Select a year first');
+    resetSelect(chapterSel, 'Select a module first');
+    updateSaveEnabled();
+    if (!pathSel.value) return;
+    const years = await withStatus(sb.from('formation_years').select('id,year_number').eq('path_id', pathSel.value).order('sequence_number'));
+    if (!years.length) { resetSelect(yearSel, 'No years in this path yet'); return; }
+    yearSel.innerHTML = '<option value="">Select a year...</option>' + years.map(y => `<option value="${y.id}">Year ${esc(y.year_number)}</option>`).join('');
+    yearSel.disabled = false;
+  });
+
+  yearSel.addEventListener('change', async () => {
+    resetSelect(moduleSel, 'Select a year first');
+    resetSelect(chapterSel, 'Select a module first');
+    updateSaveEnabled();
+    if (!yearSel.value) return;
+    const modules = await withStatus(sb.from('formation_modules').select('id,title').eq('year_id', yearSel.value).order('sequence_number'));
+    if (!modules.length) { resetSelect(moduleSel, 'No modules in this year yet'); return; }
+    moduleSel.innerHTML = '<option value="">Select a module...</option>' + modules.map(m => `<option value="${m.id}">${esc(m.title)}</option>`).join('');
+    moduleSel.disabled = false;
+  });
+
+  moduleSel.addEventListener('change', async () => {
+    resetSelect(chapterSel, 'Select a module first');
+    updateSaveEnabled();
+    if (!moduleSel.value) return;
+    const chapters = await withStatus(sb.from('formation_chapters').select('id,title').eq('module_id', moduleSel.value).order('sequence_number'));
+    if (!chapters.length) { resetSelect(chapterSel, 'No chapters in this module yet'); return; }
+    chapterSel.innerHTML = '<option value="">Select a chapter...</option>' + chapters.map(c => `<option value="${c.id}">${esc(c.title)}</option>`).join('');
+    chapterSel.disabled = false;
+  });
+
+  chapterSel.addEventListener('change', updateSaveEnabled);
+
+  saveBtn.addEventListener('click', async () => {
+    const chapterId = chapterSel.value;
+    if (!chapterId) return;
+    const title = document.getElementById('fap-title').value.trim();
+    const body = document.getElementById('fap-body').value.trim();
+    const document_id = doc ? doc.document_id : null;
+    if (!title) { alert('Title is required.'); return; }
+    if (!document_id && !body) { alert('Either a document or some text is required.'); return; }
+    const siblings = await withStatus(sb.from('formation_posts').select('id').eq('chapter_id', chapterId));
+    const row = { chapter_id: parseInt(chapterId, 10), document_id, title, body: body || null, sequence_number: siblings.length };
+    await withStatus(sb.from('formation_posts').insert(row), 'Saving...');
+    backdrop.remove();
+    if (onSaved) onSaved();
+  });
+}
+
 // Populates the signup form's membership-type dropdown before login (anon-readable list).
 export async function loadMembershipOptionsForSignup() {
   const { data, error } = await sb.from('option_lists').select('code,label').eq('list_name', 'membership_type').order('sort_order');
