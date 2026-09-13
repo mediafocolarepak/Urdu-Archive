@@ -1,4 +1,4 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken } from './core.js?v=20260911160158';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken } from './core.js?v=20260913232901';
 
 // ---------- Users ----------
 
@@ -13,6 +13,17 @@ export async function renderUsersView(main) {
   for (const q of qualRows) (qualByUid[q.user_id] ||= new Set()).add(q.qualification_code);
   const adminCount = rows.filter(r => r.role === 'admin').length;
 
+  // Sortable by name or by signup date only (the other columns have no obvious total order,
+  // e.g. role/qualifications) - same click-a-th-header pattern as dashboard.js's DASH_SORTABLE.
+  const sortCol = State.usersSort.col;
+  const dir = State.usersSort.asc ? 1 : -1;
+  rows.sort((a, b) => {
+    const av = sortCol === 'full_name' ? (profileByUid[a.user_id]?.full_name || '').toLowerCase() : (a.created_at || '');
+    const bv = sortCol === 'full_name' ? (profileByUid[b.user_id]?.full_name || '').toLowerCase() : (b.created_at || '');
+    return av < bv ? -dir : av > bv ? dir : 0;
+  });
+  const arrow = col => col !== sortCol ? '' : (State.usersSort.asc ? ' &uarr;' : ' &darr;');
+
   main.innerHTML = `
     <div class="panel">
       <h2>Users <span class="count-badge">${rows.length}</span></h2>
@@ -20,17 +31,17 @@ export async function renderUsersView(main) {
       <p class="hint">Qualifications are tags on top of the Operator role, not extra roles - a person can hold more than one (e.g. Translator + Revisor). They control which task categories someone can see and claim (Translation -> Translator, Revision -> Revisor); manage the list itself from Options -> Operator qualifications.</p>
       <p class="hint">An Admin's role can't be changed from this dropdown - remove their access and re-add them at the new role instead. There must always be at least one Admin, so the last one can't be removed either.</p>
       <div class="grid-wrap"><table class="grid" id="users-grid">
-        <thead><tr><th>Email</th><th>Role</th><th>Qualifications</th><th>Credits</th><th>Reputation</th><th>Full name</th><th>City</th><th>Membership</th><th>Phone</th><th>Since</th><th></th></tr></thead>
+        <thead><tr><th data-sort="full_name">Full name${arrow('full_name')}</th><th>Email</th><th>Role</th><th>Qualifications</th><th>Credits</th><th>Reputation</th><th>City</th><th>Membership</th><th>Phone</th><th data-sort="created_at">Since${arrow('created_at')}</th><th></th></tr></thead>
         <tbody>${rows.map(r => { const p = profileByUid[r.user_id] || {}; const uidQuals = qualByUid[r.user_id] || new Set(); const lowRep = r.role === 'operator' && r.reputation != null && r.reputation < 20; return `<tr data-uid="${esc(r.user_id)}">
+          <td>${esc(p.full_name)}</td>
           <td>${esc(r.email)}</td>
-          <td><select class="role-select" data-uid="${esc(r.user_id)}" ${r.role === 'admin' ? 'disabled title="Admin role can\'t be changed here - remove access and re-add at the new role instead."' : ''}>${optionsHtml([['user', 'User'], ['operator', 'Operator'], ['coordinator', 'Coordinator'], ['admin', 'Admin']], r.role, false)}</select></td>
+          <td><select class="role-select" data-uid="${esc(r.user_id)}" style="width:10ch;" ${r.role === 'admin' ? 'disabled title="Admin role can\'t be changed here - remove access and re-add at the new role instead."' : ''}>${optionsHtml([['user', 'User'], ['operator', 'Operator'], ['coordinator', 'Coordinator'], ['admin', 'Admin']], r.role, false)}</select></td>
           <td style="white-space:normal;min-width:220px;">${r.role !== 'operator' ? '<span class="hint">Operators only</span>' : (qualList.map(([code, label]) => `
             <label style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-weight:normal;text-transform:none;font-size:12.5px;">
               <input type="checkbox" class="qual-check" data-uid="${esc(r.user_id)}" data-code="${esc(code)}" ${uidQuals.has(code) ? 'checked' : ''}> ${esc(label)}
             </label>`).join('') || '<span class="hint">None defined yet</span>')}</td>
           <td>${r.role === 'operator' ? esc(r.credits ?? 0) : '—'}</td>
           <td>${r.role === 'operator' ? `<span${lowRep ? ' style="color:var(--danger);font-weight:600;"' : ''}>${esc(r.reputation ?? 50)}${lowRep ? ' (low)' : ''}</span>` : '—'}</td>
-          <td>${esc(p.full_name)}</td>
           <td>${esc(p.city)}</td>
           <td>${esc(labelOf(State.optionListsByName.membership_type || [], p.membership_type))}</td>
           <td>${esc(p.phone)}</td>
@@ -42,6 +53,11 @@ export async function renderUsersView(main) {
       </table></div>
       <p class="hint" style="margin-top:8px;">"Remove access" drops the person back to no role at all (they lose the app entirely until re-registered or re-added) - it does not delete their login/auth account. To fully delete an account, use the Supabase Dashboard (Authentication → Users).</p>
     </div>`;
+  main.querySelectorAll('#users-grid th[data-sort]').forEach(th => th.addEventListener('click', () => {
+    const col = th.dataset.sort;
+    if (State.usersSort.col === col) State.usersSort.asc = !State.usersSort.asc; else State.usersSort = { col, asc: true };
+    renderUsersView(main);
+  }));
   main.querySelectorAll('.role-select').forEach(sel => sel.addEventListener('change', async () => {
     await withStatus(sb.from('user_roles').update({ role: sel.value }).eq('user_id', sel.dataset.uid), 'Updating role...');
     await renderUsersView(main); // re-render so the qualifications column shows/hides for the new role

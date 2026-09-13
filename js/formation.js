@@ -10,7 +10,7 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, optionsHtml, labelOf, today, nameMapForEmails } from './core.js?v=20260911160158';
+import { sb, State, esc, withStatus, canReviewApplications, optionsHtml, labelOf, today, nameMapForEmails } from './core.js?v=20260913232901';
 
 // A readable preview of a linked document's Urdu text - same idea as boards.js's textPreview()
 // (duplicated rather than shared: project convention is modules import only from core.js).

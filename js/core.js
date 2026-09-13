@@ -273,6 +273,7 @@ export const State = {
   matchFilters: { search: '', idSearch: '', category: '', author: '', workflow_status: '', recipient: '', collection: '', language: '', source: '', orphansOnly: false },
   matchSort: { col: 'document_id', asc: false },
   matchSelectedId: null,
+  usersSort: { col: 'full_name', asc: true },
   optionsSelectedList: 'category',
   docCollections: [],  // { document_id, collection_code, page_number } for the open document
   optionListsByName: {},  // option_lists rows grouped by list_name, as [code,label] pairs - generic lookup used by SessionCache/combobox

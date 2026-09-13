@@ -8,7 +8,7 @@ import {
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup,
-} from './core.js?v=20260911160158';
+} from './core.js?v=20260913232901';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
