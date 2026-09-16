@@ -27,7 +27,7 @@ the team, session by session).
    member is still a department. We create the structure now so it is ready when the people
    arrive, not the other way round.
 2. **Separation of duties is rigid.** Nobody may, alone, (a) admit a person, (b) assign them
-   work, and (c) decide what they are paid for it. HR, Coordination and Reward & Finances stay in
+   work, and (c) decide what they are paid for it. HR, Coordination and Reward stay in
    different hands even while the team is small. Where the same person must temporarily wear two
    hats, the rule is *the one who proposes does not approve*.
 3. **Admin is a technical role, not a governance role.** Admin means "can change configuration
@@ -103,7 +103,7 @@ replaces that implicit definition with an explicit one: **Formation membership d
 create paths; `board_editors` decides who curates each board.** The two are related but
 distinct.
 
-### 2.4 Reward & Finances
+### 2.4 Reward
 
 *Mission:* the credit and compensation system is fair, transparent, lawful and fraud-proof.
 
@@ -167,11 +167,10 @@ Who may post:
 - A person may belong to any number of departments.
 - Each department has exactly **one lead**, appointed by the project owner. During the current
   experimental phase one person may lead two departments (§8.1); the goal is one lead each.
-- The three "control" departments — HR, Coordination, Reward & Finances — should have
+- The three "control" departments — HR, Coordination, Reward — should have
   **different leads**; this is the target, waived during the experimental phase (§8.1). What is
   never waived is the rule on each single decision: the person who proposes does not approve.
-- Admin (technical) may be a member of any department but should not lead HR or Reward &
-  Finances while also being the only Admin — otherwise the separation in principle 2 is empty.
+- Admin (technical) may be a member of any department but should not lead HR or Reward while also being the only Admin — otherwise the separation in principle 2 is empty.
 
 ---
 
@@ -211,13 +210,13 @@ proposed.
 | 7 | Promote to Coordinator / Admin | Owner or Lead HR | Owner | All leads | people-decision log |
 | 8 | Appoint / replace a department lead | Owner | Owner | Everyone | `department_members` |
 | 9 | Create a task, set its credits | Coordinator | — (within rate table) | — | `tasks` |
-| 10 | Grant extra credits beyond the rate | Coordinator (with note) | Lead Coordination if above the threshold in Options (§8.3) | R&F | `tasks.extra_credits`, note |
+| 10 | Grant extra credits beyond the rate | Coordinator (with note) | Lead Coordination if above the threshold in Options (§8.3) | Reward | `tasks.extra_credits`, note |
 | 11 | Reclaim a task (reputation penalty) | Coordinator | — (must give reason) | Person | `task_outcome_events` |
 | 12 | Final publish / reject of a reviewed task | Revisor/Coordinator (verdict) | Admin | Person | `task_outcome_events` |
-| 13 | Change rate table or reputation tiers | R&F | Lead R&F; Admin applies | Coordination | `task_category_rates`, `task_reputation_tiers` (with `updated_by_email`) |
-| 14 | Compensation policy (credit → money) | R&F | Owner | Everyone | Policy document (repo) |
-| 15 | Execute a compensation run | R&F | Lead R&F + Owner | Persons paid | R&F records (outside app for now) |
-| 16 | Budget top-up | Owner | Owner | R&F | `budget_ledger` |
+| 13 | Change rate table or reputation tiers | Reward | Lead Reward; Admin applies | Coordination | `task_category_rates`, `task_reputation_tiers` (with `updated_by_email`) |
+| 14 | Compensation policy (credit → money) | Reward | Owner | Everyone | Policy document (repo) |
+| 15 | Execute a compensation run | Reward | Lead Reward + Owner | Persons paid | Reward records (outside app for now) |
+| 16 | Budget top-up | Owner | Owner | Reward | `budget_ledger` |
 | 17 | Publish a formation path | Formatore | Lead Formation | — | `formation_paths` |
 | 18 | Import formation material into the archive | Formatore | Normal document workflow (Coordination) | — | `documents` |
 | 19 | Release / announce a feature | Engineering | Owner | Everyone | Announcements + `TEAM_UPDATE` |
@@ -287,7 +286,7 @@ This section is here so the team designs on the real system, not an imagined one
 - Budget, Options (rates, tiers, lists), Announcements: Admin only.
 
 Consequence: today an HR person who is not Admin **cannot see the list of people they are
-supposed to follow**, and a Reward & Finances person cannot see the ledgers. That is the first
+supposed to follow**, and a Reward person cannot see the ledgers. That is the first
 gap to close.
 
 ---
@@ -383,7 +382,7 @@ Ordered by dependency. Each item names the phase in §7.
   shortcut is wanted later, it is "create a document in draft from the formation module", which
   still lands in the normal workflow.
 
-### 6.4 Reward & Finances (phase 3 — after the policy is written)
+### 6.4 Reward (phase 3 — after the policy is written)
 - Read access to `budget_ledger`, `task_outcome_events`, rates and tiers for `RF` members.
 - History tables (or an audit trigger) for `task_category_rates` and `task_reputation_tiers`, so
   a rate change is an event with before/after, not an overwrite.
@@ -403,12 +402,12 @@ Ordered by dependency. Each item names the phase in §7.
 
 | Phase | Content | Model / people | Exit criterion |
 |---|---|---|---|
-| **0** | This document agreed; policy skeleton for R&F written by the R&F lead / Owner | Team | §8 questions answered |
+| **0** | This document agreed; policy skeleton for Reward written by the Reward lead / Owner | Team | §8 questions answered |
 | **1** | Department model: migration 80 (written; to be run and verified), then a minimal Admin UI to assign members/leads and edit policy values | Migration: Claude **Opus** (done) → UI: **Sonnet**; Sheril reviews the PR | HR and Admin can be assigned to departments; suspending a user blocks task claiming |
 | **2a** | People tab (HR view) + proposal/approval flows | **Sonnet** + Sheril (front end) | An HR member who is not Admin can do everything in §2.1 from the app |
 | **2b** | Quiz `.md` import + AI prompt; path co-authors (§6.1b) | **Sonnet** / Sheril | A formatore imports a 10-question quiz from a file; two formatori edit the same path |
 | **2c** | Boards open to members with moderation, usage policy, promote-to-archive (§6.1c) | **Sonnet** / Sheril | A User submits a post, a board editor publishes it; an Operator posts directly |
-| **3** | R&F: audit history, compensation runs, anomaly report | Sonnet, after the policy | A compensation run can be recorded and reconciled |
+| **3** | Reward: audit history, compensation runs, anomaly report | Sonnet, after the policy | A compensation run can be recorded and reconciled |
 | later | Operator training programme; "What's new" | — | — |
 
 The switch from Opus to Sonnet happens **after the migration 80 schema and the decision matrix
@@ -442,16 +441,16 @@ Answered by the Owner on 2026-09-16 unless noted. One item still open (8.6).
 
    | Department | Lead |
    |---|---|
-   | HR | Mehwish (also project management) |
+   | HR | Mehwish |
    | Coordination | Sikander Innocent |
-   | Formation | Aster Saleem |
-   | Reward & Finances | Naeem Sohail |
+   | Formation | Gina Yaqoob (2026-09-16: replaces Aster Saleem) |
+   | Reward | Naeem Sohail (not yet registered as of 2026-09-16; appoint once he signs up) |
    | Communication | Larissa |
 
    Alessandro = Owner + Admin (technical). Sheril = engineering: not a department in this
    scheme but a standing role with its own workflow (`COLLABORATION.md`).
-6. **Where do R&F records that are not in the app live** (compensation policy, payment
-   references) — repo (`docs/`), shared drive, both? **Still open** — for the R&F lead to
+6. **Where do Reward records that are not in the app live** (compensation policy, payment
+   references) — repo (`docs/`), shared drive, both? **Still open** — for the Reward lead to
    propose.
 7. **Exclusion (row 6):** remove the role, **keep the account and the ledger** — history must
    survive the person leaving. Nothing is ever deleted from `task_outcome_events` or

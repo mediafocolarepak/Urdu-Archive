@@ -275,12 +275,16 @@ export const State = {
   matchSelectedId: null,
   usersSort: { col: 'full_name', asc: true },
   optionsSelectedList: 'category',
+  deptEditorSelected: null,  // department_code currently shown in Options -> Departments
   docCollections: [],  // { document_id, collection_code, page_number } for the open document
   optionListsByName: {},  // option_lists rows grouped by list_name, as [code,label] pairs - generic lookup used by SessionCache/combobox
   hayatEditorEdition: '',
   taskPrefill: null,  // { title, description, document_id, document_pages } - set by chat.js's "Create task" button, consumed once by tasks.js's new-task form
   isFormatore: false,  // true if I personally have a board_editors row somewhere - see boot(); mirrors is_any_formatore() server-side, used to gate "+ New formation path" and "My paths"
   formationSelectedPathId: null,
+  myDepartments: [],  // [{department_code, is_lead}] for the signed-in user - see GOVERNANCE.md
+  policyValues: {},  // policy_values key -> integer value, cached at boot (see 80_departments_and_people_decisions.sql)
+  standing: 'active',  // user_roles.standing: active/watch/suspended
 };
 
 export const DASH_ROW_LIMIT = 5000;
@@ -290,7 +294,7 @@ export const DASH_SORTABLE = { document_id: 'ID', title: 'Title (EN)', original_
 // two keep their fixed, CHECK-constrained vocabularies (see 15_versions_editors_schema.sql),
 // while the Hayat Editor's Autore/Argomento comboboxes are free-typing - a new value there
 // must never risk violating the documents table's constraints on author/main_topic.
-export const OPTION_LIST_NAMES = ['category', 'author', 'main_topic', 'recipient', 'language', 'workflow_status', 'media_type', 'source', 'collection', 'quality', 'operator', 'hayat_author', 'hayat_argomento', 'membership_type', 'task_category', 'operator_qualification', 'collaboration_skill', 'report_type', 'extra_credit_reason', 'board', 'formation_audience'];
+export const OPTION_LIST_NAMES = ['category', 'author', 'main_topic', 'recipient', 'language', 'workflow_status', 'media_type', 'source', 'collection', 'quality', 'operator', 'hayat_author', 'hayat_argomento', 'membership_type', 'task_category', 'operator_qualification', 'collaboration_skill', 'report_type', 'extra_credit_reason', 'board', 'formation_audience', 'department'];
 export const OPTION_LIST_LABELS = {
   category: 'Category', author: 'Author', main_topic: 'Main topic', recipient: 'Recipient',
   language: 'Language', workflow_status: 'Workflow status', media_type: 'Media type',
@@ -303,6 +307,7 @@ export const OPTION_LIST_LABELS = {
   extra_credit_reason: 'Task: extra credits reason',
   board: 'Formation boards',
   formation_audience: 'Formation paths: target audience',
+  department: 'Departments',
 };
 
 // Pre-selection of the board from a document's recipient (suggestion, not a constraint).
@@ -390,6 +395,11 @@ export function isAdmin() { return State.currentRole === 'admin'; }
 export function isCoordinator() { return State.currentRole === 'coordinator'; }
 // Can review "Join the Team" applications - Coordinator (own queue) or Admin (everything).
 export function canReviewApplications() { return State.currentRole === 'coordinator' || State.currentRole === 'admin'; }
+
+// Department membership - mirrors is_dept_member()/is_dept_lead() server-side (see
+// 80_departments_and_people_decisions.sql). Client-side echoes only gate UI; RLS is the real gate.
+export function isDeptMember(code) { return State.myDepartments.some(d => d.department_code === code); }
+export function isDeptLead(code) { return State.myDepartments.some(d => d.department_code === code && d.is_lead); }
 
 // ---------- Standing widget (credits + reputation, shown in the topbar for Operator+) ----------
 
@@ -646,11 +656,18 @@ async function showApp(session, renderDashboardTab) {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
 
-  const { data: roleRows } = await sb.from('user_roles').select('role,credits,reputation').eq('user_id', session.user.id);
+  const { data: roleRows } = await sb.from('user_roles').select('role,credits,reputation,standing').eq('user_id', session.user.id);
   const roleRow = roleRows && roleRows[0];
   State.currentRole = roleRow ? roleRow.role : 'user';
+  State.standing = roleRow ? roleRow.standing : 'active';
   document.getElementById('user-email').textContent = `${session.user.email} (${State.currentRole})`;
   if (State.currentRole === 'operator' && roleRow) renderStandingWidget(roleRow.credits, roleRow.reputation);
+
+  const { data: deptRows } = await sb.from('department_members').select('department_code,is_lead').eq('user_id', session.user.id);
+  State.myDepartments = deptRows || [];
+  const { data: policyRows } = await sb.from('policy_values').select('key,value');
+  State.policyValues = {};
+  for (const p of (policyRows || [])) State.policyValues[p.key] = p.value;
 
   State.myQualifications = new Set();
   if (State.currentRole === 'operator') {

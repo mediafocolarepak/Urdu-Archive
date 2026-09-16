@@ -1,6 +1,8 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken } from './core.js?v=20260913232901';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken } from './core.js?v=20260916225958';
 
 // ---------- Users ----------
+
+const STANDING_BADGE = { active: '', watch: '<span class="hint" style="color:var(--warning,#b8860b);">watch</span>', suspended: '<span class="hint" style="color:var(--danger);">suspended</span>' };
 
 export async function renderUsersView(main) {
   if (!isAdmin()) { main.innerHTML = '<div class="empty-msg">Admin access required.</div>'; return; }
@@ -11,6 +13,9 @@ export async function renderUsersView(main) {
   const qualRows = qualList.length ? await withStatus(sb.from('user_qualifications').select('*')) : [];
   const qualByUid = {};
   for (const q of qualRows) (qualByUid[q.user_id] ||= new Set()).add(q.qualification_code);
+  const deptRows = await withStatus(sb.from('department_members').select('*'));
+  const deptByUid = {};
+  for (const d of deptRows) (deptByUid[d.user_id] ||= []).push(d);
   const adminCount = rows.filter(r => r.role === 'admin').length;
 
   // Sortable by name or by signup date only (the other columns have no obvious total order,
@@ -31,11 +36,15 @@ export async function renderUsersView(main) {
       <p class="hint">Qualifications are tags on top of the Operator role, not extra roles - a person can hold more than one (e.g. Translator + Revisor). They control which task categories someone can see and claim (Translation -> Translator, Revision -> Revisor); manage the list itself from Options -> Operator qualifications.</p>
       <p class="hint">An Admin's role can't be changed from this dropdown - remove their access and re-add them at the new role instead. There must always be at least one Admin, so the last one can't be removed either.</p>
       <div class="grid-wrap"><table class="grid" id="users-grid">
-        <thead><tr><th data-sort="full_name">Full name${arrow('full_name')}</th><th>Email</th><th>Role</th><th>Qualifications</th><th>Credits</th><th>Reputation</th><th>City</th><th>Membership</th><th>Phone</th><th data-sort="created_at">Since${arrow('created_at')}</th><th></th></tr></thead>
-        <tbody>${rows.map(r => { const p = profileByUid[r.user_id] || {}; const uidQuals = qualByUid[r.user_id] || new Set(); const lowRep = r.role === 'operator' && r.reputation != null && r.reputation < 20; return `<tr data-uid="${esc(r.user_id)}">
+        <thead><tr><th data-sort="full_name">Full name${arrow('full_name')}</th><th>Email</th><th>Role</th><th>Departments</th><th>Standing</th><th>Qualifications</th><th>Credits</th><th>Reputation</th><th>City</th><th>Membership</th><th>Phone</th><th data-sort="created_at">Since${arrow('created_at')}</th><th></th></tr></thead>
+        <tbody>${rows.map(r => { const p = profileByUid[r.user_id] || {}; const uidQuals = qualByUid[r.user_id] || new Set(); const lowRep = r.role === 'operator' && r.reputation != null && r.reputation < 20;
+          const deptLabel = (deptByUid[r.user_id] || []).map(d => `${labelOf(State.optionListsByName.department || [], d.department_code)}${d.is_lead ? ' (lead)' : ''}`).join(', ');
+          return `<tr data-uid="${esc(r.user_id)}">
           <td>${esc(p.full_name)}</td>
           <td>${esc(r.email)}</td>
           <td><select class="role-select" data-uid="${esc(r.user_id)}" style="width:10ch;" ${r.role === 'admin' ? 'disabled title="Admin role can\'t be changed here - remove access and re-add at the new role instead."' : ''}>${optionsHtml([['user', 'User'], ['operator', 'Operator'], ['coordinator', 'Coordinator'], ['admin', 'Admin']], r.role, false)}</select></td>
+          <td style="white-space:normal;">${esc(deptLabel) || '<span class="hint">—</span>'}</td>
+          <td>${STANDING_BADGE[r.standing] ?? esc(r.standing)}</td>
           <td style="white-space:normal;min-width:220px;">${r.role !== 'operator' ? '<span class="hint">Operators only</span>' : (qualList.map(([code, label]) => `
             <label style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-weight:normal;text-transform:none;font-size:12.5px;">
               <input type="checkbox" class="qual-check" data-uid="${esc(r.user_id)}" data-code="${esc(code)}" ${uidQuals.has(code) ? 'checked' : ''}> ${esc(label)}
@@ -48,10 +57,10 @@ export async function renderUsersView(main) {
           <td>${esc((r.created_at || '').slice(0, 10))}</td>
           <td>
             <button class="btn secondary edit-profile-btn" data-uid="${esc(r.user_id)}" data-email="${esc(r.email)}" style="padding:4px 10px;">Edit</button>
-            <button class="btn danger remove-user-btn" data-uid="${esc(r.user_id)}" data-email="${esc(r.email)}" style="padding:4px 10px;">Remove access</button>
+            <button class="btn danger propose-exclusion-btn" data-uid="${esc(r.user_id)}" data-email="${esc(r.email)}" style="padding:4px 10px;">Propose exclusion</button>
           </td></tr>`; }).join('')}</tbody>
       </table></div>
-      <p class="hint" style="margin-top:8px;">"Remove access" drops the person back to no role at all (they lose the app entirely until re-registered or re-added) - it does not delete their login/auth account. To fully delete an account, use the Supabase Dashboard (Authentication → Users).</p>
+      <p class="hint" style="margin-top:8px;">"Propose exclusion" records a request to remove this person's role, keeping their account, credits and reputation (GOVERNANCE.md §8.7) - another Admin or the HR lead must approve it for it to take effect. To fully delete a login/auth account, use the Supabase Dashboard (Authentication → Users).</p>
     </div>`;
   main.querySelectorAll('#users-grid th[data-sort]').forEach(th => th.addEventListener('click', () => {
     const col = th.dataset.sort;
@@ -67,11 +76,15 @@ export async function renderUsersView(main) {
     if (cb.checked) await withStatus(sb.from('user_qualifications').insert({ user_id: uid, qualification_code: code }), 'Saving...');
     else await withStatus(sb.from('user_qualifications').delete().eq('user_id', uid).eq('qualification_code', code), 'Saving...');
   }));
-  main.querySelectorAll('.remove-user-btn').forEach(btn => btn.addEventListener('click', async () => {
+  main.querySelectorAll('.propose-exclusion-btn').forEach(btn => btn.addEventListener('click', async () => {
     const row = rows.find(r => r.user_id === btn.dataset.uid);
-    if (row && row.role === 'admin' && adminCount <= 1) { alert('There must always be at least one Admin - promote someone else first before removing this one.'); return; }
-    if (!confirm(`Remove access for ${btn.dataset.email}? They will lose all access to the app until re-added (their login account itself is not deleted).`)) return;
-    await withStatus(sb.from('user_roles').delete().eq('user_id', btn.dataset.uid), 'Removing...');
+    if (row && row.role === 'admin' && adminCount <= 1) { alert('There must always be at least one Admin - promote someone else first before excluding this one.'); return; }
+    const reason = prompt(`Reason for proposing exclusion of ${btn.dataset.email}?\n(their account, credits and reputation are kept - only the role is removed, once approved)`);
+    if (reason == null) return;
+    if (!reason.trim()) { alert('A reason is required.'); return; }
+    const { error } = await sb.rpc('propose_people_decision', { p_subject: btn.dataset.uid, p_type: 'exclude', p_reason: reason.trim() });
+    if (error) { alert(error.message); return; }
+    alert('Exclusion proposed and recorded as pending. It needs another Admin (or the HR lead) to approve it via rpc(\'decide_people_decision\') before it takes effect - there is no approval screen yet (planned for the People tab).');
     await renderUsersView(main);
   }));
   main.querySelectorAll('.edit-profile-btn').forEach(btn => btn.addEventListener('click', () => {
@@ -127,6 +140,14 @@ export async function renderOptionsView(main) {
       <div id="reptiers-editor"></div>
     </div>
     <div class="panel">
+      <h2>Departments <span class="hint">— membership and leads, see GOVERNANCE.md §2 and §4</span></h2>
+      <div id="dept-editor"></div>
+    </div>
+    <div class="panel">
+      <h2>Policy values <span class="hint">— thresholds editable by Admin instead of hard-coded, see GOVERNANCE.md §8.3-§8.4</span></h2>
+      <div id="policy-editor"></div>
+    </div>
+    <div class="panel">
       <h2>Maintenance <span class="hint">— one-off data cleanup tools</span></h2>
       <div>
         <p class="hint">Reads each document's PDF (Supabase Storage, or Google Drive as a fallback) with the same reader used elsewhere in the app, and saves its page count if it's still missing. Runs one document at a time in this tab - keep it open while it works. Safe to stop and resume later: it always skips documents that already have a page count.</p>
@@ -141,6 +162,8 @@ export async function renderOptionsView(main) {
   document.getElementById('opt-list-select').addEventListener('change', e => { State.optionsSelectedList = e.target.value; renderOptionsEditor(); });
   await renderOptionsEditor();
   await renderReputationTiersEditor();
+  await renderDepartmentsEditor();
+  await renderPolicyValuesEditor();
   wireBackfillPageCounts();
 }
 
@@ -281,6 +304,112 @@ async function renderReputationTiersEditor() {
     await withStatus(sb.from('task_reputation_tiers').insert({ ...row, updated_at: new Date().toISOString(), updated_by_email: user.email }), 'Adding...');
     await renderReputationTiersEditor();
   });
+}
+
+// ---------- Departments (membership + one lead per department, GOVERNANCE.md §2/§4) ----------
+
+async function renderDepartmentsEditor() {
+  const box = document.getElementById('dept-editor');
+  const depts = State.optionListsByName.department || [];
+  if (!depts.length) { box.innerHTML = '<div class="hint">No departments defined yet - add one to the "department" list above.</div>'; return; }
+  const selected = depts.some(([c]) => c === State.deptEditorSelected) ? State.deptEditorSelected : depts[0][0];
+  State.deptEditorSelected = selected;
+  box.innerHTML = `
+    <div class="field" style="max-width:280px;"><label>Department</label><select id="dept-select"></select></div>
+    <div id="dept-list"><div class="hint">Loading...</div></div>
+    <div class="field" style="margin-top:8px;">
+      <label>Add member <span class="hint">(search by name or email)</span></label>
+      <input id="dept-search" placeholder="Type a name or email...">
+      <div id="dept-search-results"></div>
+    </div>`;
+  const sel = document.getElementById('dept-select');
+  sel.innerHTML = depts.map(([code, label]) => `<option value="${esc(code)}" ${code === selected ? 'selected' : ''}>${esc(label)}</option>`).join('');
+  sel.addEventListener('change', () => { State.deptEditorSelected = sel.value; refreshDepartmentMembers(sel.value); });
+
+  document.getElementById('dept-search').addEventListener('input', async e => {
+    const q = e.target.value.trim();
+    const resultsBox = document.getElementById('dept-search-results');
+    if (!q) { resultsBox.innerHTML = ''; return; }
+    const pattern = likeSafe(q);
+    const rows = await withStatus(sb.from('user_profiles').select('user_id,email,full_name').or(`full_name.ilike.${pattern},email.ilike.${pattern}`).limit(10));
+    resultsBox.innerHTML = rows.map(r => `<div class="hint" style="cursor:pointer;padding:2px 0;" data-add-uid="${esc(r.user_id)}">${esc(r.full_name) || esc(r.email)} &middot; ${esc(r.email)}</div>`).join('') || '<div class="hint">No match.</div>';
+    resultsBox.querySelectorAll('[data-add-uid]').forEach(el => el.addEventListener('click', async () => {
+      const { data: { user } } = await sb.auth.getUser();
+      const { error } = await sb.from('department_members').insert({ department_code: sel.value, user_id: el.dataset.addUid, added_by_email: user.email });
+      if (error && error.code !== '23505') { alert(error.message); return; } // 23505 = already a member, ignore
+      document.getElementById('dept-search').value = '';
+      resultsBox.innerHTML = '';
+      refreshDepartmentMembers(sel.value);
+    }));
+  });
+
+  refreshDepartmentMembers(selected);
+}
+
+async function refreshDepartmentMembers(deptCode) {
+  const box = document.getElementById('dept-list');
+  if (!box) return;
+  const memberRows = await withStatus(sb.from('department_members').select('user_id,is_lead').eq('department_code', deptCode));
+  if (!memberRows.length) { box.innerHTML = '<div class="hint">No members in this department yet.</div>'; return; }
+  const profileRows = await withStatus(sb.from('user_profiles').select('user_id,email,full_name').in('user_id', memberRows.map(r => r.user_id)));
+  const profileByUid = {}; for (const p of profileRows) profileByUid[p.user_id] = p;
+  box.innerHTML = memberRows.map(r => {
+    const p = profileByUid[r.user_id] || {};
+    return `<div class="btn-row" style="justify-content:space-between;margin:4px 0;">
+      <span>${esc(p.full_name) || esc(p.email) || r.user_id}${r.is_lead ? ' <strong>(lead)</strong>' : ''}</span>
+      <span>
+        ${r.is_lead
+          ? `<button class="btn secondary" data-unset-lead="${esc(r.user_id)}" style="padding:2px 8px;">Remove lead</button>`
+          : `<button class="btn secondary" data-make-lead="${esc(r.user_id)}" style="padding:2px 8px;">Make lead</button>`}
+        <button class="btn danger" data-remove-member="${esc(r.user_id)}" style="padding:2px 8px;">Remove</button>
+      </span>
+    </div>`;
+  }).join('');
+  box.querySelectorAll('[data-make-lead]').forEach(btn => btn.addEventListener('click', async () => {
+    const { error } = await sb.from('department_members').update({ is_lead: true }).eq('department_code', deptCode).eq('user_id', btn.dataset.makeLead);
+    if (error) { alert(error.code === '23505' ? 'This department already has a lead - remove the current lead first, then make this person lead.' : error.message); return; }
+    refreshDepartmentMembers(deptCode);
+  }));
+  box.querySelectorAll('[data-unset-lead]').forEach(btn => btn.addEventListener('click', async () => {
+    await withStatus(sb.from('department_members').update({ is_lead: false }).eq('department_code', deptCode).eq('user_id', btn.dataset.unsetLead), 'Saving...');
+    refreshDepartmentMembers(deptCode);
+  }));
+  box.querySelectorAll('[data-remove-member]').forEach(btn => btn.addEventListener('click', async () => {
+    await withStatus(sb.from('department_members').delete().eq('department_code', deptCode).eq('user_id', btn.dataset.removeMember), 'Removing...');
+    refreshDepartmentMembers(deptCode);
+  }));
+}
+
+// ---------- Policy values (thresholds editable by Admin, GOVERNANCE.md §8.3-§8.4) ----------
+
+async function renderPolicyValuesEditor() {
+  const box = document.getElementById('policy-editor');
+  const rows = await withStatus(sb.from('policy_values').select('*').order('key'));
+  box.innerHTML = `
+    <div class="grid-wrap"><table class="grid">
+      <thead><tr><th>Key</th><th>Meaning</th><th>Value</th><th></th></tr></thead>
+      <tbody>${rows.map(r => `<tr data-key="${esc(r.key)}">
+        <td><code>${esc(r.key)}</code></td>
+        <td style="white-space:normal;">${esc(r.label)}</td>
+        <td><input class="pv-value" type="number" value="${esc(r.value)}" style="width:90px;"></td>
+        <td><button class="btn secondary pv-save" style="padding:4px 10px;">Save</button></td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  box.querySelectorAll('tr[data-key]').forEach(tr => {
+    tr.querySelector('.pv-save').addEventListener('click', async () => {
+      const value = parseInt(tr.querySelector('.pv-value').value, 10);
+      if (Number.isNaN(value)) { alert('Value must be a number.'); return; }
+      const { data: { user } } = await sb.auth.getUser();
+      await withStatus(sb.from('policy_values').update({ value, updated_at: new Date().toISOString(), updated_by_email: user.email }).eq('key', tr.dataset.key), 'Saving...');
+      await loadPolicyValuesIntoState();
+    });
+  });
+}
+
+async function loadPolicyValuesIntoState() {
+  const rows = await withStatus(sb.from('policy_values').select('key,value'));
+  State.policyValues = {};
+  for (const p of rows) State.policyValues[p.key] = p.value;
 }
 
 async function renderOptionsEditor() {
