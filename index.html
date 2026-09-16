@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#7a5230">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=20260917002405">
+<link rel="stylesheet" href="css/style.css?v=20260917005437">
 <style>
 #login-screen, #recovery-screen { display: flex; align-items: center; justify-content: center; height: 100vh; }
 #login-card, #recovery-card { width: 100%; max-width: 360px; }
@@ -30,6 +30,12 @@
       <div class="field"><label>City</label><input id="signup-city" type="text" autocomplete="address-level2"></div>
       <div class="field"><label>Focolare membership type</label><select id="signup-membership"></select></div>
       <div class="field"><label>Mobile phone</label><input id="signup-phone" type="tel" autocomplete="tel"></div>
+      <div class="field"><label>Age bracket</label><select id="signup-age-bracket"></select></div>
+      <div class="field"><label>Gender</label><select id="signup-gender">
+        <option value=""></option>
+        <option value="M">Male</option>
+        <option value="F">Female</option>
+      </select></div>
     </div>
     <div class="btn-row" style="justify-content:center;">
       <button class="btn" id="login-btn" style="flex:1;">Sign in</button>
@@ -72,6 +78,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
 <script>if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.worker.min.js';</script>
-<script type="module" src="js/app.js?v=20260917002405"></script>
+<script type="module" src="js/app.js?v=20260917005437"></script>
 </body>
 </html>
