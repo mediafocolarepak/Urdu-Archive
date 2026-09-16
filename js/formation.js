@@ -10,7 +10,61 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, optionsHtml, labelOf, today, nameMapForEmails } from './core.js?v=20260916225958';
+import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails } from './core.js?v=20260917000800';
+
+// Standard prompt for drafting a quiz with an AI tool (GOVERNANCE.md §2.3), shared by the
+// "Copy prompt" button below and the matching Help entry (see supabase/83_formation_ai_prompt_help.sql)
+// so both always say the same thing - only the Markdown format actually matters (parseQuizMarkdown below).
+const QUIZ_AI_PROMPT = `You are helping build a quiz for an online course module. Based on the module content below, write 8-10 multiple-choice questions in this exact Markdown format (nothing else):
+
+## <question text>
+- [ ] <wrong option>
+- [ ] <wrong option>
+- [x] <correct option>
+- [ ] <wrong option>
+points: 1
+
+Rules:
+- Each question needs at least 2 options and exactly one marked [x] as correct.
+- "points: N" is optional (defaults to 1) and, if present, must be its own line right after the last option.
+- Do not add numbering, explanations, or any text outside this format.
+
+Module content:
+<paste the module's text here>`;
+
+// Parses the Markdown format above into rows ready for formation_quiz_questions. Returns every
+// well-formed question plus a human-readable error per malformed one, rather than failing the
+// whole import over a single typo - the caller decides whether to import the valid ones anyway.
+function parseQuizMarkdown(text) {
+  const lines = (text || '').split(/\r?\n/);
+  const questions = [];
+  const errors = [];
+  let current = null;
+  let qNum = 0;
+  function finalizeCurrent() {
+    if (!current) return;
+    const opts = current.options;
+    const correctCount = opts.filter(o => o.correct).length;
+    const label = `Question ${current.num} ("${current.text.slice(0, 40)}")`;
+    if (opts.length < 2) { errors.push(`${label}: needs at least 2 options.`); return; }
+    if (correctCount !== 1) { errors.push(`${label}: exactly one option must be marked correct (found ${correctCount}).`); return; }
+    questions.push({ question_text: current.text, options: opts.map(o => o.text), correct_index: opts.findIndex(o => o.correct), points: current.points });
+  }
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    const hMatch = line.match(/^##\s+(.+)/);
+    if (hMatch) { finalizeCurrent(); qNum++; current = { num: qNum, text: hMatch[1].trim(), options: [], points: 1 }; continue; }
+    if (!current) continue;
+    const optMatch = line.match(/^-\s*\[([ xX])\]\s*(.+)/);
+    if (optMatch) { current.options.push({ correct: optMatch[1].toLowerCase() === 'x', text: optMatch[2].trim() }); continue; }
+    const ptsMatch = line.match(/^points:\s*(\d+)/i);
+    if (ptsMatch) { current.points = parseInt(ptsMatch[1], 10) || 1; continue; }
+  }
+  finalizeCurrent();
+  if (!qNum) errors.unshift('No questions found - each question must start with a line like "## Question text".');
+  return { questions, errors };
+}
 
 // A readable preview of a linked document's Urdu text - same idea as boards.js's textPreview()
 // (duplicated rather than shared: project convention is modules import only from core.js).
@@ -197,8 +251,25 @@ async function renderPathDetail(main, pathId) {
     for (const t of texts) textById[t.document_id] = t;
   }
 
+  // Co-authors (migration 82): any editor works the path exactly like the owner (can_edit_path()
+  // server-side); only the owner or the Formation lead may add/remove co-authors themselves.
+  const editorRows = await withStatus(sb.from('formation_path_editors').select('user_id,added_by_email,created_at').eq('path_id', pathId));
+  const isCoAuthor = editorRows.some(e => e.user_id === user.id);
+  const canManageCoAuthors = path.owner_id === user.id || isDeptLead('FORM') || isAdmin();
+  const editorProfiles = editorRows.length ? await withStatus(sb.from('user_profiles').select('user_id,email,full_name').in('user_id', editorRows.map(e => e.user_id))) : [];
+  const editorProfileByUid = {}; for (const p of editorProfiles) editorProfileByUid[p.user_id] = p;
+  let formMemberOptions = [];
+  if (canManageCoAuthors) {
+    const formMembers = await withStatus(sb.from('department_members').select('user_id').eq('department_code', 'FORM'));
+    const candidateIds = formMembers.map(m => m.user_id).filter(uid => uid !== path.owner_id && !editorRows.some(e => e.user_id === uid));
+    if (candidateIds.length) {
+      const candidateProfiles = await withStatus(sb.from('user_profiles').select('user_id,email,full_name').in('user_id', candidateIds));
+      formMemberOptions = candidateProfiles.map(p => [p.user_id, p.full_name || p.email]);
+    }
+  }
+
   const audienceList = State.optionListsByName.formation_audience || [];
-  const canEdit = path.owner_id === user.id || canReviewApplications();
+  const canEdit = path.owner_id === user.id || isCoAuthor || canReviewApplications();
   const canSeeEnrollees = canEdit;  // owner or Coordinator/Admin - formation_enrollees() checks this itself too
 
   const modulesOf = yearId => modules.filter(m => m.year_id === yearId);
@@ -279,6 +350,7 @@ async function renderPathDetail(main, pathId) {
         ${path.status !== 'published' ? '<button class="btn secondary" id="fp-publish">Publish</button>' : '<button class="btn secondary" id="fp-archive">Archive</button>'}
         <button class="btn danger" id="fp-delete-path">Delete path</button>
       </div>` : ''}
+      ${(canEdit && (editorRows.length || canManageCoAuthors)) ? renderCoAuthorsSectionHtml(editorRows, editorProfileByUid, canManageCoAuthors, formMemberOptions) : ''}
       ${chatSectionHtml('students', 'Discussion', canSeeStudentsChat)}
       ${chatSectionHtml('formatori', 'Formatori notes (visible only to formatori)', canSeeFormatoriChat)}
       ${myCertificate ? `<div class="hint" style="margin-top:10px;">&#127891; Certificate earned on ${esc((myCertificate.issued_at || '').slice(0, 10))} &middot; code ${esc(myCertificate.certificate_code)}</div>` : ''}
@@ -352,9 +424,53 @@ async function renderPathDetail(main, pathId) {
 
   wireChatSection(main, pathId, 'students', canSeeStudentsChat);
   wireChatSection(main, pathId, 'formatori', canSeeFormatoriChat);
+  wireCoAuthorsActions(main, pathId, canManageCoAuthors);
   wireQuizActions(main, pathId, quizzes);
 
   wireTreeActions(main, pathId, years, modules, chapters, posts, canEdit);
+}
+
+// ---------- Co-authors (migration 82) ----------
+
+function renderCoAuthorsSectionHtml(editorRows, profileByUid, canManage, formMemberOptions) {
+  const nameOf = uid => esc(profileByUid[uid]?.full_name || profileByUid[uid]?.email || uid);
+  if (!canManage) {
+    return editorRows.length ? `<div class="hint" style="margin-top:10px;">Co-authors: ${editorRows.map(e => nameOf(e.user_id)).join(', ')}</div>` : '';
+  }
+  return `
+    <div style="margin-top:10px;">
+      <div class="hint" style="font-weight:600;">Co-authors <span class="hint" style="font-weight:normal;">— work this path exactly like the owner</span></div>
+      ${editorRows.length ? editorRows.map(e => `
+        <div class="btn-row" style="justify-content:space-between;max-width:320px;margin:2px 0;">
+          <span>${nameOf(e.user_id)}</span>
+          <button class="btn secondary" data-remove-coauthor="${esc(e.user_id)}" style="padding:2px 8px;">Remove</button>
+        </div>`).join('') : '<div class="hint">No co-authors yet.</div>'}
+      ${formMemberOptions.length ? `
+        <div class="field" style="max-width:320px;margin-top:6px;">
+          <label>Add co-author <span class="hint">(Formation department members)</span></label>
+          <div class="btn-row">
+            <select id="fp-coauthor-add">${optionsHtml(formMemberOptions, '', true)}</select>
+            <button class="btn secondary" id="fp-coauthor-add-btn" style="padding:4px 10px;">Add</button>
+          </div>
+        </div>` : '<div class="hint" style="margin-top:6px;">No other Formation department members available to add.</div>'}
+    </div>`;
+}
+
+function wireCoAuthorsActions(main, pathId, canManageCoAuthors) {
+  if (!canManageCoAuthors) return;
+  const addBtn = document.getElementById('fp-coauthor-add-btn');
+  if (addBtn) addBtn.addEventListener('click', async () => {
+    const sel = document.getElementById('fp-coauthor-add');
+    if (!sel.value) return;
+    const { data: { user } } = await sb.auth.getUser();
+    await withStatus(sb.from('formation_path_editors').insert({ path_id: pathId, user_id: sel.value, added_by_email: user.email }), 'Adding...');
+    renderPathDetail(main, pathId);
+  });
+  document.querySelectorAll('[data-remove-coauthor]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Remove this co-author? They will lose edit access to this path.')) return;
+    await withStatus(sb.from('formation_path_editors').delete().eq('path_id', pathId).eq('user_id', btn.dataset.removeCoauthor), 'Removing...');
+    renderPathDetail(main, pathId);
+  }));
 }
 
 // ---------- Chat (Fase C) ----------
@@ -535,6 +651,41 @@ function openQuestionPopup({ quizId, question = null, sequence = 0, onSaved }) {
   });
 }
 
+// Pastes the QUIZ_AI_PROMPT format, parses it client-side (parseQuizMarkdown), and inserts every
+// well-formed question in one batch - matching questions are skipped with a reason shown inline
+// rather than blocking the whole import over one malformed line.
+function openImportQuizPopup({ quizId, startingSequence, onSaved }) {
+  document.getElementById('fp-import-quiz-popup')?.remove();
+  const backdrop = document.createElement('div');
+  backdrop.id = 'fp-import-quiz-popup';
+  backdrop.className = 'overlay-backdrop';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel">
+      <h2 style="margin-top:0;">Import quiz from Markdown</h2>
+      <p class="hint">Paste questions in the standard format (see "Copy AI prompt", or Help). Valid questions are imported even if others have errors.</p>
+      <div class="field"><textarea id="fiq-text" rows="12" placeholder="## Question text&#10;- [ ] wrong option&#10;- [x] correct option&#10;points: 1"></textarea></div>
+      <div id="fiq-errors" class="hint" style="color:var(--danger);white-space:pre-wrap;"></div>
+      <div class="btn-row" style="justify-content:flex-end;">
+        <button class="btn secondary" id="fiq-cancel">Cancel</button>
+        <button class="btn" id="fiq-import">Import</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+  document.getElementById('fiq-cancel').addEventListener('click', () => backdrop.remove());
+  document.getElementById('fiq-import').addEventListener('click', async () => {
+    const { questions, errors } = parseQuizMarkdown(document.getElementById('fiq-text').value);
+    const errBox = document.getElementById('fiq-errors');
+    errBox.textContent = errors.join('\n');
+    if (!questions.length) { if (!errors.length) errBox.textContent = 'Nothing to import.'; return; }
+    const rows = questions.map((q, i) => ({ quiz_id: quizId, sequence_number: startingSequence + i, ...q }));
+    await withStatus(sb.from('formation_quiz_questions').insert(rows), 'Importing...');
+    backdrop.remove();
+    if (errors.length) alert(`Imported ${questions.length} question(s); ${errors.length} were skipped:\n\n${errors.join('\n')}`);
+    if (onSaved) onSaved();
+  });
+}
+
 async function renderQuizManagePanel(main, pathId, quiz) {
   const box = document.getElementById(`fp-quiz-manage-${quiz.id}`);
   if (!box) return;
@@ -553,7 +704,11 @@ async function renderQuizManagePanel(main, pathId, quiz) {
           <button class="btn danger" data-delete-question="${q.id}" style="padding:2px 6px;">Delete</button>
         </div>
       </div>`).join('') : '<div class="hint">No questions yet.</div>'}
-    <div class="btn-row" style="margin-top:8px;"><button class="btn secondary" data-add-question="1">+ Add question</button></div>`;
+    <div class="btn-row" style="margin-top:8px;">
+      <button class="btn secondary" data-add-question="1">+ Add question</button>
+      <button class="btn secondary" data-import-quiz-md="1">Import quiz (.md)</button>
+      <button class="btn secondary" data-copy-ai-prompt="1">Copy AI prompt</button>
+    </div>`;
 
   box.querySelector('[data-edit-quiz-meta]').addEventListener('click', () => {
     openQuizMetaPopup({ title: 'Edit quiz', quiz, onSaved: async fields => {
@@ -568,6 +723,13 @@ async function renderQuizManagePanel(main, pathId, quiz) {
   });
   box.querySelector('[data-add-question]').addEventListener('click', () => {
     openQuestionPopup({ quizId: quiz.id, sequence: questions.length, onSaved: () => renderPathDetail(main, pathId) });
+  });
+  box.querySelector('[data-import-quiz-md]').addEventListener('click', () => {
+    openImportQuizPopup({ quizId: quiz.id, startingSequence: questions.length, onSaved: () => renderPathDetail(main, pathId) });
+  });
+  box.querySelector('[data-copy-ai-prompt]').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(QUIZ_AI_PROMPT); alert('Prompt copied - paste it into your AI tool of choice, then paste the module content where it says so.'); }
+    catch { alert('Could not copy automatically - the prompt is also in Help ("Formation: drafting a quiz with AI").'); }
   });
   box.querySelectorAll('[data-edit-question]').forEach(el => el.addEventListener('click', () => {
     const q = questions.find(x => x.id === parseInt(el.dataset.editQuestion, 10));

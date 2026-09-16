@@ -274,6 +274,8 @@ export const State = {
   matchSort: { col: 'document_id', asc: false },
   matchSelectedId: null,
   usersSort: { col: 'full_name', asc: true },
+  peopleSort: { col: 'full_name', asc: true },
+  peopleFilter: { search: '', standing: '', atRiskOnly: false },
   optionsSelectedList: 'category',
   deptEditorSelected: null,  // department_code currently shown in Options -> Departments
   docCollections: [],  // { document_id, collection_code, page_number } for the open document
@@ -394,12 +396,21 @@ export function canDelete() { return State.currentRole === 'admin'; }
 export function isAdmin() { return State.currentRole === 'admin'; }
 export function isCoordinator() { return State.currentRole === 'coordinator'; }
 // Can review "Join the Team" applications - Coordinator (own queue) or Admin (everything).
+// Kept broad on purpose (used by openFormationPostPopup etc. for "sees everything" access) -
+// canReviewTeamApplications() below is the narrower, HR-based gate for the Team Applications
+// tab specifically (GOVERNANCE.md phase 2a).
 export function canReviewApplications() { return State.currentRole === 'coordinator' || State.currentRole === 'admin'; }
 
 // Department membership - mirrors is_dept_member()/is_dept_lead() server-side (see
 // 80_departments_and_people_decisions.sql). Client-side echoes only gate UI; RLS is the real gate.
 export function isDeptMember(code) { return State.myDepartments.some(d => d.department_code === code); }
 export function isDeptLead(code) { return State.myDepartments.some(d => d.department_code === code && d.is_lead); }
+export function isAnyDeptLead() { return State.myDepartments.some(d => d.is_lead); }
+
+// Team Applications tab visibility, moved from Coordinator to HR (GOVERNANCE.md phase 2a) -
+// Coordinators still keep RLS access for now (migration 80 §8) until migration 81 removes it,
+// so this is purely a client-side narrowing of who sees the tab, not the real gate.
+export function canReviewTeamApplications() { return isDeptMember('HR') || isAdmin(); }
 
 // ---------- Standing widget (credits + reputation, shown in the topbar for Operator+) ----------
 
