@@ -1,5 +1,27 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260917000800';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260917000800';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260917002405';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260917002405';
+
+// "From the boards" (84_boards_moderation.sql): a small window onto recent public board
+// activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
+// tab. Read-only, latest few published posts across every board - no filters, no pagination,
+// deliberately lightweight (the Boards tab itself is where you actually browse/search/post).
+async function renderFromBoards() {
+  const box = document.getElementById('dash-from-boards-list');
+  if (!box) return;
+  const posts = await withStatus(sb.from('board_posts').select('id,board_code,title,body,created_at')
+    .eq('status', 'published').order('created_at', { ascending: false }).limit(5));
+  const boardList = State.optionListsByName.board || [];
+  box.innerHTML = posts.length ? posts.map(p => `
+    <div style="padding:6px 0;border-top:1px solid var(--line);cursor:pointer;" data-open-board="${esc(p.board_code)}">
+      <div style="font-weight:600;" dir="auto">${esc(p.title)}</div>
+      <div class="hint">${esc(labelOf(boardList, p.board_code))} &middot; ${esc((p.created_at || '').slice(0, 10))}</div>
+      ${p.body ? `<div class="hint" dir="auto">${esc((p.body || '').slice(0, 140))}${(p.body || '').length > 140 ? '…' : ''}</div>` : ''}
+    </div>`).join('') : '<div class="hint">No board posts yet.</div>';
+  box.querySelectorAll('[data-open-board]').forEach(el => el.addEventListener('click', () => {
+    State.boardsSelected = el.dataset.openBoard;
+    window.__renderTab('boards');
+  }));
+}
 
 export async function renderDashboardView(main) {
   // Operator shares the simplified read/search-only Dashboard layout with User - their write
@@ -49,6 +71,10 @@ export async function renderDashboardView(main) {
         </div>
         <div class="panel" id="doc-detail" style="margin:0;"></div>
       </div>
+    </div>
+    <div class="panel">
+      <h2>From the boards</h2>
+      <div id="dash-from-boards-list"><div class="hint">Loading...</div></div>
     </div>`;
 
   document.getElementById('dash-search').addEventListener('input', e => { State.dashFilters.search = e.target.value; refreshDashGrid(); });
@@ -74,6 +100,7 @@ export async function renderDashboardView(main) {
 
   await refreshDashGrid();
   await renderDocDetail(State.selectedDocId);
+  renderFromBoards();
 }
 
 // Fase 2 (PROJECT_HANDOFF_v16.md): the search box now also reaches into the Urdu body text
