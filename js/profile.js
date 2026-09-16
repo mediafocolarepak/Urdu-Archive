@@ -5,7 +5,7 @@
 // reviewed. Deliberately does not import from collaboration.js (project convention: modules
 // only import from core.js), so the skill-chip rendering is duplicated here in small form.
 
-import { sb, State, esc, withStatus, labelOf } from './core.js?v=20260917002405';
+import { sb, State, esc, withStatus, labelOf, optionsHtml } from './core.js?v=20260917005437';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -14,6 +14,8 @@ const ACADEMIC_LEVELS = [
   ['DOCTORATE', 'Doctorate'],
   ['OTHER', 'Other / prefer to describe below'],
 ];
+
+const GENDER_OPTIONS = [['M', 'Male'], ['F', 'Female']];
 
 const ROLE_LABEL = { user: 'User', operator: 'Operator', coordinator: 'Coordinator', admin: 'Admin' };
 
@@ -50,6 +52,7 @@ export async function renderMyProfileView(main) {
         <h3>My Certificates</h3>
         ${certRows.map(c => `<div class="hint" style="padding:2px 0;">&#127891; <span dir="auto">${esc(c.formation_paths?.title) || 'Formation path'}</span> &middot; ${esc((c.issued_at || '').slice(0, 10))} &middot; code ${esc(c.certificate_code)}</div>`).join('')}
       </div>` : ''}
+      <div class="subpanel" id="profile-demographics"></div>
       ${role === 'operator' ? '<div class="subpanel" id="profile-editable"></div>' : ''}
       <div class="subpanel" style="margin-top:16px;">
         <h3>Change my password</h3>
@@ -62,10 +65,34 @@ export async function renderMyProfileView(main) {
       </div>
     </div>`;
 
+  renderDemographics(document.getElementById('profile-demographics'), profile, user.id, main);
   if (role === 'operator') {
     renderEditable(document.getElementById('profile-editable'), profile, skillList, storedSkills, otherSkills, user.id, main);
   }
   wireChangePassword();
+}
+
+// Age bracket + gender (85_signup_demographics.sql): collected at signup for HR statistics,
+// but every account created before that migration has both null - self-editable here (any
+// role, unlike the operator-only section below) so people can fill them in themselves instead
+// of HR having to chase everyone individually.
+function renderDemographics(box, profile, userId, main) {
+  const ageBracketList = State.optionListsByName.age_bracket || [];
+  box.innerHTML = `
+    <h3>Personal details <span class="hint">— used for programme statistics only</span></h3>
+    <div class="field-grid wide">
+      <div class="field"><label>Age bracket</label><select id="pf-age-bracket">${optionsHtml(ageBracketList, profile.age_bracket, true)}</select></div>
+      <div class="field"><label>Gender</label><select id="pf-gender">${optionsHtml(GENDER_OPTIONS, profile.gender, true)}</select></div>
+    </div>
+    <div class="btn-row"><button class="btn secondary" id="pf-demographics-save">Save</button></div>`;
+  document.getElementById('pf-demographics-save').addEventListener('click', async () => {
+    await withStatus(sb.from('user_profiles').update({
+      age_bracket: document.getElementById('pf-age-bracket').value || null,
+      gender: document.getElementById('pf-gender').value || null,
+      profile_updated_at: new Date().toISOString(),
+    }).eq('user_id', userId), 'Saving...');
+    await renderMyProfileView(main);
+  });
 }
 
 function wireChangePassword() {

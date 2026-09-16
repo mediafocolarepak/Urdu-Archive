@@ -1,4 +1,4 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken } from './core.js?v=20260917002405';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken } from './core.js?v=20260917005437';
 
 // ---------- Users ----------
 
@@ -104,6 +104,12 @@ function showEditProfileModal(uid, email, profile, main) {
         <select id="edit-profile-membership">${optionsHtml(State.optionListsByName.membership_type || [], profile.membership_type, true)}</select>
       </div>
       <div class="field"><label>Mobile phone</label><input id="edit-profile-phone" value="${esc(profile.phone)}"></div>
+      <div class="field"><label>Age bracket <span class="hint">(statistics only)</span></label>
+        <select id="edit-profile-age-bracket">${optionsHtml(State.optionListsByName.age_bracket || [], profile.age_bracket, true)}</select>
+      </div>
+      <div class="field"><label>Gender <span class="hint">(statistics only)</span></label>
+        <select id="edit-profile-gender">${optionsHtml([['M', 'Male'], ['F', 'Female']], profile.gender, true)}</select>
+      </div>
       <div class="btn-row" style="justify-content:flex-end;">
         <button class="btn secondary" id="edit-profile-cancel">Cancel</button>
         <button class="btn" id="edit-profile-save">Save</button>
@@ -116,7 +122,9 @@ function showEditProfileModal(uid, email, profile, main) {
     const city = document.getElementById('edit-profile-city').value.trim();
     const membership_type = document.getElementById('edit-profile-membership').value;
     const phone = document.getElementById('edit-profile-phone').value.trim();
-    await withStatus(sb.from('user_profiles').upsert({ user_id: uid, email, full_name, city, membership_type, phone }), 'Saving...');
+    const age_bracket = document.getElementById('edit-profile-age-bracket').value || null;
+    const gender = document.getElementById('edit-profile-gender').value || null;
+    await withStatus(sb.from('user_profiles').upsert({ user_id: uid, email, full_name, city, membership_type, phone, age_bracket, gender }), 'Saving...');
     backdrop.remove();
     await renderUsersView(main);
   });

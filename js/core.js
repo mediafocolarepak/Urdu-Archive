@@ -311,7 +311,7 @@ export const DASH_SORTABLE = { document_id: 'ID', title: 'Title (EN)', original_
 // two keep their fixed, CHECK-constrained vocabularies (see 15_versions_editors_schema.sql),
 // while the Hayat Editor's Autore/Argomento comboboxes are free-typing - a new value there
 // must never risk violating the documents table's constraints on author/main_topic.
-export const OPTION_LIST_NAMES = ['category', 'author', 'main_topic', 'recipient', 'language', 'workflow_status', 'media_type', 'source', 'collection', 'quality', 'operator', 'hayat_author', 'hayat_argomento', 'membership_type', 'task_category', 'operator_qualification', 'collaboration_skill', 'report_type', 'extra_credit_reason', 'board', 'formation_audience', 'department'];
+export const OPTION_LIST_NAMES = ['category', 'author', 'main_topic', 'recipient', 'language', 'workflow_status', 'media_type', 'source', 'collection', 'quality', 'operator', 'hayat_author', 'hayat_argomento', 'membership_type', 'task_category', 'operator_qualification', 'collaboration_skill', 'report_type', 'extra_credit_reason', 'board', 'formation_audience', 'department', 'age_bracket'];
 export const OPTION_LIST_LABELS = {
   category: 'Category', author: 'Author', main_topic: 'Main topic', recipient: 'Recipient',
   language: 'Language', workflow_status: 'Workflow status', media_type: 'Media type',
@@ -325,6 +325,7 @@ export const OPTION_LIST_LABELS = {
   board: 'Formation boards',
   formation_audience: 'Formation paths: target audience',
   department: 'Departments',
+  age_bracket: 'Age bracket (signup statistics)',
 };
 
 // Pre-selection of the board from a document's recipient (suggestion, not a constraint).
@@ -986,9 +987,11 @@ export function openFormationPostPopup({ doc = null, onSaved } = {}) {
   });
 }
 
-// Populates the signup form's membership-type dropdown before login (anon-readable list).
-export async function loadMembershipOptionsForSignup() {
-  const { data, error } = await sb.from('option_lists').select('code,label').eq('list_name', 'membership_type').order('sort_order');
+// Populates a signup-form dropdown before login (anon-readable option_lists rows - see
+// option_lists_select_anon in 16_signup_chat_splash.sql). Used for both membership type and
+// age bracket.
+export async function loadOptionsForSignup(listName) {
+  const { data, error } = await sb.from('option_lists').select('code,label').eq('list_name', listName).order('sort_order');
   return error ? [] : data.map(r => [r.code, r.label]);
 }
 
@@ -1023,8 +1026,12 @@ export function wireAuthButtons() {
   switchLink.addEventListener('click', () => setSignupMode(!signupMode));
   setSignupMode(false);
 
-  loadMembershipOptionsForSignup().then(rows => {
+  loadOptionsForSignup('membership_type').then(rows => {
     document.getElementById('signup-membership').innerHTML =
+      '<option value=""></option>' + rows.map(([c, l]) => `<option value="${c}">${esc(l)}</option>`).join('');
+  });
+  loadOptionsForSignup('age_bracket').then(rows => {
+    document.getElementById('signup-age-bracket').innerHTML =
       '<option value=""></option>' + rows.map(([c, l]) => `<option value="${c}">${esc(l)}</option>`).join('');
   });
 
@@ -1035,11 +1042,13 @@ export function wireAuthButtons() {
     const city = document.getElementById('signup-city').value.trim();
     const membership_type = document.getElementById('signup-membership').value;
     const phone = document.getElementById('signup-phone').value.trim();
+    const age_bracket = document.getElementById('signup-age-bracket').value;
+    const gender = document.getElementById('signup-gender').value;
     const errBox = document.getElementById('login-error');
     errBox.textContent = '';
     if (!email || password.length < 6) { errBox.textContent = 'Email and password (min. 6 characters) are required.'; return; }
-    if (!full_name || !city || !membership_type || !phone) { errBox.textContent = 'Full name, city, membership type and phone are required.'; return; }
-    const { error } = await sb.auth.signUp({ email, password, options: { data: { full_name, city, membership_type, phone }, emailRedirectTo: 'https://mediafocolarepak.github.io/Urdu-Archive/' } });
+    if (!full_name || !city || !membership_type || !phone || !age_bracket || !gender) { errBox.textContent = 'Full name, city, membership type, phone, age bracket and gender are required.'; return; }
+    const { error } = await sb.auth.signUp({ email, password, options: { data: { full_name, city, membership_type, phone, age_bracket, gender }, emailRedirectTo: 'https://mediafocolarepak.github.io/Urdu-Archive/' } });
     if (error) { errBox.textContent = error.message; return; }
     errBox.style.color = 'var(--accent)';
     errBox.textContent = 'Sign-up submitted. Check your email to confirm, then sign in.';
