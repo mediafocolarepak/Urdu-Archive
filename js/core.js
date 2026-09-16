@@ -287,7 +287,22 @@ export const State = {
   myDepartments: [],  // [{department_code, is_lead}] for the signed-in user - see GOVERNANCE.md
   policyValues: {},  // policy_values key -> integer value, cached at boot (see 80_departments_and_people_decisions.sql)
   standing: 'active',  // user_roles.standing: active/watch/suspended
+  boardPostingBlocked: false,  // user_roles.board_posting_blocked (84_boards_moderation.sql)
+  boardPolicyAcked: false,  // whether user_profiles.board_policy_ack_at is set
+  boardsSearch: '',  // free-text filter over the open board (84_boards_moderation.sql)
 };
+
+// Storage bucket for board post images (84_boards_moderation.sql) - separate from BUCKET
+// (archive-files) because it's public-read and has a much smaller per-file size cap.
+export const BOARD_MEDIA_BUCKET = 'board-media';
+
+// Records that the signed-in user has seen and accepted the board usage policy (js/boards.js
+// shows it once before their first post). Never re-shown once set.
+export async function ackBoardPolicy() {
+  const { data: { user } } = await sb.auth.getUser();
+  await withStatus(sb.from('user_profiles').update({ board_policy_ack_at: new Date().toISOString() }).eq('user_id', user.id));
+  State.boardPolicyAcked = true;
+}
 
 export const DASH_ROW_LIMIT = 5000;
 export const DASH_SORTABLE = { document_id: 'ID', title: 'Title (EN)', original_title: 'Original title', author: 'Author', place: 'Place', category: 'Category' };
@@ -667,10 +682,11 @@ async function showApp(session, renderDashboardTab) {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
 
-  const { data: roleRows } = await sb.from('user_roles').select('role,credits,reputation,standing').eq('user_id', session.user.id);
+  const { data: roleRows } = await sb.from('user_roles').select('role,credits,reputation,standing,board_posting_blocked').eq('user_id', session.user.id);
   const roleRow = roleRows && roleRows[0];
   State.currentRole = roleRow ? roleRow.role : 'user';
   State.standing = roleRow ? roleRow.standing : 'active';
+  State.boardPostingBlocked = roleRow ? !!roleRow.board_posting_blocked : false;
   document.getElementById('user-email').textContent = `${session.user.email} (${State.currentRole})`;
   if (State.currentRole === 'operator' && roleRow) renderStandingWidget(roleRow.credits, roleRow.reputation);
 
@@ -703,8 +719,9 @@ async function showApp(session, renderDashboardTab) {
   // is_any_formatore(), used to gate formation-path creation and the "My paths" section.
   const { data: myEditorRows } = await sb.from('board_editors').select('board_code').eq('user_id', session.user.id);
   State.isFormatore = (myEditorRows || []).length > 0;
-  const { data: profileRows } = await sb.from('user_profiles').select('membership_type').eq('user_id', session.user.id);
+  const { data: profileRows } = await sb.from('user_profiles').select('membership_type,board_policy_ack_at').eq('user_id', session.user.id);
   State.myMembershipType = (profileRows && profileRows[0] && profileRows[0].membership_type) || null;
+  State.boardPolicyAcked = !!(profileRows && profileRows[0] && profileRows[0].board_policy_ack_at);
 
   renderDashboardTab();
   await maybeShowSplash();
@@ -799,21 +816,29 @@ export function isDocPostable(doc) {
 // modules can't import each other (project convention: modules import only from core.js).
 // { doc } prefills from a document; { boardCode } prefills the board directly; { post } switches
 // this to an edit (update instead of insert).
+// Posting is open to any signed-in, non-blocked user (84_boards_moderation.sql) - the board list
+// here is every board, not just State.myBoards (which now means "boards I moderate"). A User's
+// post lands 'pending' server-side (trg_force_board_post_pending); this popup never claims
+// otherwise.
 export function openBoardPostPopup({ doc = null, boardCode = null, post = null, onSaved } = {}) {
   document.getElementById('board-post-popup')?.remove();
   const backdrop = document.createElement('div');
   backdrop.id = 'board-post-popup';
   backdrop.className = 'overlay-backdrop';
-  const myBoards = (State.optionListsByName.board || []).filter(([code]) => State.myBoards.has(code));
+  const allBoards = State.optionListsByName.board || [];
   const suggested = post ? post.board_code : (boardCode || (doc && BOARD_FOR_RECIPIENT[(doc.recipient || [])[0]]));
-  const preselect = myBoards.some(([code]) => code === suggested) ? suggested : (myBoards[0] && myBoards[0][0]) || '';
+  const preselect = allBoards.some(([code]) => code === suggested) ? suggested : (allBoards[0] && allBoards[0][0]) || '';
   backdrop.innerHTML = `
     <div class="panel overlay-panel">
       <h2 style="margin-top:0;">${post ? 'Edit post' : 'New post'}</h2>
-      <div class="field"><label>Board</label><select id="bp-board">${optionsHtml(myBoards, preselect, false)}</select></div>
+      <p class="hint" id="bp-pending-hint" style="display:${!post && !State.myBoards.has(preselect) ? 'block' : 'none'};">Your post will be held for review by that board's editors before it appears to others.</p>
+      <div class="field"><label>Board</label><select id="bp-board">${optionsHtml(allBoards, preselect, false)}</select></div>
       ${doc ? `<div class="field"><label>Document</label><div style="font-size:13px;padding:4px 0;">#${esc(doc.document_id)} &mdash; ${esc(doc.en_title) || '<span class="hint">(no title)</span>'}</div></div>` : ''}
       <div class="field"><label>Title</label><input id="bp-title" value="${esc(post ? post.title : (doc ? doc.en_title || '' : ''))}"></div>
       <div class="field"><label>Text</label><textarea id="bp-body" dir="auto" rows="8">${esc(post ? post.body : '')}</textarea></div>
+      <div class="field"><label>Link <span class="hint">(optional)</span></label><input id="bp-link" placeholder="https://..." value="${esc(post ? post.link_url : '')}"></div>
+      <div class="field"><label>Image <span class="hint">(optional${post && post.image_path ? ' - choose a file to replace the current one' : ''})</span></label><input id="bp-image" type="file" accept="image/*"></div>
+      <div class="hint" id="bp-error"></div>
       <div class="btn-row" style="justify-content:flex-end;">
         <button class="btn secondary" id="bp-cancel">Cancel</button>
         <button class="btn" id="bp-save">Save</button>
@@ -822,15 +847,30 @@ export function openBoardPostPopup({ doc = null, boardCode = null, post = null, 
   document.body.appendChild(backdrop);
   backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
   document.getElementById('bp-cancel').addEventListener('click', () => backdrop.remove());
+  if (!post) document.getElementById('bp-board').addEventListener('change', e => {
+    document.getElementById('bp-pending-hint').style.display = State.myBoards.has(e.target.value) ? 'none' : 'block';
+  });
   document.getElementById('bp-save').addEventListener('click', async () => {
     const board_code = document.getElementById('bp-board').value;
     const title = document.getElementById('bp-title').value.trim();
     const body = document.getElementById('bp-body').value.trim();
+    const link_url = document.getElementById('bp-link').value.trim();
+    const errBox = document.getElementById('bp-error');
+    errBox.textContent = '';
     const document_id = doc ? doc.document_id : (post ? post.document_id : null);
-    if (!title) { alert('Title is required.'); return; }
-    if (!document_id && !body) { alert('Either a document or some text is required.'); return; }
+    if (!title) { errBox.textContent = 'Title is required.'; return; }
+    if (link_url && !/^https?:\/\//.test(link_url)) { errBox.textContent = 'Link must start with http:// or https://'; return; }
+    let image_path = post ? post.image_path : null;
+    const file = document.getElementById('bp-image').files[0];
+    if (file) {
+      const path = `${Date.now()}-${file.name}`.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const { error } = await sb.storage.from(BOARD_MEDIA_BUCKET).upload(path, file, { upsert: true });
+      if (error) { errBox.textContent = 'Could not upload the image: ' + error.message; return; }
+      image_path = path;
+    }
+    if (!document_id && !body && !link_url && !image_path) { errBox.textContent = 'A document, some text, a link, or an image is required.'; return; }
     const { data: { user } } = await sb.auth.getUser();
-    const row = { board_code, document_id, title, body: body || null, posted_by_email: user.email };
+    const row = { board_code, document_id, title, body: body || null, link_url: link_url || null, image_path, posted_by_email: user.email };
     if (post) await withStatus(sb.from('board_posts').update(row).eq('id', post.id), 'Saving...');
     else await withStatus(sb.from('board_posts').insert(row), 'Saving...');
     backdrop.remove();

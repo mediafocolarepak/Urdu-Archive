@@ -7,7 +7,7 @@
 
 import {
   sb, State, esc, withStatus, isAdmin, isDeptMember, isDeptLead, labelOf, optionsHtml,
-} from './core.js?v=20260917000800';
+} from './core.js?v=20260917002405';
 
 const STANDING_BADGE = {
   active: '',
@@ -24,7 +24,7 @@ function canProposeTypeClientSide(type) {
   if (type === 'qualification_add' || type === 'qualification_remove') return isDeptMember('HR');
   if (['watch_on', 'watch_off', 'suspend', 'reinstate', 'exclude'].includes(type)) return isDeptMember('HR');
   if (type === 'role_change') return isDeptLead('HR');
-  if (type === 'board_misuse') return State.currentRole === 'coordinator' || State.myBoards.size > 0;
+  if (['board_misuse', 'board_block', 'board_unblock'].includes(type)) return State.currentRole === 'coordinator' || State.myBoards.size > 0;
   return false;
 }
 
@@ -32,7 +32,7 @@ function canProposeTypeClientSide(type) {
 function canApproveTypeClientSide(type) {
   if (isAdmin()) return true;
   if (type === 'suspend' || type === 'reinstate') return isDeptLead('HR');
-  if (type === 'board_misuse') return isDeptLead('FORM') || isDeptLead('HR');
+  if (['board_misuse', 'board_block', 'board_unblock'].includes(type)) return isDeptLead('FORM') || isDeptLead('HR');
   return false;
 }
 
