@@ -1,23 +1,24 @@
-import { State, canWrite, isAdmin, canReviewApplications, boot, wireAuthButtons } from './core.js?v=20260913232901';
-import { renderDashboardView } from './dashboard.js?v=20260913232901';
-import { renderReportsView } from './reports.js?v=20260913232901';
-import { renderHayatView } from './hayatindex.js?v=20260913232901';
-import { renderMatchReviewView } from './matchreview.js?v=20260913232901';
-import { renderBulkImportView } from './bulkimport.js?v=20260913232901';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260913232901';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260913232901';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260913232901';
-import { renderHayatEditorView } from './hayateditor.js?v=20260913232901';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260913232901';
-import { renderUserGuideView } from './userguide.js?v=20260913232901';
-import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260913232901';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260913232901';
-import { renderMyProfileView } from './profile.js?v=20260913232901';
-import { renderMySpaceView } from './myspace.js?v=20260913232901';
-import { renderBoardsView } from './boards.js?v=20260913232901';
-import { renderFormationView } from './formation.js?v=20260913232901';
-import { renderRereadView } from './reread.js?v=20260913232901';
-import { registerServiceWorker } from './pwa-register.js?v=20260913232901';
+import { State, canWrite, isAdmin, canReviewApplications, canReviewTeamApplications, isDeptMember, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20260916231621';
+import { renderDashboardView } from './dashboard.js?v=20260916231621';
+import { renderReportsView } from './reports.js?v=20260916231621';
+import { renderHayatView } from './hayatindex.js?v=20260916231621';
+import { renderMatchReviewView } from './matchreview.js?v=20260916231621';
+import { renderBulkImportView } from './bulkimport.js?v=20260916231621';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260916231621';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260916231621';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260916231621';
+import { renderHayatEditorView } from './hayateditor.js?v=20260916231621';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260916231621';
+import { renderUserGuideView } from './userguide.js?v=20260916231621';
+import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260916231621';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260916231621';
+import { renderMyProfileView } from './profile.js?v=20260916231621';
+import { renderMySpaceView } from './myspace.js?v=20260916231621';
+import { renderBoardsView } from './boards.js?v=20260916231621';
+import { renderFormationView } from './formation.js?v=20260916231621';
+import { renderPeopleView } from './people.js?v=20260916231621';
+import { renderRereadView } from './reread.js?v=20260916231621';
+import { registerServiceWorker } from './pwa-register.js?v=20260916231621';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -51,7 +52,8 @@ function getTabs() {
     }
     tabs.push({ id: 'inpageconverter', label: 'InPage Converter' });
   }
-  if (canReviewApplications()) { tabs.push({ id: 'applications', label: 'Team Applications' }); }
+  if (canReviewTeamApplications()) { tabs.push({ id: 'applications', label: 'Team Applications' }); }
+  if (isDeptMember('HR') || isAnyDeptLead() || isAdmin()) { tabs.push({ id: 'people', label: 'People' }); }
   if (canWrite()) { tabs.push({ id: 'tasks', label: 'Tasks' }); }
   // Proof Reader qualification (Options -> Operator qualifications), or Coordinator/Admin.
   if (canReviewApplications() || State.myQualifications.has('PROOF_READER')) { tabs.push({ id: 'reread', label: 'Proofreading' }); }
@@ -102,6 +104,7 @@ function renderTab(id) {
   else if (id === 'announcements') renderAnnouncementsView(main);
   else if (id === 'chat') { canReviewApplications() ? renderAdminMessagesView(main) : renderChatView(main); }
   else if (id === 'applications') renderApplicationsView(main);
+  else if (id === 'people') renderPeopleView(main);
   else if (id === 'tasks') renderTasksView(main);
   else if (id === 'reread') renderRereadView(main);
   else if (id === 'jointeam') renderJoinTeamView(main);

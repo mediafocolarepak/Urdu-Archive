@@ -5,7 +5,7 @@
 // the UI) - only Admin can set 'approved', paired with the actual role promotion in
 // user_roles (already an admin-only action, see 05_roles_and_permissions.sql).
 
-import { sb, State, esc, canReviewApplications, isAdmin, withStatus, nameMapForEmails } from './core.js?v=20260913232901';
+import { sb, State, esc, canReviewTeamApplications, isAdmin, withStatus, nameMapForEmails } from './core.js?v=20260916231621';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -139,12 +139,12 @@ export async function renderJoinTeamView(main) {
 // ---------- Review queue (Coordinator + Admin) ----------
 
 export async function renderApplicationsView(main) {
-  if (!canReviewApplications()) { main.innerHTML = '<div class="empty-msg">Coordinator or Admin access required.</div>'; return; }
+  if (!canReviewTeamApplications()) { main.innerHTML = '<div class="empty-msg">HR or Admin access required.</div>'; return; }
   main.innerHTML = `
     <div class="panel">
       <h2>Team Applications</h2>
       <p class="hint">${isAdmin()
-        ? 'Coordinators recommend candidates here; approving promotes them to Operator directly.'
+        ? 'HR recommends candidates here; approving promotes them to Operator directly.'
         : 'Review requests and recommend candidates to an Admin - only an Admin can give final approval.'}</p>
       <div class="field-grid">
         <div class="field"><label>Status</label>
@@ -171,7 +171,7 @@ async function refreshApplications() {
 
   const list = document.getElementById('apps-list');
   if (!rows.length) { list.innerHTML = '<div class="empty-msg">No applications match this filter.</div>'; return; }
-  const nameMap = await nameMapForEmails(rows.map(r => r.user_email));
+  const nameMap = await nameMapForEmails([...rows.map(r => r.user_email), ...rows.map(r => r.recommended_by_email).filter(Boolean)]);
 
   list.innerHTML = rows.map(r => `
     <div class="panel" data-id="${r.id}" style="margin-bottom:12px;">
@@ -181,6 +181,7 @@ async function refreshApplications() {
       ${r.skills ? `<p><b>Skills:</b> ${esc(r.skills)}</p>` : ''}
       <p><b>Motivation:</b> ${esc(r.motivation)}</p>
       ${r.availability ? `<p><b>Availability:</b> ${esc(r.availability)}</p>` : ''}
+      ${r.recommended_by_email ? `<p class="hint"><b>Recommended by:</b> ${esc(nameMap[r.recommended_by_email] || r.recommended_by_email)}</p>` : ''}
       ${r.coordinator_note ? `<p class="hint"><b>Note:</b> ${esc(r.coordinator_note)}</p>` : ''}
       ${(r.status === 'pending' || r.status === 'recommended') ? `
         <div class="field"><label>Note <span class="hint">(optional, shown to the applicant if not accepted)</span></label>
