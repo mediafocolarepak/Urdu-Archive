@@ -3,9 +3,9 @@
 // Department list is fully data-driven from option_lists ('department') and department_members
 // - departments can be added, renamed or retired from Options without touching this file.
 
-import { sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260918000637';
-import { renderPolicySection } from './policy.js?v=20260918000637';
-import { renderPeopleSection } from './people.js?v=20260918000637';
+import { sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260918002805';
+import { renderPolicySection } from './policy.js?v=20260918002805';
+import { renderPeopleSection } from './people.js?v=20260918002805';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -144,38 +144,51 @@ async function renderCoordinationOverview(box) {
   const approved = rows.filter(r => r.status === 'approved');
   const overdue = claimed.filter(isOverdue);
   const nearDue = claimed.filter(isNearDue);
-  const followUp = [...overdue, ...nearDue].sort((a, b) => (a.due_date || '') < (b.due_date || '') ? -1 : 1);
 
-  const tile = (label, value) => `<div class="field"><label>${esc(label)}</label><div style="font-size:20px;font-weight:600;">${esc(value)}</div></div>`;
   const whoName = uid => { const p = profileByUid[uid] || {}; return p.full_name || p.email || uid || '—'; };
   const daysDiff = due => Math.round((new Date(due) - new Date(todayStr)) / 86400000);
+  const dueCell = r => {
+    if (!r.due_date) return '<span class="hint">—</span>';
+    if (r.status !== 'claimed') return esc(r.due_date);
+    const d = daysDiff(r.due_date);
+    return d < 0 ? `${esc(r.due_date)} <span style="color:var(--danger);font-weight:600;">(${-d}d overdue)</span>`
+      : `${esc(r.due_date)} <span class="hint">(in ${d}d)</span>`;
+  };
+
+  const TABS = [
+    { id: 'open', label: 'Open', rows: open, showAssignee: false, showDue: false },
+    { id: 'claimed', label: 'Claimed', rows: claimed, showAssignee: true, showDue: true },
+    { id: 'submitted', label: 'Awaiting review', rows: submitted, showAssignee: true, showDue: true },
+    { id: 'approved', label: 'Awaiting publish', rows: approved, showAssignee: true, showDue: true },
+    { id: 'overdue', label: 'Overdue', rows: overdue, showAssignee: true, showDue: true },
+    { id: 'neardue', label: `Near due (≤${nearDueDays}d)`, rows: nearDue, showAssignee: true, showDue: true },
+  ];
+  const activeTab = TABS.find(t => t.id === State.myDeptCoordTab) || TABS[0];
+
+  const rowHtml = (r, t) => `<tr>
+    <td>${esc(r.title)}</td>
+    <td>${esc(r.category)}</td>
+    ${t.showAssignee ? `<td>${esc(whoName(r.claimed_by))}</td>` : ''}
+    ${t.showDue ? `<td>${dueCell(r)}</td>` : ''}
+  </tr>`;
 
   box.innerHTML = `
     <div class="panel">
-      <h2>Task flow <span class="hint">— live overview of the open pipeline</span></h2>
-      <div class="field-grid">
-        ${tile('Open (unclaimed)', open.length)}
-        ${tile('Claimed, in progress', claimed.length)}
-        ${tile('Awaiting review', submitted.length)}
-        ${tile('Awaiting publish', approved.length)}
-        ${tile('Overdue', overdue.length)}
-        ${tile(`Near due (≤ ${nearDueDays}d)`, nearDue.length)}
+      <h2>Task flow <span class="hint">— live overview of the open pipeline, same buckets as Tasks</span></h2>
+      <div class="btn-row" style="margin-bottom:12px;flex-wrap:wrap;">
+        ${TABS.map(t => `<button class="btn ${t.id === activeTab.id ? '' : 'secondary'} mydept-coord-tab-btn" data-tab="${t.id}">${t.label} <span class="count-badge">${t.rows.length}</span></button>`).join('')}
       </div>
-      <h3>Needs follow-up <span class="hint">(overdue or near due - reassign/reclaim from Tasks &rarr; Team overview)</span></h3>
       <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>Task</th><th>Category</th><th>Assignee</th><th>Due</th><th></th></tr></thead>
-        <tbody>${followUp.length ? followUp.map(r => {
-          const d = daysDiff(r.due_date);
-          return `<tr>
-            <td>${esc(r.title)}</td>
-            <td>${esc(r.category)}</td>
-            <td>${esc(whoName(r.claimed_by))}</td>
-            <td>${esc(r.due_date)}</td>
-            <td>${d < 0 ? `<span style="color:var(--danger);font-weight:600;">${-d}d overdue</span>` : `<span class="hint">due in ${d}d</span>`}</td>
-          </tr>`;
-        }).join('') : '<tr><td colspan="5" class="empty-msg">Nothing overdue or near due.</td></tr>'}</tbody>
+        <thead><tr><th>Task</th><th>Category</th>${activeTab.showAssignee ? '<th>Assignee</th>' : ''}${activeTab.showDue ? '<th>Due</th>' : ''}</tr></thead>
+        <tbody>${activeTab.rows.length ? activeTab.rows.map(r => rowHtml(r, activeTab)).join('') : `<tr><td colspan="${2 + (activeTab.showAssignee ? 1 : 0) + (activeTab.showDue ? 1 : 0)}" class="empty-msg">Nothing here.</td></tr>`}</tbody>
       </table></div>
+      <p class="hint" style="margin-top:8px;">Read-only - reassign, reclaim, review or publish a task from the Tasks tab, where those actions already work against the real permissions.</p>
     </div>`;
+
+  box.querySelectorAll('.mydept-coord-tab-btn').forEach(btn => btn.addEventListener('click', () => {
+    State.myDeptCoordTab = btn.dataset.tab;
+    renderCoordinationOverview(box);
+  }));
 }
 
 async function renderRewardCredits(box) {
