@@ -3,9 +3,9 @@
 // Department list is fully data-driven from option_lists ('department') and department_members
 // - departments can be added, renamed or retired from Options without touching this file.
 
-import { sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260917235929';
-import { renderPolicySection } from './policy.js?v=20260917235929';
-import { renderPeopleSection } from './people.js?v=20260917235929';
+import { sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260918000637';
+import { renderPolicySection } from './policy.js?v=20260918000637';
+import { renderPeopleSection } from './people.js?v=20260918000637';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -38,6 +38,7 @@ export async function renderMyDepartmentView(main) {
     ${selected === 'HR' ? '<div id="mydept-people-box"></div>' : ''}
     ${selected === 'RF' ? '<div id="mydept-credits-box"></div>' : ''}
     ${selected === 'COORD' ? '<div id="mydept-tasks-box"></div>' : ''}
+    ${selected === 'FORM' ? '<div id="mydept-formation-box"></div>' : ''}
     <div id="mydept-policy-box"></div>`;
 
   if (codes.length > 1) {
@@ -61,7 +62,64 @@ export async function renderMyDepartmentView(main) {
   // excludes open (unclaimed) tasks entirely. Read-only here: reassigning/reclaiming a task
   // stays in Team overview, which already does it correctly against the real RLS.
   if (selected === 'COORD') await renderCoordinationOverview(document.getElementById('mydept-tasks-box'));
+  // Formation needs the pipeline (what's being written, what's published) and a way into each
+  // path to actually coordinate/help - a FORM lead already has full read access to every path
+  // (including drafts) and the formatori-only chat channel via existing RLS (is_any_formatore()
+  // == FORM membership since migration 80), so no new migration is needed here, only the view.
+  if (selected === 'FORM') await renderFormationPipeline(document.getElementById('mydept-formation-box'));
   await renderPolicySection(document.getElementById('mydept-policy-box'), { departmentFilter: selected });
+}
+
+async function renderFormationPipeline(box) {
+  const [paths, editorRows, chatRows] = await Promise.all([
+    withStatus(sb.from('formation_paths').select('id,title,target_audience,status,owner_id,course_starts_at,course_ends_at').order('created_at', { ascending: false })),
+    withStatus(sb.from('formation_path_editors').select('path_id,user_id')),
+    withStatus(sb.from('formation_chat_messages').select('path_id,created_at').eq('channel', 'formatori').order('created_at', { ascending: false })),
+  ]);
+  const ownerIds = [...new Set(paths.map(p => p.owner_id))];
+  const profileRows = ownerIds.length
+    ? await withStatus(sb.from('user_profiles').select('user_id,email,full_name').in('user_id', ownerIds))
+    : [];
+  const profileByUid = {};
+  for (const p of profileRows) profileByUid[p.user_id] = p;
+  const coAuthorCount = {};
+  for (const e of editorRows) coAuthorCount[e.path_id] = (coAuthorCount[e.path_id] || 0) + 1;
+  const activityCount = {};
+  const lastActivity = {};
+  for (const m of chatRows) { // rows are newest-first, so the first hit per path is the last activity
+    activityCount[m.path_id] = (activityCount[m.path_id] || 0) + 1;
+    if (!lastActivity[m.path_id]) lastActivity[m.path_id] = m.created_at;
+  }
+  const ownerName = uid => { const p = profileByUid[uid] || {}; return p.full_name || p.email || uid || '—'; };
+
+  const row = p => `<tr>
+    <td>${esc(p.title)}</td>
+    <td>${esc(p.target_audience) || '<span class="hint">—</span>'}</td>
+    <td>${esc(ownerName(p.owner_id))}</td>
+    <td>${coAuthorCount[p.id] || 0}</td>
+    <td>${p.course_starts_at || p.course_ends_at ? `${esc(p.course_starts_at) || '?'} &rarr; ${esc(p.course_ends_at) || '?'}` : '<span class="hint">not scheduled yet</span>'}</td>
+    <td>${activityCount[p.id] ? `${activityCount[p.id]} msgs &middot; last ${esc((lastActivity[p.id] || '').slice(0, 10))}` : '<span class="hint">none yet</span>'}</td>
+    <td><button class="btn secondary mydept-open-path-btn" data-id="${p.id}" style="padding:4px 10px;">Open</button></td>
+  </tr>`;
+  const section = (title, hint, rows) => `
+    <h3 style="margin-top:16px;">${esc(title)} <span class="count-badge">${rows.length}</span> ${hint ? `<span class="hint">${esc(hint)}</span>` : ''}</h3>
+    <div class="grid-wrap"><table class="grid">
+      <thead><tr><th>Title</th><th>Audience</th><th>Owner</th><th>Co-authors</th><th>Course dates</th><th>Formatori chat</th><th></th></tr></thead>
+      <tbody>${rows.length ? rows.map(row).join('') : '<tr><td colspan="7" class="hint">None.</td></tr>'}</tbody>
+    </table></div>`;
+
+  box.innerHTML = `
+    <div class="panel">
+      <h2>Formation pipeline <span class="hint">— every path, open one to coordinate or help tune it</span></h2>
+      ${section('In progress', '— being written, not yet published (drafts)', paths.filter(p => p.status === 'draft'))}
+      ${section('Published', '', paths.filter(p => p.status === 'published'))}
+      ${(() => { const arch = paths.filter(p => p.status === 'archived'); return arch.length ? section('Archived', '', arch) : ''; })()}
+    </div>`;
+
+  box.querySelectorAll('.mydept-open-path-btn').forEach(btn => btn.addEventListener('click', () => {
+    State.formationSelectedPathId = parseInt(btn.dataset.id, 10);
+    document.querySelector('.tab-btn[data-tab="formation"]')?.click();
+  }));
 }
 
 async function renderCoordinationOverview(box) {
