@@ -444,7 +444,7 @@ Answered by the Owner on 2026-09-16 unless noted. One item still open (8.6).
    | HR | Mehwish |
    | Coordination | Sikander Innocent |
    | Formation | Gina Yaqoob (2026-09-16: replaces Aster Saleem) |
-   | Reward | Naeem Sohail (not yet registered as of 2026-09-16; appoint once he signs up) |
+   | Reward | Naeem Sohail (2026-09-17: appointed, now registered) |
    | Communication | Larissa |
 
    Alessandro = Owner + Admin (technical). Sheril = engineering: not a department in this
