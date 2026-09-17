@@ -3,9 +3,9 @@
 // Department list is fully data-driven from option_lists ('department') and department_members
 // - departments can be added, renamed or retired from Options without touching this file.
 
-import { sb, State, esc, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260917234604';
-import { renderPolicySection } from './policy.js?v=20260917234604';
-import { renderPeopleSection } from './people.js?v=20260917234604';
+import { sb, State, esc, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260917235357';
+import { renderPolicySection } from './policy.js?v=20260917235357';
+import { renderPeopleSection } from './people.js?v=20260917235357';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -36,6 +36,7 @@ export async function renderMyDepartmentView(main) {
     </div>
     <div id="mydept-roster-box"></div>
     ${selected === 'HR' ? '<div id="mydept-people-box"></div>' : ''}
+    ${selected === 'RF' ? '<div id="mydept-credits-box"></div>' : ''}
     <div id="mydept-policy-box"></div>`;
 
   if (codes.length > 1) {
@@ -50,7 +51,44 @@ export async function renderMyDepartmentView(main) {
   // People roster (GOVERNANCE.md §6.2) belongs here too, per the owner's request 2026-09-17, so
   // an HR lead doesn't have to bounce between My Department and the standalone People tab.
   if (selected === 'HR') await renderPeopleSection(document.getElementById('mydept-people-box'));
+  // Reward needs to see credits in circulation to tune rates/tiers and, later, plan compensation
+  // runs (GOVERNANCE.md §6.4, migration 88) - same numbers Admin already sees in Tasks -> Budget,
+  // read-only here (topping up the budget stays an Owner/Admin action, decision matrix row 16).
+  if (selected === 'RF') await renderRewardCredits(document.getElementById('mydept-credits-box'));
   await renderPolicySection(document.getElementById('mydept-policy-box'), { departmentFilter: selected });
+}
+
+async function renderRewardCredits(box) {
+  const [overviewRows, ledgerRows] = await Promise.all([
+    withStatus(sb.rpc('reward_credit_overview')),
+    withStatus(sb.from('budget_ledger').select('*').order('created_at', { ascending: false })),
+  ]);
+  const o = overviewRows[0] || { open_credits: 0, in_progress_credits: 0, to_redeem_credits: 0, redeemed_credits: 0, budget: 0 };
+  const used = o.open_credits + o.in_progress_credits + o.to_redeem_credits + o.redeemed_credits;
+  const available = o.budget - used;
+  const tile = (label, value) => `<div class="field"><label>${esc(label)}</label><div style="font-size:20px;font-weight:600;">${esc(value)}</div></div>`;
+
+  box.innerHTML = `
+    <div class="panel">
+      <h2>Credits in circulation <span class="hint">— live, GOVERNANCE.md §6.4</span></h2>
+      <p class="hint">Every credit currently posted, claimed, awaiting review, or already published - useful for tuning rates and reputation tiers (Policy, below), and later for planning compensation runs.</p>
+      <div class="field-grid">
+        ${tile('Budget', o.budget)}
+        ${tile('Available', available)}
+        ${tile('Posted, not claimed', o.open_credits)}
+        ${tile('Claimed, in progress', o.in_progress_credits)}
+        ${tile('Approved, to redeem', o.to_redeem_credits)}
+        ${tile('Redeemed (published)', o.redeemed_credits)}
+      </div>
+      <p class="hint" style="margin-top:8px;">Topping up the budget stays an Owner/Admin action (Tasks &rarr; Budget).</p>
+      <h3>Top-up history</h3>
+      <div class="grid-wrap"><table class="grid">
+        <thead><tr><th>Date</th><th>Amount</th><th>Note</th><th>Added by</th></tr></thead>
+        <tbody>${ledgerRows.length ? ledgerRows.map(r => `
+          <tr><td>${esc((r.created_at || '').slice(0, 10))}</td><td>${esc(r.amount)}</td><td>${esc(r.note) || '—'}</td><td>${esc(r.created_by_email) || '—'}</td></tr>
+        `).join('') : '<tr><td colspan="4" class="empty-msg">No top-ups recorded yet.</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
 }
 
 async function renderRoster(code) {

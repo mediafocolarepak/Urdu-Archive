@@ -10,7 +10,7 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails } from './core.js?v=20260917234604';
+import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails } from './core.js?v=20260917235357';
 
 // Standard prompt for drafting a quiz with an AI tool (GOVERNANCE.md §2.3), shared by the
 // "Copy prompt" button below and the matching Help entry (see supabase/83_formation_ai_prompt_help.sql)
