@@ -428,6 +428,11 @@ export function isAnyDeptLead() { return State.myDepartments.some(d => d.is_lead
 // so this is purely a client-side narrowing of who sees the tab, not the real gate.
 export function canReviewTeamApplications() { return isDeptMember('HR') || isAdmin(); }
 
+// Policy revision framework (GOVERNANCE.md §2.8/§6.6, migration 86) - mirrors
+// can_propose_policy_change()/can_approve_policy_change() server-side; RLS is the real gate.
+export function canProposePolicyChange(departmentCode) { return isAdmin() || isDeptLead(departmentCode); }
+export function canApprovePolicyChange() { return isAdmin(); }
+
 // ---------- Standing widget (credits + reputation, shown in the topbar for Operator+) ----------
 
 const GOOD_PRACTICES = [

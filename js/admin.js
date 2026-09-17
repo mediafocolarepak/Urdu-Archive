@@ -1,4 +1,5 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken } from './core.js?v=20260917011147';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange } from './core.js?v=20260917011147';
+import { openPolicyProposalModal, ownersFor } from './policy.js?v=20260917011147';
 
 // ---------- Users ----------
 
@@ -148,16 +149,12 @@ export async function renderOptionsView(main) {
       <div id="opt-editor"></div>
     </div>
     <div class="panel">
-      <h2>Task reputation tiers <span class="hint">— reputation deltas by task size (base credits)</span></h2>
-      <div id="reptiers-editor"></div>
-    </div>
-    <div class="panel">
       <h2>Departments <span class="hint">— membership and leads, see GOVERNANCE.md §2 and §4</span></h2>
       <div id="dept-editor"></div>
     </div>
     <div class="panel">
-      <h2>Policy values <span class="hint">— thresholds editable by Admin instead of hard-coded, see GOVERNANCE.md §8.3-§8.4</span></h2>
-      <div id="policy-editor"></div>
+      <h2>Policy <span class="hint">— task category rates, reputation tiers and thresholds</span></h2>
+      <p class="hint">These moved to a propose/approve workflow (GOVERNANCE.md §2.8): no one, including Admin, edits them directly here any more. See <strong>People</strong> to view current values, propose a change (department leads), or approve/reject a pending proposal (Admin).</p>
     </div>
     <div class="panel">
       <h2>Maintenance <span class="hint">— one-off data cleanup tools</span></h2>
@@ -173,9 +170,7 @@ export async function renderOptionsView(main) {
     </div>`;
   document.getElementById('opt-list-select').addEventListener('change', e => { State.optionsSelectedList = e.target.value; renderOptionsEditor(); });
   await renderOptionsEditor();
-  await renderReputationTiersEditor();
   await renderDepartmentsEditor();
-  await renderPolicyValuesEditor();
   wireBackfillPageCounts();
 }
 
@@ -246,76 +241,6 @@ async function runBackfillPageCounts() {
   if (!backfillStopRequested) progress.textContent += ' — done.';
   startBtn.style.display = 'inline-block';
   stopBtn.style.display = 'none';
-}
-
-async function renderReputationTiersEditor() {
-  const box = document.getElementById('reptiers-editor');
-  const rows = await withStatus(sb.from('task_reputation_tiers').select('*').order('sort_order'));
-  box.innerHTML = `
-    <div class="grid-wrap"><table class="grid">
-      <thead><tr><th>Tier</th><th>Min base credits</th><th>Max base credits</th><th>OK</th><th>OK, but...</th><th>Fail / Reject</th><th>Sort order</th><th></th></tr></thead>
-      <tbody>${rows.map(r => `<tr data-tier="${esc(r.tier_name)}">
-        <td><input class="rt-name" value="${esc(r.tier_name)}" style="width:90px;"></td>
-        <td><input class="rt-min" type="number" value="${esc(r.min_base_credits)}" style="width:70px;"></td>
-        <td><input class="rt-max" type="number" value="${r.max_base_credits ?? ''}" placeholder="none" style="width:70px;"></td>
-        <td><input class="rt-ok" type="number" value="${esc(r.ok_delta)}" style="width:60px;"></td>
-        <td><input class="rt-okbut" type="number" value="${esc(r.ok_but_delta)}" style="width:60px;"></td>
-        <td><input class="rt-fail" type="number" value="${esc(r.fail_delta)}" style="width:60px;"></td>
-        <td><input class="rt-order" type="number" value="${esc(r.sort_order)}" style="width:60px;"></td>
-        <td><button class="btn secondary rt-save" style="padding:4px 10px;">Save</button>
-            <button class="btn danger rt-delete" style="padding:4px 10px;">Delete</button></td>
-      </tr>`).join('')}
-      <tr data-tier="">
-        <td><input class="rt-name" placeholder="Tier name" style="width:90px;"></td>
-        <td><input class="rt-min" type="number" value="0" style="width:70px;"></td>
-        <td><input class="rt-max" type="number" placeholder="none" style="width:70px;"></td>
-        <td><input class="rt-ok" type="number" value="0" style="width:60px;"></td>
-        <td><input class="rt-okbut" type="number" value="0" style="width:60px;"></td>
-        <td><input class="rt-fail" type="number" value="0" style="width:60px;"></td>
-        <td><input class="rt-order" type="number" value="${rows.length + 1}" style="width:60px;"></td>
-        <td><button class="btn rt-add" style="padding:4px 10px;">Add</button></td>
-      </tr>
-      </tbody>
-    </table></div>
-    <p class="hint" style="margin-top:8px;">Leave "Max base credits" empty for an open-ended top tier. A task's tier is matched by its base credits (rate &times; pages), not by the total including any extra credits.</p>
-  `;
-  function readRow(tr) {
-    const tier_name = tr.querySelector('.rt-name').value.trim();
-    const min_base_credits = parseInt(tr.querySelector('.rt-min').value, 10) || 0;
-    const maxRaw = tr.querySelector('.rt-max').value.trim();
-    const max_base_credits = maxRaw === '' ? null : parseInt(maxRaw, 10);
-    const ok_delta = parseInt(tr.querySelector('.rt-ok').value, 10) || 0;
-    const ok_but_delta = parseInt(tr.querySelector('.rt-okbut').value, 10) || 0;
-    const fail_delta = parseInt(tr.querySelector('.rt-fail').value, 10) || 0;
-    const sort_order = parseInt(tr.querySelector('.rt-order').value, 10) || 0;
-    return { tier_name, min_base_credits, max_base_credits, ok_delta, ok_but_delta, fail_delta, sort_order };
-  }
-  box.querySelectorAll('tr[data-tier]:not([data-tier=""])').forEach(tr => {
-    const originalName = tr.dataset.tier;
-    tr.querySelector('.rt-save').addEventListener('click', async () => {
-      const row = readRow(tr);
-      if (!row.tier_name) { alert('Tier name is required.'); return; }
-      const { data: { user } } = await sb.auth.getUser();
-      if (row.tier_name !== originalName) {
-        await withStatus(sb.from('task_reputation_tiers').delete().eq('tier_name', originalName));
-      }
-      await withStatus(sb.from('task_reputation_tiers').upsert({ ...row, updated_at: new Date().toISOString(), updated_by_email: user.email }), 'Saving...');
-      await renderReputationTiersEditor();
-    });
-    tr.querySelector('.rt-delete').addEventListener('click', async () => {
-      if (!confirm(`Remove tier "${originalName}"?`)) return;
-      await withStatus(sb.from('task_reputation_tiers').delete().eq('tier_name', originalName));
-      await renderReputationTiersEditor();
-    });
-  });
-  const addRow = box.querySelector('tr[data-tier=""]');
-  addRow.querySelector('.rt-add').addEventListener('click', async () => {
-    const row = readRow(addRow);
-    if (!row.tier_name) { alert('Tier name is required.'); return; }
-    const { data: { user } } = await sb.auth.getUser();
-    await withStatus(sb.from('task_reputation_tiers').insert({ ...row, updated_at: new Date().toISOString(), updated_by_email: user.email }), 'Adding...');
-    await renderReputationTiersEditor();
-  });
 }
 
 // ---------- Departments (membership + one lead per department, GOVERNANCE.md §2/§4) ----------
@@ -392,38 +317,6 @@ async function refreshDepartmentMembers(deptCode) {
   }));
 }
 
-// ---------- Policy values (thresholds editable by Admin, GOVERNANCE.md §8.3-§8.4) ----------
-
-async function renderPolicyValuesEditor() {
-  const box = document.getElementById('policy-editor');
-  const rows = await withStatus(sb.from('policy_values').select('*').order('key'));
-  box.innerHTML = `
-    <div class="grid-wrap"><table class="grid">
-      <thead><tr><th>Key</th><th>Meaning</th><th>Value</th><th></th></tr></thead>
-      <tbody>${rows.map(r => `<tr data-key="${esc(r.key)}">
-        <td><code>${esc(r.key)}</code></td>
-        <td style="white-space:normal;">${esc(r.label)}</td>
-        <td><input class="pv-value" type="number" value="${esc(r.value)}" style="width:90px;"></td>
-        <td><button class="btn secondary pv-save" style="padding:4px 10px;">Save</button></td>
-      </tr>`).join('')}</tbody>
-    </table></div>`;
-  box.querySelectorAll('tr[data-key]').forEach(tr => {
-    tr.querySelector('.pv-save').addEventListener('click', async () => {
-      const value = parseInt(tr.querySelector('.pv-value').value, 10);
-      if (Number.isNaN(value)) { alert('Value must be a number.'); return; }
-      const { data: { user } } = await sb.auth.getUser();
-      await withStatus(sb.from('policy_values').update({ value, updated_at: new Date().toISOString(), updated_by_email: user.email }).eq('key', tr.dataset.key), 'Saving...');
-      await loadPolicyValuesIntoState();
-    });
-  });
-}
-
-async function loadPolicyValuesIntoState() {
-  const rows = await withStatus(sb.from('policy_values').select('key,value'));
-  State.policyValues = {};
-  for (const p of rows) State.policyValues[p.key] = p.value;
-}
-
 async function renderOptionsEditor() {
   const box = document.getElementById('opt-editor');
   const isTaskCategory = State.optionsSelectedList === 'task_category';
@@ -434,7 +327,13 @@ async function renderOptionsEditor() {
     for (const r of rateRows) rateByCode[r.category] = r.credits_per_page;
   }
   const rateHeadCell = isTaskCategory ? '<th>Credits/page</th>' : '';
-  const rateCell = code => isTaskCategory ? `<td><input class="opt-rate" type="number" min="0" step="0.5" value="${esc(rateByCode[code] ?? 0)}" style="width:70px;"></td>` : '';
+  const canProposeRate = isTaskCategory && canProposePolicyChange('RF');
+  const rateCell = code => {
+    if (!isTaskCategory) return '';
+    const rate = rateByCode[code];
+    const proposeBtn = canProposeRate ? `<button class="btn secondary opt-propose-rate" data-category="${esc(code)}" data-rate="${esc(rate ?? 0)}" style="padding:2px 8px;margin-left:6px;">Propose</button>` : '';
+    return `<td>${rate == null ? '<span class="hint">not set</span>' : esc(rate)}${proposeBtn}</td>`;
+  };
   box.innerHTML = `
     <div class="grid-wrap"><table class="grid">
       <thead><tr><th>Code</th><th>Label</th><th>Sort order</th>${rateHeadCell}<th></th></tr></thead>
@@ -450,13 +349,13 @@ async function renderOptionsEditor() {
         <td><input class="opt-code" placeholder="NEWCODE" style="width:90px;"></td>
         <td><input class="opt-label" placeholder="New option label"></td>
         <td><input class="opt-order" type="number" value="${rows.length + 1}" style="width:70px;"></td>
-        ${isTaskCategory ? '<td><input class="opt-rate" type="number" min="0" step="0.5" value="0" style="width:70px;"></td>' : ''}
+        ${isTaskCategory ? '<td><span class="hint">set after creating, below</span></td>' : ''}
         <td><button class="btn opt-add" style="padding:4px 10px;">Add</button></td>
       </tr>
       </tbody>
     </table></div>
     <p class="hint" style="margin-top:8px;">Changing or removing a code here does not update documents that already use the old code — edit those separately if needed.</p>
-    ${isTaskCategory ? '<p class="hint">Credits/page is the base rate used to suggest a task\'s credits (rate &times; document pages) when creating a task in that category - see the Tasks tab.</p>' : ''}
+    ${isTaskCategory ? '<p class="hint">Credits/page (GOVERNANCE.md §2.8) is no longer edited here - it moved to a propose/approve workflow, see People &rarr; Policy. A brand-new category has no rate until a Reward lead proposes one there.</p>' : ''}
   `;
   box.querySelectorAll('tr[data-code]:not([data-code=""])').forEach(tr => {
     const originalCode = tr.dataset.code;
@@ -467,25 +366,29 @@ async function renderOptionsEditor() {
       if (!code || !label) { alert('Code and label are required.'); return; }
       if (code !== originalCode) {
         await withStatus(sb.from('option_lists').delete().eq('list_name', State.optionsSelectedList).eq('code', originalCode));
-        if (isTaskCategory) await withStatus(sb.from('task_category_rates').delete().eq('category', originalCode));
       }
       await withStatus(sb.from('option_lists').upsert({ list_name: State.optionsSelectedList, code, label, sort_order: sortOrder }), 'Saving...');
-      if (isTaskCategory) {
-        const { data: { user } } = await sb.auth.getUser();
-        const rate = parseFloat(tr.querySelector('.opt-rate').value) || 0;
-        await withStatus(sb.from('task_category_rates').upsert({ category: code, credits_per_page: rate, updated_at: new Date().toISOString(), updated_by_email: user.email }), 'Saving...');
-      }
       await loadOptions();
       await renderOptionsEditor();
     });
     tr.querySelector('.opt-delete').addEventListener('click', async () => {
       if (!confirm(`Remove option "${originalCode}" from this list?`)) return;
       await withStatus(sb.from('option_lists').delete().eq('list_name', State.optionsSelectedList).eq('code', originalCode));
-      if (isTaskCategory) await withStatus(sb.from('task_category_rates').delete().eq('category', originalCode));
       await loadOptions();
       await renderOptionsEditor();
     });
   });
+  if (isTaskCategory) {
+    box.querySelectorAll('.opt-propose-rate').forEach(btn => btn.addEventListener('click', () => {
+      openPolicyProposalModal({
+        title: `Propose a rate change — ${btn.dataset.category}`,
+        targetTable: 'task_category_rates', targetKey: btn.dataset.category, action: 'upsert',
+        owners: ownersFor('task_category_rates'),
+        fields: [{ name: 'credits_per_page', label: 'Credits per page', type: 'number', value: btn.dataset.rate }],
+        onSaved: renderOptionsEditor,
+      });
+    }));
+  }
   const addRow = box.querySelector('tr[data-code=""]');
   addRow.querySelector('.opt-add').addEventListener('click', async () => {
     const code = addRow.querySelector('.opt-code').value.trim();
@@ -493,13 +396,17 @@ async function renderOptionsEditor() {
     const sortOrder = parseInt(addRow.querySelector('.opt-order').value, 10) || 0;
     if (!code || !label) { alert('Code and label are required.'); return; }
     await withStatus(sb.from('option_lists').insert({ list_name: State.optionsSelectedList, code, label, sort_order: sortOrder }), 'Adding...');
-    if (isTaskCategory) {
-      const { data: { user } } = await sb.auth.getUser();
-      const rate = parseFloat(addRow.querySelector('.opt-rate').value) || 0;
-      await withStatus(sb.from('task_category_rates').upsert({ category: code, credits_per_page: rate, updated_at: new Date().toISOString(), updated_by_email: user.email }), 'Saving...');
-    }
     await loadOptions();
     await renderOptionsEditor();
+    if (isTaskCategory && canProposePolicyChange('RF')) {
+      openPolicyProposalModal({
+        title: `Propose the initial rate — ${code}`,
+        targetTable: 'task_category_rates', targetKey: code, action: 'upsert',
+        owners: ownersFor('task_category_rates'),
+        fields: [{ name: 'credits_per_page', label: 'Credits per page', type: 'number', value: 0 }],
+        onSaved: renderOptionsEditor,
+      });
+    }
   });
 }
 
