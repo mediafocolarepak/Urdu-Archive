@@ -172,6 +172,48 @@ Who may post:
   never waived is the rule on each single decision: the person who proposes does not approve.
 - Admin (technical) may be a member of any department but should not lead HR or Reward while also being the only Admin — otherwise the separation in principle 2 is empty.
 
+### 2.8 Policy revision process
+
+The platform is in an experimental, trial phase (started 2026-09-17): none of the operational
+policy tables (`task_category_rates`, `task_reputation_tiers`, `policy_values`, and any future
+editable policy table) are meant to be final. They must stay changeable for as long as the
+project runs — but a change must never be a single Admin's unilateral decision. It is a team
+decision that an Admin only **applies**.
+
+**Who owns which policy table** (who may propose a change to it):
+- `task_category_rates`, `task_reputation_tiers`, extra-credit thresholds — Reward (§2.4)
+- risk thresholds (`risk_negative_events`, `risk_reputation_below`, `risk_window_days`) — HR and
+  Reward jointly (§2.1, §2.4)
+- board-related policy values (`board_misuse_reputation_delta`) — Formation and HR jointly (§2.6)
+- any future policy value — the department whose mission it serves; ambiguous cases go to the
+  Owner.
+
+**Process:**
+1. **Propose.** Any department lead may draft a policy change: which table/key, the current
+   value, the proposed value, and the reason. The proposal is recorded — never applied directly.
+2. **Review.** The team (Admins and department leads) reviews the proposal — in a meeting, on a
+   call, or however the group works at the time; the process does not require a specific review
+   medium, only that the outcome is recorded.
+3. **Approve or reject.** An Admin who is not the proposer applies the decision. Approving a
+   change writes the new value to the live table (with `updated_by_email` and a link back to the
+   proposal); rejecting closes the proposal with a reason. An Admin may never change a policy
+   table's value except by applying an already-decided proposal — never on their own initiative
+   alone (principle 2, §1).
+4. **Record.** Every department keeps its own policy revision history: every proposal, who
+   proposed it, the decision, who decided, and when — visible to that department's members and to
+   Admin, forever (nothing is deleted, same as `task_outcome_events` and the people-decision log).
+5. **Consult.** The current value of every policy table stays visible to everyone for read-only
+   consultation; editing happens only through this process, never through a direct table edit
+   outside it.
+
+This mirrors principle 2 (§1) — the one who proposes does not approve — applied to policy
+instead of people. It generalizes row 13 of the decision matrix (§4) beyond Reward's two tables,
+and formalizes what row 14 ("Compensation policy... recorded in Policy document (repo)") always
+implied: a policy document in the repo (e.g. `docs/REWARD_POLICY.md`) is the trial-phase
+substitute for this in-app workflow, not a replacement for it. Once §6.6 is built, in-app
+proposals become the record of truth; the repo document becomes a human-readable summary kept in
+sync with it, not the primary record.
+
 ---
 
 ## 3. Technical roles (unchanged)
@@ -213,8 +255,8 @@ proposed.
 | 10 | Grant extra credits beyond the rate | Coordinator (with note) | Lead Coordination if above the threshold in Options (§8.3) | Reward | `tasks.extra_credits`, note |
 | 11 | Reclaim a task (reputation penalty) | Coordinator | — (must give reason) | Person | `task_outcome_events` |
 | 12 | Final publish / reject of a reviewed task | Revisor/Coordinator (verdict) | Admin | Person | `task_outcome_events` |
-| 13 | Change rate table or reputation tiers | Reward | Lead Reward; Admin applies | Coordination | `task_category_rates`, `task_reputation_tiers` (with `updated_by_email`) |
-| 14 | Compensation policy (credit → money) | Reward | Owner | Everyone | Policy document (repo) |
+| 13 | Change any policy table value (rates, tiers, thresholds — see §2.8 for who owns which) | Owning department's lead | Admin who is not the proposer, after team review (§2.8) | Owning department | `task_category_rates`, `task_reputation_tiers`, `policy_values` (with `updated_by_email`); per-department policy revision history (§2.8, §6.6) |
+| 14 | Compensation policy (credit → money) | Reward | Owner | Everyone | Policy document (repo), trial phase — see §2.8 |
 | 15 | Execute a compensation run | Reward | Lead Reward + Owner | Persons paid | Reward records (outside app for now) |
 | 16 | Budget top-up | Owner | Owner | Reward | `budget_ledger` |
 | 17 | Publish a formation path | Formatore | Lead Formation | — | `formation_paths` |
@@ -396,6 +438,32 @@ Ordered by dependency. Each item names the phase in §7.
 ### 6.5 Communication (no phase)
 - Nothing required. A "What's new" block on the Dashboard fed by Announcements is a nice-to-have.
 
+### 6.6 Policy revision framework (phase 3, cross-department — see §2.8)
+Not started. Technical design pending; sketch below to guide it, not a spec to build from as-is.
+- A `policy_proposals` table (or similarly named): department_code, target table, target
+  key/row, proposed field changes (old/new), rationale, proposed_by, status
+  (pending/approved/rejected/withdrawn), decided_by, decided_at, decision note. Append-only, like
+  `task_outcome_events` and the people-decision log — nothing is ever deleted.
+- `propose_policy_change(...)`: any lead of the owning department (§2.8) may call it; inserts a
+  pending proposal, changes nothing yet.
+- `approve_policy_change(id)` / `reject_policy_change(id, note)`: Admin only, and not the same
+  user who proposed. Approving writes the new value into the real table
+  (`task_category_rates` / `task_reputation_tiers` / `policy_values`) inside the same
+  transaction, with `updated_by_email` pointing at the approving Admin and a reference back to
+  the proposal.
+- RLS: remove the current direct `admin_update` policy on `task_category_rates`,
+  `task_reputation_tiers` and `policy_values` (today any Admin can write them unilaterally —
+  exactly what §2.8 says must stop). All writes to these tables go through
+  `approve_policy_change()`, `security definer`, which is the only path that can move a value
+  from proposed to live.
+- UI: a read-only "Current policy" view for everyone (replaces direct editing in the existing
+  Departments/Policy values admin panels); a "Propose change" action for department leads; a
+  "Pending proposals" queue for Admin (approve/reject with note); a per-department "Policy
+  history" view (mirrors the People tab's per-person decision history, §6.2).
+- Until this is built, policy changes are made the trial-phase way: an Admin edits the table
+  directly, but only after a decision recorded in a document like `docs/REWARD_POLICY.md` — the
+  same discipline the schema will later enforce, applied by hand.
+
 ---
 
 ## 7. Implementation phases and who works on them
@@ -450,8 +518,14 @@ Answered by the Owner on 2026-09-16 unless noted. One item still open (8.6).
    Alessandro = Owner + Admin (technical). Sheril = engineering: not a department in this
    scheme but a standing role with its own workflow (`COLLABORATION.md`).
 6. **Where do Reward records that are not in the app live** (compensation policy, payment
-   references) — repo (`docs/`), shared drive, both? **Still open** — for the Reward lead to
-   propose.
+   references) — **repo, `docs/`** (answered 2026-09-17: `docs/REWARD_POLICY.md`, approved by
+   Alessandro Maggi as Admin as a trial policy pending Naeem Sohail's review — see §2.8).
 7. **Exclusion (row 6):** remove the role, **keep the account and the ledger** — history must
    survive the person leaving. Nothing is ever deleted from `task_outcome_events` or
    `people_decisions`.
+8. **Policy tables must stay revisable for the whole life of the project, never frozen as
+   "final"** (decided 2026-09-17, prompted by writing the first Reward policy in the trial
+   phase): every change is a team decision an Admin applies, never a single Admin's unilateral
+   edit. Process in §2.8; the in-app framework to enforce it technically is planned (§6.6,
+   phase 3) but not yet built — until then the discipline is applied by hand, through a policy
+   document like `docs/REWARD_POLICY.md`.
