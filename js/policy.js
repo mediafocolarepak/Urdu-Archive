@@ -6,7 +6,7 @@
 // People: any department lead or Admin) and from admin.js (per-row "Propose..." buttons that
 // replace the old direct-edit inputs on the reputation-tiers/policy-values/task-category panels).
 
-import { sb, State, esc, withStatus, canProposePolicyChange, canApprovePolicyChange } from './core.js?v=20260917011147';
+import { sb, State, esc, withStatus, canProposePolicyChange, canApprovePolicyChange } from './core.js?v=20260917230345';
 
 // Who may propose a change to each policy_values key (GOVERNANCE.md §2.8 "who owns which
 // policy table"). task_category_rates and task_reputation_tiers are Reward's alone.
@@ -91,22 +91,26 @@ export function openPolicyProposalModal({ title, targetTable, targetKey, action,
 
 // ---------- The "Policy" section: read-only current values, pending queue, history ----------
 
-export async function renderPolicySection(container) {
+export async function renderPolicySection(container, { departmentFilter } = {}) {
   container.innerHTML = '<div class="hint">Loading...</div>';
-  const [rates, tiers, values, proposals] = await Promise.all([
+  const [rates, tiers, values, proposalsRaw] = await Promise.all([
     withStatus(sb.from('task_category_rates').select('*').order('category')),
     withStatus(sb.from('task_reputation_tiers').select('*').order('sort_order')),
     withStatus(sb.from('policy_values').select('*').order('key')),
     withStatus(sb.from('policy_proposals').select('*').order('proposed_at', { ascending: false })),
   ]);
+  const proposals = departmentFilter ? proposalsRaw.filter(p => p.department_code === departmentFilter) : proposalsRaw;
   const pending = proposals.filter(p => p.status === 'pending');
   const history = proposals.filter(p => p.status !== 'pending');
   const { data: { user } } = await sb.auth.getUser();
   const myEmail = user.email;
   const depts = State.optionListsByName.department || [];
   const canProposeAny = owners => owners.some(d => canProposePolicyChange(d));
+  // In a department-scoped view (My Department), a table/row is shown only if this department
+  // is one of its owners - otherwise it isn't this department's business, keep the view short.
+  const owns = owners => !departmentFilter || owners.includes(departmentFilter);
 
-  container.innerHTML = `
+  const ratesPanel = owns(ownersFor('task_category_rates')) ? `
     <div class="panel">
       <h2>Task category rates <span class="hint">— credits per page, owned by Reward (GOVERNANCE.md §2.4)</span></h2>
       <div class="grid-wrap"><table class="grid">
@@ -118,7 +122,8 @@ export async function renderPolicySection(container) {
             : `<span class="hint">Owned by ${ownersFor('task_category_rates').map(deptLabel).join(' / ')}</span>`}</td>
         </tr>`).join('')}</tbody>
       </table></div>
-    </div>
+    </div>` : '';
+  const tiersPanel = owns(ownersFor('task_reputation_tiers')) ? `
     <div class="panel">
       <h2>Task reputation tiers <span class="hint">— owned by Reward</span></h2>
       <div class="grid-wrap"><table class="grid">
@@ -131,23 +136,25 @@ export async function renderPolicySection(container) {
             : `<span class="hint">Owned by ${ownersFor('task_reputation_tiers').map(deptLabel).join(' / ')}</span>`}</td>
         </tr>`).join('')}</tbody>
       </table></div>
-    </div>
+    </div>` : '';
+  const valueRows = values.filter(v => owns(ownersFor('policy_values', v.key)));
+  const valuesPanel = valueRows.length ? `
     <div class="panel">
       <h2>Policy values <span class="hint">— thresholds, ownership varies by key (GOVERNANCE.md §2.8)</span></h2>
       <div class="grid-wrap"><table class="grid">
         <thead><tr><th>Key</th><th>Meaning</th><th>Value</th><th></th></tr></thead>
-        <tbody>${values.map(v => `<tr>
+        <tbody>${valueRows.map(v => `<tr>
           <td><code>${esc(v.key)}</code></td><td style="white-space:normal;">${esc(v.label)}</td><td>${esc(v.value)}</td>
           <td>${canProposeAny(ownersFor('policy_values', v.key))
             ? `<button class="btn secondary pp-propose-value" style="padding:4px 10px;" data-key="${esc(v.key)}" data-value="${esc(v.value)}">Propose change</button>`
             : `<span class="hint">Owned by ${ownersFor('policy_values', v.key).map(deptLabel).join(' / ')}</span>`}</td>
         </tr>`).join('')}</tbody>
-      </table></div>
-    </div>
+      </table></div>` : '';
+  const historyPanel = departmentFilter ? `
     <div class="panel">
-      <h2>Pending policy proposals</h2>
-      <div id="policy-pending-box"></div>
-    </div>
+      <h2>Policy history <span class="hint">— every proposal for this department, kept forever</span></h2>
+      <div id="policy-history-box"></div>
+    </div>` : `
     <div class="panel">
       <h2>Policy history <span class="hint">— every proposal, per department, kept forever</span></h2>
       <div class="field" style="max-width:280px;"><label>Department</label>
@@ -156,13 +163,22 @@ export async function renderPolicySection(container) {
       <div id="policy-history-box"></div>
     </div>`;
 
+  container.innerHTML = `
+    ${ratesPanel}${tiersPanel}${valuesPanel}
+    ${!ratesPanel && !tiersPanel && !valuesPanel ? '<div class="panel"><p class="empty-msg">This department does not own any policy table yet.</p></div>' : ''}
+    <div class="panel">
+      <h2>Pending policy proposals</h2>
+      <div id="policy-pending-box"></div>
+    </div>
+    ${historyPanel}`;
+
   container.querySelectorAll('.pp-propose-rate').forEach(btn => btn.addEventListener('click', () => {
     openPolicyProposalModal({
       title: `Propose a rate change — ${btn.dataset.category}`,
       targetTable: 'task_category_rates', targetKey: btn.dataset.category, action: 'upsert',
       owners: ownersFor('task_category_rates'),
       fields: [{ name: 'credits_per_page', label: 'Credits per page', type: 'number', value: btn.dataset.rate }],
-      onSaved: () => renderPolicySection(container),
+      onSaved: () => renderPolicySection(container, { departmentFilter }),
     });
   }));
   container.querySelectorAll('.pp-propose-tier').forEach(btn => btn.addEventListener('click', () => {
@@ -180,7 +196,7 @@ export async function renderPolicySection(container) {
         { name: 'fail_delta', label: 'Fail delta', type: 'number', value: t.fail_delta },
         { name: 'sort_order', label: 'Sort order', type: 'number', value: t.sort_order },
       ],
-      onSaved: () => renderPolicySection(container),
+      onSaved: () => renderPolicySection(container, { departmentFilter }),
     });
   }));
   container.querySelectorAll('.pp-propose-value').forEach(btn => btn.addEventListener('click', () => {
@@ -189,12 +205,12 @@ export async function renderPolicySection(container) {
       targetTable: 'policy_values', targetKey: btn.dataset.key, action: 'upsert',
       owners: ownersFor('policy_values', btn.dataset.key),
       fields: [{ name: 'value', label: 'Value', type: 'number', value: btn.dataset.value }],
-      onSaved: () => renderPolicySection(container),
+      onSaved: () => renderPolicySection(container, { departmentFilter }),
     });
   }));
 
-  renderPendingQueue(pending, myEmail, container);
-  wireHistory(history, container);
+  renderPendingQueue(pending, myEmail, container, departmentFilter);
+  wireHistory(history, container, departmentFilter);
 }
 
 function fieldChangesSummary(p) {
@@ -202,7 +218,7 @@ function fieldChangesSummary(p) {
   return Object.entries(p.field_changes || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
 }
 
-function renderPendingQueue(pending, myEmail, container) {
+function renderPendingQueue(pending, myEmail, container, departmentFilter) {
   const box = document.getElementById('policy-pending-box');
   if (!box) return;
   if (!pending.length) { box.innerHTML = '<div class="empty-msg">Nothing pending.</div>'; return; }
@@ -231,7 +247,7 @@ function renderPendingQueue(pending, myEmail, container) {
     if (!confirm('Withdraw this proposal?')) return;
     const { error } = await sb.rpc('decide_policy_change', { p_id: parseInt(btn.closest('tr').dataset.id, 10), p_outcome: 'withdrawn' });
     if (error) { alert(error.message); return; }
-    renderPolicySection(container);
+    renderPolicySection(container, { departmentFilter });
   }));
   box.querySelectorAll('.pp-approve-btn').forEach(btn => btn.addEventListener('click', async () => {
     if (!confirm('Approve this policy change? It becomes live immediately.')) return;
@@ -242,7 +258,7 @@ function renderPendingQueue(pending, myEmail, container) {
     const { data: policyRows } = await sb.from('policy_values').select('key,value');
     State.policyValues = {};
     for (const p of (policyRows || [])) State.policyValues[p.key] = p.value;
-    renderPolicySection(container);
+    renderPolicySection(container, { departmentFilter });
   }));
   box.querySelectorAll('.pp-reject-btn').forEach(btn => btn.addEventListener('click', async () => {
     const note = prompt('A note is required when rejecting - it will be visible to the proposer:');
@@ -250,15 +266,15 @@ function renderPendingQueue(pending, myEmail, container) {
     if (!note.trim()) { alert('A note is required when rejecting.'); return; }
     const { error } = await sb.rpc('decide_policy_change', { p_id: parseInt(btn.closest('tr').dataset.id, 10), p_outcome: 'rejected', p_note: note.trim() });
     if (error) { alert(error.message); return; }
-    renderPolicySection(container);
+    renderPolicySection(container, { departmentFilter });
   }));
 }
 
-function wireHistory(history, container) {
-  const sel = document.getElementById('policy-history-dept');
+function wireHistory(history, container, departmentFilter) {
+  const sel = document.getElementById('policy-history-dept'); // absent when departmentFilter is set - see historyPanel above
   const box = document.getElementById('policy-history-box');
   function render() {
-    const filtered = sel.value ? history.filter(p => p.department_code === sel.value) : history;
+    const filtered = sel && sel.value ? history.filter(p => p.department_code === sel.value) : history;
     if (!filtered.length) { box.innerHTML = '<div class="empty-msg">No decided proposals yet.</div>'; return; }
     box.innerHTML = `
       <div class="grid-wrap"><table class="grid">
@@ -276,6 +292,6 @@ function wireHistory(history, container) {
         </tr>`).join('')}</tbody>
       </table></div>`;
   }
-  sel.addEventListener('change', render);
+  if (sel) sel.addEventListener('change', render);
   render();
 }
