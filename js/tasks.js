@@ -7,7 +7,7 @@
 // un'operazione tecnica). RLS impedisce di toccare un task preso da qualcun altro (vedi
 // 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel vincolo, non lo sostituiscono.
 
-import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName } from './core.js?v=20260918004412';
+import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName } from './core.js?v=20260918004854';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -323,18 +323,36 @@ async function renderMineView(body, user) {
     for (const c of candidates) candidateByTaskId[c.source_task_id] = c.document_id;
   }
 
+  const active = rows.filter(t => t.status === 'claimed');
+  const submitted = rows.filter(t => t.status === 'submitted');
+  const closed = rows.filter(t => ['approved', 'rejected', 'published'].includes(t.status));
+  const MINE_TABS = [['active', 'In progress', active.length], ['submitted', 'Waiting for review', submitted.length], ['closed', 'Closed', closed.length]];
+  if (!MINE_TABS.some(([id]) => id === State.mineTab)) State.mineTab = 'active';
+
   body.innerHTML = `
     <div class="btn-row"><button class="btn secondary" id="mine-credits-btn">My credits</button></div>
     <div id="mine-ledger" style="display:none;margin-top:12px;"></div>
-    <h3>In progress</h3><div id="mine-active-list"></div>
-    <h3>Waiting for review</h3><div id="mine-submitted-list"></div>
-    <h3>Closed</h3><div id="mine-closed-list"></div>`;
+    <div class="btn-row" style="margin:16px 0 0;flex-wrap:wrap;">
+      ${MINE_TABS.map(([id, label, count]) => `<button class="btn ${id === State.mineTab ? '' : 'secondary'} mine-tab-btn" data-tab="${id}">${label} <span class="count-badge">${count}</span></button>`).join('')}
+    </div>
+    <div id="mine-active-section" style="${State.mineTab === 'active' ? '' : 'display:none;'}"><div id="mine-active-list"></div></div>
+    <div id="mine-submitted-section" style="${State.mineTab === 'submitted' ? '' : 'display:none;'}"><div id="mine-submitted-list"></div></div>
+    <div id="mine-closed-section" style="${State.mineTab === 'closed' ? '' : 'display:none;'}"><div id="mine-closed-list"></div></div>`;
 
-  renderMineActiveList(rows.filter(t => t.status === 'claimed'), candidateByTaskId);
-  renderMineSubmittedList(rows.filter(t => t.status === 'submitted'));
-  renderMineClosedList(rows.filter(t => ['approved', 'rejected', 'published'].includes(t.status)));
+  renderMineActiveList(active, candidateByTaskId);
+  renderMineSubmittedList(submitted);
+  renderMineClosedList(closed);
 
   document.getElementById('mine-credits-btn').addEventListener('click', () => toggleLedger(user));
+  // Tab switch just toggles which already-rendered section is visible - all three are cheap and
+  // already fetched together above, so there's no need to re-query on every click.
+  body.querySelectorAll('.mine-tab-btn').forEach(btn => btn.addEventListener('click', () => {
+    State.mineTab = btn.dataset.tab;
+    document.getElementById('mine-active-section').style.display = State.mineTab === 'active' ? '' : 'none';
+    document.getElementById('mine-submitted-section').style.display = State.mineTab === 'submitted' ? '' : 'none';
+    document.getElementById('mine-closed-section').style.display = State.mineTab === 'closed' ? '' : 'none';
+    body.querySelectorAll('.mine-tab-btn').forEach(b => b.classList.toggle('secondary', b.dataset.tab !== State.mineTab));
+  }));
 }
 
 async function toggleLedger(user) {
@@ -342,18 +360,20 @@ async function toggleLedger(user) {
   if (box.style.display === 'block') { box.style.display = 'none'; return; }
   box.style.display = 'block';
   box.innerHTML = '<div class="hint">Loading...</div>';
-  const [events, pending] = await Promise.all([
+  const [events, pending, redeemed] = await Promise.all([
     withStatus(sb.from('task_outcome_events').select('credit_delta').eq('user_id', user.id)),
     withStatus(sb.from('tasks').select('credits').eq('claimed_by', user.id).in('status', ['claimed', 'submitted', 'approved'])),
+    withStatus(sb.from('tasks').select('credits').eq('claimed_by', user.id).eq('status', 'published')),
   ]);
   const earned = events.reduce((sum, e) => sum + (e.credit_delta || 0), 0);
   const inProgress = pending.reduce((sum, t) => sum + (t.credits || 0), 0);
+  const redeemedTotal = redeemed.reduce((sum, t) => sum + (t.credits || 0), 0);
   box.innerHTML = `
     <div class="panel">
       <div class="field-grid">
         <div class="field"><label>Earned</label><div style="font-size:20px;font-weight:600;">${esc(earned)}</div></div>
         <div class="field"><label>In progress <span class="hint">(if approved)</span></label><div style="font-size:20px;font-weight:600;">${esc(inProgress)}</div></div>
-        <div class="field"><label>Redeemed</label><div style="font-size:20px;font-weight:600;">0 <span class="hint">(not available yet)</span></div></div>
+        <div class="field"><label>Redeemed <span class="hint">(published)</span></label><div style="font-size:20px;font-weight:600;">${esc(redeemedTotal)}</div></div>
       </div>
     </div>`;
 }
