@@ -7,8 +7,8 @@
 
 import {
   sb, State, esc, withStatus, isAdmin, isDeptMember, isDeptLead, labelOf, optionsHtml,
-} from './core.js?v=20260917230345';
-import { renderPolicySection } from './policy.js?v=20260917230345';
+} from './core.js?v=20260917234604';
+import { renderPolicySection } from './policy.js?v=20260917234604';
 
 const STANDING_BADGE = {
   active: '',
@@ -37,6 +37,11 @@ function canApproveTypeClientSide(type) {
   return false;
 }
 
+// Tracks whichever container last rendered the roster (People tab or My Department's embedded
+// section), so a successful propose can refresh that same section in place instead of assuming
+// it's always the standalone People tab.
+let currentRosterContainer = null;
+
 let decisionTypes = null; // [[code,label]] from option_lists, loaded once per People tab visit
 async function loadDecisionTypes() {
   if (decisionTypes) return decisionTypes;
@@ -47,9 +52,34 @@ async function loadDecisionTypes() {
 
 export async function renderPeopleView(main) {
   main.innerHTML = '<div class="panel"><h2>People</h2><div class="empty-msg">Loading...</div></div>';
-  const [rows] = await Promise.all([withStatus(sb.rpc('hr_people_overview')), loadDecisionTypes()]);
+  await loadDecisionTypes();
 
   main.innerHTML = `
+    <div id="people-section-box"></div>
+    <div class="panel">
+      <h2>Pending decisions</h2>
+      <div id="people-pending-box"><div class="hint">Loading...</div></div>
+    </div>
+    <div id="policy-section-box"></div>`;
+
+  await renderPeopleSection(document.getElementById('people-section-box'));
+  renderPendingDecisions(main);
+  renderPolicySection(document.getElementById('policy-section-box'));
+}
+
+// The roster grid (search/standing/at-risk/department/role/qualification filters, sortable
+// Name/Credits/Reputation/Since, Propose.../History per row) as a self-contained section -
+// reusable wherever it's useful, not just the People tab: mydepartment.js embeds it in HR's
+// "My Department" page too (2026-09-17, owner's request), instead of duplicating the grid.
+export async function renderPeopleSection(container) {
+  currentRosterContainer = container; // see openProposePopup's refresh-after-save below
+  container.innerHTML = '<div class="panel"><h2>People</h2><div class="empty-msg">Loading...</div></div>';
+  await loadDecisionTypes();
+  const rows = await withStatus(sb.rpc('hr_people_overview'));
+  const deptOptions = State.optionListsByName.department || [];
+  const qualOptions = State.optionListsByName.operator_qualification || [];
+
+  container.innerHTML = `
     <div class="panel">
       <h2>People <span class="count-badge">${rows.length}</span> <span class="hint">— GOVERNANCE.md §6.2</span></h2>
       <div class="field-grid">
@@ -62,6 +92,15 @@ export async function renderPeopleView(main) {
             <option value="suspended" ${State.peopleFilter.standing === 'suspended' ? 'selected' : ''}>Suspended</option>
           </select>
         </div>
+        <div class="field"><label>Department</label>
+          <select id="people-department-filter"><option value="">All</option>${deptOptions.map(([c, l]) => `<option value="${esc(c)}" ${State.peopleFilter.department === c ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Role</label>
+          <select id="people-role-filter"><option value="">All</option>${ROLE_OPTIONS.map(([c, l]) => `<option value="${esc(c)}" ${State.peopleFilter.role === c ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Qualification</label>
+          <select id="people-qualification-filter"><option value="">All</option>${qualOptions.map(([c, l]) => `<option value="${esc(c)}" ${State.peopleFilter.qualification === c ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+        </div>
         <div class="field"><label>&nbsp;</label>
           <label style="display:flex;align-items:center;gap:6px;font-weight:normal;text-transform:none;">
             <input type="checkbox" id="people-atrisk-filter" ${State.peopleFilter.atRiskOnly ? 'checked' : ''}> At risk only
@@ -69,20 +108,23 @@ export async function renderPeopleView(main) {
         </div>
       </div>
       <div id="people-grid-box"></div>
-    </div>
-    <div class="panel">
-      <h2>Pending decisions</h2>
-      <div id="people-pending-box"><div class="hint">Loading...</div></div>
-    </div>
-    <div id="policy-section-box"></div>`;
+    </div>`;
 
   document.getElementById('people-search').addEventListener('input', e => { State.peopleFilter.search = e.target.value; renderPeopleGrid(rows); });
   document.getElementById('people-standing-filter').addEventListener('change', e => { State.peopleFilter.standing = e.target.value; renderPeopleGrid(rows); });
+  document.getElementById('people-department-filter').addEventListener('change', e => { State.peopleFilter.department = e.target.value; renderPeopleGrid(rows); });
+  document.getElementById('people-role-filter').addEventListener('change', e => { State.peopleFilter.role = e.target.value; renderPeopleGrid(rows); });
+  document.getElementById('people-qualification-filter').addEventListener('change', e => { State.peopleFilter.qualification = e.target.value; renderPeopleGrid(rows); });
   document.getElementById('people-atrisk-filter').addEventListener('change', e => { State.peopleFilter.atRiskOnly = e.target.checked; renderPeopleGrid(rows); });
 
   renderPeopleGrid(rows);
-  renderPendingDecisions(main);
-  renderPolicySection(document.getElementById('policy-section-box'));
+}
+
+// department_code/qualification_code tokens in a comma-joined "CODE (lead)?, CODE, ..." string
+// (see hr_people_overview()'s string_agg columns) - split and match exactly, not a substring
+// search, so e.g. filtering "HR" never matches a hypothetical "HRX" department.
+function hasToken(joined, code) {
+  return (joined || '').split(',').some(seg => seg.trim().replace(/\s*\(lead\)$/, '') === code);
 }
 
 function renderPeopleGrid(allRows) {
@@ -93,6 +135,9 @@ function renderPeopleGrid(allRows) {
   let rows = allRows.filter(r =>
     (!q || (r.full_name || '').toLowerCase().includes(q) || (r.email || '').toLowerCase().includes(q)) &&
     (!f.standing || r.standing === f.standing) &&
+    (!f.department || hasToken(r.departments, f.department)) &&
+    (!f.role || r.role === f.role) &&
+    (!f.qualification || hasToken(r.qualifications, f.qualification)) &&
     (!f.atRiskOnly || r.at_risk));
 
   const sortCol = State.peopleSort.col;
@@ -242,7 +287,7 @@ function openProposePopup(row, allRows) {
     const { error } = await sb.rpc('propose_people_decision', { p_subject: row.user_id, p_type: type, p_reason: reason, p_payload: payload });
     if (error) { errBox.textContent = error.message; return; }
     backdrop.remove();
-    await renderPeopleView(document.getElementById('main'));
+    if (currentRosterContainer) await renderPeopleSection(currentRosterContainer);
   });
 }
 

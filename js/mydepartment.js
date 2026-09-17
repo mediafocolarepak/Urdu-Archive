@@ -3,8 +3,9 @@
 // Department list is fully data-driven from option_lists ('department') and department_members
 // - departments can be added, renamed or retired from Options without touching this file.
 
-import { sb, State, esc, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260917230345';
-import { renderPolicySection } from './policy.js?v=20260917230345';
+import { sb, State, esc, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260917234604';
+import { renderPolicySection } from './policy.js?v=20260917234604';
+import { renderPeopleSection } from './people.js?v=20260917234604';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -34,6 +35,7 @@ export async function renderMyDepartmentView(main) {
         : `<p class="hint">${esc(deptLabel(selected))}</p>`}
     </div>
     <div id="mydept-roster-box"></div>
+    ${selected === 'HR' ? '<div id="mydept-people-box"></div>' : ''}
     <div id="mydept-policy-box"></div>`;
 
   if (codes.length > 1) {
@@ -44,6 +46,10 @@ export async function renderMyDepartmentView(main) {
   }
 
   await renderRoster(selected);
+  // HR's job is org-wide people oversight, not just its own small team (§Team above) - the full
+  // People roster (GOVERNANCE.md §6.2) belongs here too, per the owner's request 2026-09-17, so
+  // an HR lead doesn't have to bounce between My Department and the standalone People tab.
+  if (selected === 'HR') await renderPeopleSection(document.getElementById('mydept-people-box'));
   await renderPolicySection(document.getElementById('mydept-policy-box'), { departmentFilter: selected });
 }
 
