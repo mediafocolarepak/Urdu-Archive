@@ -278,6 +278,7 @@ export const State = {
   peopleFilter: { search: '', standing: '', atRiskOnly: false },
   optionsSelectedList: 'category',
   deptEditorSelected: null,  // department_code currently shown in Options -> Departments
+  myDeptSelected: null,  // department_code currently shown in My Department (mydepartment.js)
   docCollections: [],  // { document_id, collection_code, page_number } for the open document
   optionListsByName: {},  // option_lists rows grouped by list_name, as [code,label] pairs - generic lookup used by SessionCache/combobox
   hayatEditorEdition: '',
