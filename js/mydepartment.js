@@ -3,9 +3,9 @@
 // Department list is fully data-driven from option_lists ('department') and department_members
 // - departments can be added, renamed or retired from Options without touching this file.
 
-import { sb, State, esc, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260917235357';
-import { renderPolicySection } from './policy.js?v=20260917235357';
-import { renderPeopleSection } from './people.js?v=20260917235357';
+import { sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260917235929';
+import { renderPolicySection } from './policy.js?v=20260917235929';
+import { renderPeopleSection } from './people.js?v=20260917235929';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -37,6 +37,7 @@ export async function renderMyDepartmentView(main) {
     <div id="mydept-roster-box"></div>
     ${selected === 'HR' ? '<div id="mydept-people-box"></div>' : ''}
     ${selected === 'RF' ? '<div id="mydept-credits-box"></div>' : ''}
+    ${selected === 'COORD' ? '<div id="mydept-tasks-box"></div>' : ''}
     <div id="mydept-policy-box"></div>`;
 
   if (codes.length > 1) {
@@ -55,7 +56,68 @@ export async function renderMyDepartmentView(main) {
   // runs (GOVERNANCE.md §6.4, migration 88) - same numbers Admin already sees in Tasks -> Budget,
   // read-only here (topping up the budget stays an Owner/Admin action, decision matrix row 16).
   if (selected === 'RF') await renderRewardCredits(document.getElementById('mydept-credits-box'));
+  // Coordination needs a live flow overview - counts plus who to follow up with - since
+  // Tasks -> Team overview (js/tasks.js) only ever shows a filtered list, no counts, and
+  // excludes open (unclaimed) tasks entirely. Read-only here: reassigning/reclaiming a task
+  // stays in Team overview, which already does it correctly against the real RLS.
+  if (selected === 'COORD') await renderCoordinationOverview(document.getElementById('mydept-tasks-box'));
   await renderPolicySection(document.getElementById('mydept-policy-box'), { departmentFilter: selected });
+}
+
+async function renderCoordinationOverview(box) {
+  const rows = await withStatus(sb.rpc('coordination_task_overview'));
+  const claimedIds = [...new Set(rows.filter(r => r.claimed_by).map(r => r.claimed_by))];
+  const profileRows = claimedIds.length
+    ? await withStatus(sb.from('user_profiles').select('user_id,email,full_name').in('user_id', claimedIds))
+    : [];
+  const profileByUid = {};
+  for (const p of profileRows) profileByUid[p.user_id] = p;
+
+  const nearDueDays = State.policyValues.task_near_due_days ?? 3;
+  const todayStr = today();
+  const nearDueLimit = new Date(); nearDueLimit.setDate(nearDueLimit.getDate() + nearDueDays);
+
+  const isOverdue = r => r.status === 'claimed' && r.due_date && r.due_date < todayStr;
+  const isNearDue = r => r.status === 'claimed' && r.due_date && !isOverdue(r) && new Date(r.due_date) <= nearDueLimit;
+
+  const open = rows.filter(r => r.status === 'open');
+  const claimed = rows.filter(r => r.status === 'claimed');
+  const submitted = rows.filter(r => r.status === 'submitted');
+  const approved = rows.filter(r => r.status === 'approved');
+  const overdue = claimed.filter(isOverdue);
+  const nearDue = claimed.filter(isNearDue);
+  const followUp = [...overdue, ...nearDue].sort((a, b) => (a.due_date || '') < (b.due_date || '') ? -1 : 1);
+
+  const tile = (label, value) => `<div class="field"><label>${esc(label)}</label><div style="font-size:20px;font-weight:600;">${esc(value)}</div></div>`;
+  const whoName = uid => { const p = profileByUid[uid] || {}; return p.full_name || p.email || uid || '—'; };
+  const daysDiff = due => Math.round((new Date(due) - new Date(todayStr)) / 86400000);
+
+  box.innerHTML = `
+    <div class="panel">
+      <h2>Task flow <span class="hint">— live overview of the open pipeline</span></h2>
+      <div class="field-grid">
+        ${tile('Open (unclaimed)', open.length)}
+        ${tile('Claimed, in progress', claimed.length)}
+        ${tile('Awaiting review', submitted.length)}
+        ${tile('Awaiting publish', approved.length)}
+        ${tile('Overdue', overdue.length)}
+        ${tile(`Near due (≤ ${nearDueDays}d)`, nearDue.length)}
+      </div>
+      <h3>Needs follow-up <span class="hint">(overdue or near due - reassign/reclaim from Tasks &rarr; Team overview)</span></h3>
+      <div class="grid-wrap"><table class="grid">
+        <thead><tr><th>Task</th><th>Category</th><th>Assignee</th><th>Due</th><th></th></tr></thead>
+        <tbody>${followUp.length ? followUp.map(r => {
+          const d = daysDiff(r.due_date);
+          return `<tr>
+            <td>${esc(r.title)}</td>
+            <td>${esc(r.category)}</td>
+            <td>${esc(whoName(r.claimed_by))}</td>
+            <td>${esc(r.due_date)}</td>
+            <td>${d < 0 ? `<span style="color:var(--danger);font-weight:600;">${-d}d overdue</span>` : `<span class="hint">due in ${d}d</span>`}</td>
+          </tr>`;
+        }).join('') : '<tr><td colspan="5" class="empty-msg">Nothing overdue or near due.</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
 }
 
 async function renderRewardCredits(box) {
