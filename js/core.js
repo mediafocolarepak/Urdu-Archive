@@ -275,7 +275,7 @@ export const State = {
   matchSelectedId: null,
   usersSort: { col: 'full_name', asc: true },
   peopleSort: { col: 'full_name', asc: true },
-  peopleFilter: { search: '', standing: '', atRiskOnly: false },
+  peopleFilter: { search: '', standing: '', atRiskOnly: false, department: '', role: '', qualification: '' },
   optionsSelectedList: 'category',
   deptEditorSelected: null,  // department_code currently shown in Options -> Departments
   myDeptSelected: null,  // department_code currently shown in My Department (mydepartment.js)
