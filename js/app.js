@@ -1,25 +1,25 @@
-import { State, canWrite, isAdmin, canReviewApplications, canReviewTeamApplications, isDeptMember, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20260918003325';
-import { renderDashboardView } from './dashboard.js?v=20260918003325';
-import { renderReportsView } from './reports.js?v=20260918003325';
-import { renderHayatView } from './hayatindex.js?v=20260918003325';
-import { renderMatchReviewView } from './matchreview.js?v=20260918003325';
-import { renderBulkImportView } from './bulkimport.js?v=20260918003325';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260918003325';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260918003325';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260918003325';
-import { renderHayatEditorView } from './hayateditor.js?v=20260918003325';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260918003325';
-import { renderUserGuideView } from './userguide.js?v=20260918003325';
-import { renderJoinTeamView, renderApplicationsView } from './collaboration.js?v=20260918003325';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260918003325';
-import { renderMyProfileView } from './profile.js?v=20260918003325';
-import { renderMySpaceView } from './myspace.js?v=20260918003325';
-import { renderBoardsView } from './boards.js?v=20260918003325';
-import { renderFormationView } from './formation.js?v=20260918003325';
-import { renderPeopleView } from './people.js?v=20260918003325';
-import { renderMyDepartmentView } from './mydepartment.js?v=20260918003325';
-import { renderRereadView } from './reread.js?v=20260918003325';
-import { registerServiceWorker } from './pwa-register.js?v=20260918003325';
+import { State, canWrite, isAdmin, canReviewApplications, isDeptMember, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20260918004412';
+import { renderDashboardView } from './dashboard.js?v=20260918004412';
+import { renderReportsView } from './reports.js?v=20260918004412';
+import { renderHayatView } from './hayatindex.js?v=20260918004412';
+import { renderMatchReviewView } from './matchreview.js?v=20260918004412';
+import { renderBulkImportView } from './bulkimport.js?v=20260918004412';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260918004412';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260918004412';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260918004412';
+import { renderHayatEditorView } from './hayateditor.js?v=20260918004412';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260918004412';
+import { renderUserGuideView } from './userguide.js?v=20260918004412';
+import { renderJoinTeamView } from './collaboration.js?v=20260918004412';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260918004412';
+import { renderMyProfileView } from './profile.js?v=20260918004412';
+import { renderMySpaceView } from './myspace.js?v=20260918004412';
+import { renderBoardsView } from './boards.js?v=20260918004412';
+import { renderFormationView } from './formation.js?v=20260918004412';
+import { renderPeopleView } from './people.js?v=20260918004412';
+import { renderMyDepartmentView } from './mydepartment.js?v=20260918004412';
+import { renderRereadView } from './reread.js?v=20260918004412';
+import { registerServiceWorker } from './pwa-register.js?v=20260918004412';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -53,7 +53,6 @@ function getTabs() {
     }
     tabs.push({ id: 'inpageconverter', label: 'InPage Converter' });
   }
-  if (canReviewTeamApplications()) { tabs.push({ id: 'applications', label: 'Team Applications' }); }
   if (isDeptMember('HR') || isAnyDeptLead() || isAdmin()) { tabs.push({ id: 'people', label: 'People' }); }
   if (State.myDepartments.length > 0 || isAdmin()) { tabs.push({ id: 'mydepartment', label: 'My Department' }); }
   if (canWrite()) { tabs.push({ id: 'tasks', label: 'Tasks' }); }
@@ -105,7 +104,6 @@ function renderTab(id) {
   else if (id === 'inpageconverter') renderInPageConverterView(main);
   else if (id === 'announcements') renderAnnouncementsView(main);
   else if (id === 'chat') { canReviewApplications() ? renderAdminMessagesView(main) : renderChatView(main); }
-  else if (id === 'applications') renderApplicationsView(main);
   else if (id === 'people') renderPeopleView(main);
   else if (id === 'mydepartment') renderMyDepartmentView(main);
   else if (id === 'tasks') renderTasksView(main);
