@@ -8,6 +8,7 @@
 import {
   sb, State, esc, withStatus, isAdmin, isDeptMember, isDeptLead, labelOf, optionsHtml,
 } from './core.js?v=20260917011147';
+import { renderPolicySection } from './policy.js?v=20260917011147';
 
 const STANDING_BADGE = {
   active: '',
@@ -72,7 +73,8 @@ export async function renderPeopleView(main) {
     <div class="panel">
       <h2>Pending decisions</h2>
       <div id="people-pending-box"><div class="hint">Loading...</div></div>
-    </div>`;
+    </div>
+    <div id="policy-section-box"></div>`;
 
   document.getElementById('people-search').addEventListener('input', e => { State.peopleFilter.search = e.target.value; renderPeopleGrid(rows); });
   document.getElementById('people-standing-filter').addEventListener('change', e => { State.peopleFilter.standing = e.target.value; renderPeopleGrid(rows); });
@@ -80,6 +82,7 @@ export async function renderPeopleView(main) {
 
   renderPeopleGrid(rows);
   renderPendingDecisions(main);
+  renderPolicySection(document.getElementById('policy-section-box'));
 }
 
 function renderPeopleGrid(allRows) {
