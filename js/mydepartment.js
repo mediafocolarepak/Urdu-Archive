@@ -3,9 +3,10 @@
 // Department list is fully data-driven from option_lists ('department') and department_members
 // - departments can be added, renamed or retired from Options without touching this file.
 
-import { sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260918002805';
-import { renderPolicySection } from './policy.js?v=20260918002805';
-import { renderPeopleSection } from './people.js?v=20260918002805';
+import { sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260918003325';
+import { renderPolicySection } from './policy.js?v=20260918003325';
+import { renderPeopleSection } from './people.js?v=20260918003325';
+import { renderApplicationsView } from './collaboration.js?v=20260918003325';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -35,6 +36,7 @@ export async function renderMyDepartmentView(main) {
         : `<p class="hint">${esc(deptLabel(selected))}</p>`}
     </div>
     <div id="mydept-roster-box"></div>
+    ${selected === 'HR' ? '<div id="mydept-applications-box"></div>' : ''}
     ${selected === 'HR' ? '<div id="mydept-people-box"></div>' : ''}
     ${selected === 'RF' ? '<div id="mydept-credits-box"></div>' : ''}
     ${selected === 'COORD' ? '<div id="mydept-tasks-box"></div>' : ''}
@@ -49,9 +51,12 @@ export async function renderMyDepartmentView(main) {
   }
 
   await renderRoster(selected);
-  // HR's job is org-wide people oversight, not just its own small team (§Team above) - the full
-  // People roster (GOVERNANCE.md §6.2) belongs here too, per the owner's request 2026-09-17, so
-  // an HR lead doesn't have to bounce between My Department and the standalone People tab.
+  // HR's work starts with Team Applications (screening candidates before they're even Operators)
+  // and continues with the People roster (GOVERNANCE.md §6.2) once they're on the team - both
+  // belong here, per the owner's request 2026-09-17/18, so an HR lead doesn't have to bounce
+  // between My Department and two separate standalone tabs. Reused as-is (same component the
+  // standalone Team Applications tab uses), not duplicated.
+  if (selected === 'HR') await renderApplicationsView(document.getElementById('mydept-applications-box'));
   if (selected === 'HR') await renderPeopleSection(document.getElementById('mydept-people-box'));
   // Reward needs to see credits in circulation to tune rates/tiers and, later, plan compensation
   // runs (GOVERNANCE.md §6.4, migration 88) - same numbers Admin already sees in Tasks -> Budget,
