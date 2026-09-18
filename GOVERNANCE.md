@@ -1,7 +1,17 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.4 (2026-09-18) — decisions taken by the Owner; all of phases 1 through 3 are built and
-merged (migrations 80–93). Team comments welcome, changes go through a new version.**
+**Status: v1.5 (2026-09-18) — decisions taken by the Owner; all of phases 1 through 3 are built and
+merged (migrations 80–94). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.5:** same day as v1.1–v1.4, later session, one new migration. Two additions,
+requested together when the Owner asked for a plain-language map of how the whole system fits
+together (see the two-poles framing opening §2 below, and PROJECT_HANDOFF_v34.md):
+- **Internal team communications**, deferred since v26/§6.8 of earlier versions, is built: a
+  private "Team channel" per department (§5.3, migration 94), closing that long-open gap.
+- §2 now opens with the **two-poles framing** — Material (Formation, Coordination) vs. People
+  (HR, Reward), with Communication working across both — the same structure already implicit in
+  the department list, now written down explicitly because it turned out to be the clearest way
+  to explain the whole system to someone seeing it for the first time.
 
 **What changed in v1.4:** same day as v1.1–v1.3, later session, no new migration. The formation
 path editor gained a "Generate image prompt" button (§5.4): composes a ready-to-paste AI-image
@@ -68,6 +78,20 @@ the team, session by session).
 ---
 
 ## 2. Departments
+
+Five departments, but two objects. Two departments own **the material** — the Urdu texts that
+enter the archive and leave it again as published documents and formation paths: **Formation**
+(§2.3, builds the paths, brings material into the pipeline) and **Coordination** (§2.2, runs the
+translation → typing → proofreading → revision → publication pipeline that the Operators execute).
+Two more own **the people** who do that work, not the material itself: **HR** (§2.1, admits and
+monitors Operators) and **Reward** (§2.4, distributes credits — and, later, compensation — for the
+work done). **Communication** (§2.5) belongs to neither object: it promotes what Formation and
+Coordination produce, and it recruits toward HR, working in close contact with both sides without
+owning either.
+
+This split is why the separation-of-duties rule in §1.2 draws its lines where it does: the
+department that decides *what work gets done* (Coordination) is never the same one that decides
+*who is fit to do it* (HR) or *what that work is worth* (Reward).
 
 ### 2.1 HR (Human Resources)
 
@@ -353,9 +377,18 @@ low-priority known gaps.
   stored thing is the HR decision (`watch`), never the heuristic itself.
 - **My Department**: one screen per department (HR, Coordination, Formation, Reward), each
   showing that department's own working view (roster, applications/People for HR, task-flow
-  overview for Coordination, course pipeline for Formation, credit circulation for Reward) plus
-  the shared Policy section (§5.6). Team Applications no longer exists as a separate top-level
-  tab — it lives inside My Department → HR.
+  overview for Coordination, course pipeline for Formation, credit circulation for Reward), a
+  shared **Team channel** (below) and the shared Policy section (§5.6). Team Applications no
+  longer exists as a separate top-level tab — it lives inside My Department → HR.
+- **Team channel** (migration 94, `department_messages`): the internal team communications
+  deferred since v26/§6.8 of earlier versions — a private message thread per department, visible
+  only to that department's members and Admin, distinct from Boards (§2.6, public and moderated)
+  and from the admin↔user chat (`chat_messages`, 1:1 ticketing). Any department member can post
+  and reply; the department lead (or Admin) can pin a message; the author can edit or delete their
+  own message within 15 minutes of posting, enforced server-side by a field-separation trigger so
+  an edit can't sneak in a pin and vice versa. Images attach through a **private** storage bucket
+  (`department-media`) — unlike `board-media`, not public, since the whole point of this channel
+  is that it stays internal to the department.
 
 ### 5.4 Formation, boards and quiz import
 - `FORM` department membership (not `board_editors`) gates who may create formation paths;
@@ -516,13 +549,14 @@ Pre-dates migrations 80–93; not a regression, but not matched to the letter of
 Low priority: formation paths go through the same document revision/approval workflow before
 their content reaches the archive (row 18), so this doesn't bypass the archive's own review.
 
-### 6.8 Known gap: two technical-role enforcement items from earlier handoffs
-Carried over, not touched by migrations 80–93:
+### 6.8 Known gap: department-lead appointment isn't RLS-enforced
+Carried over, not touched by migrations 80–94:
 - "Only the Owner appoints department leads" (row 8) is a written rule, not an RLS-enforced one —
   any Admin can currently write `department_members`. Harmless today (Owner is the sole Admin);
   revisit if/when a second Admin is added.
-- Internal team communications (a private lead-to-team channel, distinct from the public,
-  moderated Boards) — explicitly deferred by the Owner, no design started.
+
+(Internal team communications, the other item that used to be listed here, shipped this session —
+see §5.3.)
 
 ---
 
@@ -591,3 +625,10 @@ it was answered 2026-09-17 (see its own entry below) and nothing here remains op
    (§5.6, migration 86 — direct admin writes to the policy tables are gone at the RLS level, not
    just discouraged). `docs/REWARD_POLICY.md` remains the human-readable summary of Reward's own
    trial-phase values, kept in sync with the in-app history rather than being the primary record.
+9. **Internal team communications (§5.3, migration 94), scoped 2026-09-18:** any department
+   member may post and reply, not lead-only broadcast — restricting posting to leads would make it
+   announcement-only, and members would have no in-app way to respond. Admin sees and can post in
+   every department's channel, consistent with Admin's visibility everywhere else in My Department.
+   The department lead (or Admin) may pin a message; the author may edit or delete their own
+   message for 15 minutes after posting, a fixed UX allowance rather than a `policy_values` entry —
+   it isn't a governance decision the propose/approve framework needs to own.
