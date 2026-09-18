@@ -10,7 +10,7 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, confirmPopup } from './core.js?v=20260918183522';
+import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, confirmPopup } from './core.js?v=20260918185130';
 
 // Thumbnails (migration 93, owner's request to make the catalog "look like Coursera") - a public
 // bucket, same shape as board post images (BOARD_MEDIA_BUCKET in core.js), but not shared outside
@@ -185,12 +185,18 @@ function openPathPopup({ path = null, onSaved } = {}) {
       <h2 style="margin-top:0;">${path ? 'Edit path' : 'New path'}</h2>
       <div class="field"><label>Title</label><input id="fpp-title" value="${esc(path ? path.title : '')}"></div>
       <div class="field"><label>Description</label><textarea id="fpp-description" dir="auto" rows="3">${esc(path ? path.description : '')}</textarea></div>
+      <div class="field"><label>Target audience</label><select id="fpp-audience">${optionsHtml(audienceList, path ? path.target_audience : '', true)}</select></div>
       <div class="field">
         <label>Thumbnail <span class="hint">(shown on the catalog card - optional, a plain color is used if you skip this)</span></label>
         ${path && path.thumbnail_path ? `<div style="margin-bottom:6px;"><img src="${esc(thumbnailUrl(path.thumbnail_path))}" alt="" style="max-width:220px;border-radius:6px;display:block;"></div>` : ''}
+        <div class="btn-row" style="margin-bottom:6px;"><button type="button" class="btn secondary" id="fpp-gen-prompt">Generate image prompt</button></div>
+        <div id="fpp-prompt-box" style="display:none;margin-bottom:8px;">
+          <textarea id="fpp-prompt-text" dir="auto" rows="5" readonly style="font-size:12px;"></textarea>
+          <div class="btn-row" style="margin-top:4px;"><button type="button" class="btn secondary" id="fpp-copy-prompt" style="padding:4px 10px;">Copy</button>
+            <span class="hint">Paste this into an AI image tool (Midjourney, ChatGPT/DALL-E, Copilot...), then upload the image it gives you below.</span></div>
+        </div>
         <input id="fpp-thumbnail" type="file" accept="image/*">
       </div>
-      <div class="field"><label>Target audience</label><select id="fpp-audience">${optionsHtml(audienceList, path ? path.target_audience : '', true)}</select></div>
       <div class="field"><label>Session type</label><select id="fpp-session">
         <option value="regular" ${!path || path.session_type === 'regular' ? 'selected' : ''}>Regular (October-May)</option>
         <option value="summer" ${path && path.session_type === 'summer' ? 'selected' : ''}>Summer (June-September)</option>
@@ -208,6 +214,35 @@ function openPathPopup({ path = null, onSaved } = {}) {
   document.body.appendChild(backdrop);
   backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
   document.getElementById('fpp-cancel').addEventListener('click', () => backdrop.remove());
+
+  // Image prompt (owner's request, session of 2026-09-18): not automatic generation - that needs
+  // a paid API and a secret key this vanilla-JS/no-backend app has nowhere safe to keep (see
+  // QUIZ_AI_PROMPT above for the same reasoning applied to quizzes) - just a well-formed prompt
+  // built from the path's own title/description/audience, for the formatore to paste into
+  // whatever AI image tool they already use, then upload the result via the file input below.
+  document.getElementById('fpp-gen-prompt').addEventListener('click', () => {
+    const title = document.getElementById('fpp-title').value.trim();
+    if (!title) { alert('Please enter a title first.'); return; }
+    const description = document.getElementById('fpp-description').value.trim();
+    const audienceSel = document.getElementById('fpp-audience');
+    const audienceLabel = audienceSel.selectedOptions[0] && audienceSel.selectedOptions[0].value ? audienceSel.selectedOptions[0].textContent.trim() : '';
+    const promptText = [
+      'Create a vibrant, modern cover illustration for an online course catalog card (16:9, landscape).',
+      `Course title: "${title}"`,
+      description ? `Course theme: ${description}` : null,
+      audienceLabel ? `Audience: ${audienceLabel}` : null,
+      'Style: colourful, contemporary, flat/illustrative design, welcoming and energetic mood, suitable for a Catholic formation/spirituality learning platform.',
+      'No text, letters, numbers or logos anywhere in the image.',
+    ].filter(Boolean).join('\n');
+    document.getElementById('fpp-prompt-text').value = promptText;
+    document.getElementById('fpp-prompt-box').style.display = 'block';
+  });
+  document.getElementById('fpp-copy-prompt').addEventListener('click', async () => {
+    const text = document.getElementById('fpp-prompt-text').value;
+    try { await navigator.clipboard.writeText(text); alert('Prompt copied - paste it into your AI image tool of choice.'); }
+    catch { alert('Could not copy automatically - select the text above and copy it manually.'); }
+  });
+
   document.getElementById('fpp-save').addEventListener('click', async () => {
     const title = document.getElementById('fpp-title').value.trim();
     if (!title) { alert('Title is required.'); return; }
