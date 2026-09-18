@@ -7,7 +7,7 @@
 // un'operazione tecnica). RLS impedisce di toccare un task preso da qualcun altro (vedi
 // 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel vincolo, non lo sostituiscono.
 
-import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName } from './core.js?v=20260918004854';
+import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName } from './core.js?v=20260918130800';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -224,6 +224,7 @@ function openNewTaskPopup(operators) {
       <div class="field"><label>Base credits <span class="hint">(category rate &times; pages)</span></label><input id="task-new-base-credits" type="number" min="0" readonly style="background:var(--paper-card, #f3f4ea);"></div>
       <div class="field"><label>Extra credits <span class="hint">(difficulty/urgency bonus, optional)</span></label><input id="task-new-extra-credits" type="number" value="0"></div>
       <div class="field" id="task-new-extra-note-field" style="display:none;grid-column:1/-1;"><label>Why the extra credits? <span class="hint">(required if not zero)</span></label><select id="task-new-extra-note">${optionsHtml(State.optionListsByName.extra_credit_reason || [], '', true)}</select></div>
+      <div class="field" id="task-new-extra-approval-hint" style="display:none;grid-column:1/-1;"><span class="hint">This amount is above the Coordination-lead approval threshold - the task can be created, claimed and worked as usual, but can't be given a passing review verdict (its credits can't be paid out) until the Coordination lead approves it.</span></div>
       <div class="field" style="grid-column:1/-1;"><label>Total credits</label><div id="task-new-total-credits" style="font-size:14px;font-weight:600;padding:4px 0;">0</div></div>
       <div class="field"><label>Assign directly to <span class="hint">(optional — otherwise left open to claim; list narrows to who's qualified once a category is picked)</span></label>
         <select id="task-new-assignee"></select>
@@ -249,6 +250,12 @@ function openNewTaskPopup(operators) {
     const extra = parseInt(panel.querySelector('#task-new-extra-credits').value, 10) || 0;
     panel.querySelector('#task-new-total-credits').textContent = base + extra;
     panel.querySelector('#task-new-extra-note-field').style.display = extra !== 0 ? 'block' : 'none';
+    // Client-side preview only - extra_credit_needs_approval() in the DB is what's actually
+    // enforced (migration 90), this just avoids surprising the Coordinator after the fact.
+    const pctThreshold = State.policyValues.extra_credit_pct_threshold ?? 30;
+    const absThreshold = State.policyValues.extra_credit_abs_threshold ?? 10;
+    const needsApproval = extra > Math.min(base * pctThreshold / 100, absThreshold);
+    panel.querySelector('#task-new-extra-approval-hint').style.display = needsApproval ? 'block' : 'none';
   }
   panel.querySelector('#task-new-pages').addEventListener('input', recomputeCredits);
   panel.querySelector('#task-new-extra-credits').addEventListener('input', recomputeCredits);

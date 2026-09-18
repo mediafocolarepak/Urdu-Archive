@@ -3,10 +3,10 @@
 // Department list is fully data-driven from option_lists ('department') and department_members
 // - departments can be added, renamed or retired from Options without touching this file.
 
-import { sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260918004854';
-import { renderPolicySection } from './policy.js?v=20260918004854';
-import { renderPeopleSection } from './people.js?v=20260918004854';
-import { renderApplicationsView } from './collaboration.js?v=20260918004854';
+import { sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260918130800';
+import { renderPolicySection } from './policy.js?v=20260918130800';
+import { renderPeopleSection } from './people.js?v=20260918130800';
+import { renderApplicationsView } from './collaboration.js?v=20260918130800';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -129,6 +129,7 @@ async function renderFormationPipeline(box) {
 
 async function renderCoordinationOverview(box) {
   const rows = await withStatus(sb.rpc('coordination_task_overview'));
+  const pendingExtraCredits = rows.filter(r => r.extra_credits_status === 'pending');
   const claimedIds = [...new Set(rows.filter(r => r.claimed_by).map(r => r.claimed_by))];
   const profileRows = claimedIds.length
     ? await withStatus(sb.from('user_profiles').select('user_id,email,full_name').in('user_id', claimedIds))
@@ -177,7 +178,31 @@ async function renderCoordinationOverview(box) {
     ${t.showDue ? `<td>${dueCell(r)}</td>` : ''}
   </tr>`;
 
+  // Decision matrix row 10 (GOVERNANCE.md §4/§8.3, migration 90): extra credits above the
+  // policy threshold can't be paid out until the Coordination lead approves them. Shown here,
+  // not folded into a TABS entry, because it cuts across every status bucket above (a task can
+  // be 'claimed' or 'submitted' and still be pending on its extra credits at the same time) and
+  // it's the one place in this panel with a real write action, not just a read-only overview.
+  const canApproveExtraCredits = isDeptLead('COORD');
+  const extraCreditsRowHtml = r => `<tr>
+    <td>${esc(r.title)}</td>
+    <td>${esc(r.category)}</td>
+    <td>${esc(r.base_credits ?? 0)}</td>
+    <td>${esc(r.extra_credits)}</td>
+    <td>${esc(r.extra_credits_note) || '—'}</td>
+    <td>${esc(r.created_by_email) || '—'}</td>
+    <td>${canApproveExtraCredits ? `<button class="btn mydept-approve-extra-btn" data-id="${esc(r.id)}" style="padding:2px 8px;">Approve</button>` : '<span class="hint">Coordination lead only</span>'}</td>
+  </tr>`;
+
   box.innerHTML = `
+    ${pendingExtraCredits.length ? `<div class="panel">
+      <h2>Extra credits awaiting approval <span class="count-badge">${pendingExtraCredits.length}</span></h2>
+      <p class="hint">Above the policy threshold (My Department &rarr; Policy, GOVERNANCE.md §8.3) - can't be given a passing review verdict until approved here. The proposer can't approve their own task.</p>
+      <div class="grid-wrap"><table class="grid">
+        <thead><tr><th>Task</th><th>Category</th><th>Base</th><th>Extra</th><th>Reason</th><th>Proposed by</th><th></th></tr></thead>
+        <tbody>${pendingExtraCredits.map(extraCreditsRowHtml).join('')}</tbody>
+      </table></div>
+    </div>` : ''}
     <div class="panel">
       <h2>Task flow <span class="hint">— live overview of the open pipeline, same buckets as Tasks</span></h2>
       <div class="btn-row" style="margin-bottom:12px;flex-wrap:wrap;">
@@ -192,6 +217,13 @@ async function renderCoordinationOverview(box) {
 
   box.querySelectorAll('.mydept-coord-tab-btn').forEach(btn => btn.addEventListener('click', () => {
     State.myDeptCoordTab = btn.dataset.tab;
+    renderCoordinationOverview(box);
+  }));
+
+  box.querySelectorAll('.mydept-approve-extra-btn').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Approve these extra credits? This lets the task be given a passing review verdict.')) return;
+    const { error } = await sb.rpc('approve_task_extra_credits', { p_task_id: parseInt(btn.dataset.id, 10) });
+    if (error) { alert(error.message); return; }
     renderCoordinationOverview(box);
   }));
 }
