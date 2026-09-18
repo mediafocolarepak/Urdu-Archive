@@ -285,7 +285,7 @@ export const State = {
   optionListsByName: {},  // option_lists rows grouped by list_name, as [code,label] pairs - generic lookup used by SessionCache/combobox
   hayatEditorEdition: '',
   taskPrefill: null,  // { title, description, document_id, document_pages } - set by chat.js's "Create task" button, consumed once by tasks.js's new-task form
-  isFormatore: false,  // true if I personally have a board_editors row somewhere - see boot(); mirrors is_any_formatore() server-side, used to gate "+ New formation path" and "My paths"
+  isFormatore: false,  // true if I'm a FORM department member - see boot(); mirrors is_any_formatore() server-side, used to gate "+ New formation path" and "My paths"
   formationSelectedPathId: null,
   myDepartments: [],  // [{department_code, is_lead}] for the signed-in user - see GOVERNANCE.md
   policyValues: {},  // policy_values key -> integer value, cached at boot (see 80_departments_and_people_decisions.sql)
@@ -723,11 +723,15 @@ async function showApp(session, renderDashboardTab) {
     const { data: editorRows } = await sb.from('board_editors').select('board_code');
     State.myBoards = new Set((editorRows || []).map(r => r.board_code));
   }
-  // Unlike myBoards above (which for Coordinator/Admin holds every board, editor or not), this
-  // is always my own actual board_editors membership - the client-side mirror of the server's
-  // is_any_formatore(), used to gate formation-path creation and the "My paths" section.
-  const { data: myEditorRows } = await sb.from('board_editors').select('board_code').eq('user_id', session.user.id);
-  State.isFormatore = (myEditorRows || []).length > 0;
+  // The client-side mirror of the server's is_any_formatore() (80_departments_and_people_
+  // decisions.sql), used to gate formation-path creation and the "My paths" section - "formatore"
+  // has meant "member of the FORM department" since migration 80, not "has a board_editors row"
+  // (that's now a separate, narrower thing: who curates a specific board, GOVERNANCE.md §2.3).
+  // This used to still check board_editors directly, which drifted out of sync the moment 80
+  // shipped: a FORM member added without ever being a board editor lost the "+ Path" button
+  // client-side even though the server would have allowed them (found 2026-09-18, testing the
+  // formation path redesign).
+  State.isFormatore = State.myDepartments.some(d => d.department_code === 'FORM');
   const { data: profileRows } = await sb.from('user_profiles').select('membership_type,board_policy_ack_at').eq('user_id', session.user.id);
   State.myMembershipType = (profileRows && profileRows[0] && profileRows[0].membership_type) || null;
   State.boardPolicyAcked = !!(profileRows && profileRows[0] && profileRows[0].board_policy_ack_at);
