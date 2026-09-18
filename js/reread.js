@@ -5,7 +5,7 @@
 // server-side in submit_document_reread() ed entra nel registro esistente
 // (task_outcome_events, con task_id = null) cosi' credits/reputation si aggiornano da soli.
 
-import { sb, State, esc, withStatus, isAdmin, canReviewApplications } from './core.js?v=20260918182542';
+import { sb, State, esc, withStatus, isAdmin, canReviewApplications } from './core.js?v=20260918183522';
 
 export async function renderRereadView(main) {
   const canUse = canReviewApplications() || State.myQualifications.has('PROOF_READER');
