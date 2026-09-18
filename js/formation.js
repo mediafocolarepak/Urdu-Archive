@@ -10,7 +10,13 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails } from './core.js?v=20260918171904';
+import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails } from './core.js?v=20260918172937';
+
+// Thumbnails (migration 93, owner's request to make the catalog "look like Coursera") - a public
+// bucket, same shape as board post images (BOARD_MEDIA_BUCKET in core.js), but not shared outside
+// this file so it isn't exported from core.js.
+const FORMATION_MEDIA_BUCKET = 'formation-media';
+const thumbnailUrl = path => path ? sb.storage.from(FORMATION_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl : null;
 
 // Standard prompt for drafting a quiz with an AI tool (GOVERNANCE.md §2.3), shared by the
 // "Copy prompt" button below and the matching Help entry (see supabase/83_formation_ai_prompt_help.sql)
@@ -103,10 +109,10 @@ async function renderCatalog(main) {
       ${State.isFormatore ? `
         <h3>My Paths</h3>
         <div class="btn-row" style="margin-bottom:10px;"><button class="btn" id="fp-new">+ New path</button></div>
-        <div id="fp-mine">${mine.length ? mine.map(p => renderPathCard(p, audienceList, true)).join('') : '<div class="empty-msg">You haven’t created any path yet.</div>'}</div>
+        <div id="fp-mine" class="field-grid wide">${mine.length ? mine.map(p => renderPathCard(p, audienceList, true)).join('') : '<div class="empty-msg">You haven’t created any path yet.</div>'}</div>
         <h3 style="margin-top:20px;">Catalog</h3>
       ` : ''}
-      <div id="fp-catalog">${published.length ? published.map(p => renderPathCard(p, audienceList, false)).join('') : ''}</div>
+      <div id="fp-catalog" class="field-grid wide">${published.length ? published.map(p => renderPathCard(p, audienceList, false)).join('') : ''}</div>
       ${!published.length && !mine.length ? '<div class="empty-msg">No paths available yet.</div>' : ''}
     </div>`;
 
@@ -126,19 +132,42 @@ async function renderCatalog(main) {
   }
 }
 
+// A handful of pleasant, fixed gradients (not random per render, so a path's card doesn't
+// flicker to a different color on every refresh) - picked by the path's own id, so it stays
+// stable for that path forever. Used as a placeholder cover whenever no thumbnail is uploaded,
+// so the catalog reads like a grid of course cards (Coursera-style, the owner's reference) even
+// before anyone gets around to adding real images.
+const CARD_GRADIENTS = [
+  'linear-gradient(135deg,#6b4f3b,#a9784f)', 'linear-gradient(135deg,#3b5a4f,#6f9c86)',
+  'linear-gradient(135deg,#4f4a6b,#8577ad)', 'linear-gradient(135deg,#6b3b4a,#ad7789)',
+  'linear-gradient(135deg,#3b526b,#5f8bad)', 'linear-gradient(135deg,#6b5f3b,#ad9a5f)',
+];
+function cardCoverHtml(p) {
+  const url = thumbnailUrl(p.thumbnail_path);
+  if (url) return `<div style="width:100%;aspect-ratio:16/9;border-radius:8px 8px 0 0;overflow:hidden;background:#eee;"><img src="${esc(url)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;"></div>`;
+  const gradient = CARD_GRADIENTS[p.id % CARD_GRADIENTS.length];
+  const initial = (p.title || '?').trim().charAt(0).toUpperCase();
+  return `<div style="width:100%;aspect-ratio:16/9;border-radius:8px 8px 0 0;background:${gradient};display:flex;align-items:center;justify-content:center;">
+    <span style="font-size:38px;font-weight:700;color:rgba(255,255,255,.85);">${esc(initial)}</span>
+  </div>`;
+}
+
 function renderPathCard(p, audienceList, isMine) {
   const badge = p.status === 'draft' ? 'Draft' : (p.status === 'archived' ? 'Archived' : 'Published');
   return `
-    <div class="panel" data-open-path="${p.id}" style="cursor:pointer;margin-bottom:8px;">
-      <div class="btn-row" style="justify-content:space-between;">
-        <div style="font-weight:600;" dir="auto">${esc(p.title)}</div>
-        ${isMine ? `<span class="hint">${badge}</span>` : ''}
-      </div>
-      ${p.description ? `<div class="hint" style="margin-top:4px;" dir="auto">${esc(p.description)}</div>` : ''}
-      <div class="hint" style="margin-top:4px;">
-        ${esc(labelOf(audienceList, p.target_audience))}
-        ${p.session_type === 'summer' ? ' &middot; Summer session' : ' &middot; Regular path'}
-        ${p.enrollment_deadline ? ` &middot; Enroll by ${esc(p.enrollment_deadline)}` : ''}
+    <div class="panel" data-open-path="${p.id}" style="cursor:pointer;padding:0;overflow:hidden;display:flex;flex-direction:column;">
+      ${cardCoverHtml(p)}
+      <div style="padding:12px;flex:1;display:flex;flex-direction:column;">
+        <div class="btn-row" style="justify-content:space-between;align-items:flex-start;">
+          <div style="font-weight:600;" dir="auto">${esc(p.title)}</div>
+          ${isMine ? `<span class="hint" style="white-space:nowrap;">${badge}</span>` : ''}
+        </div>
+        ${p.description ? `<div class="hint" style="margin-top:4px;" dir="auto">${esc(textPreview(p.description, 140))}</div>` : ''}
+        <div class="hint" style="margin-top:auto;padding-top:8px;">
+          ${esc(labelOf(audienceList, p.target_audience))}
+          ${p.session_type === 'summer' ? ' &middot; Summer session' : ' &middot; Regular path'}
+          ${p.enrollment_deadline ? ` &middot; Enroll by ${esc(p.enrollment_deadline)}` : ''}
+        </div>
       </div>
     </div>`;
 }
@@ -156,6 +185,11 @@ function openPathPopup({ path = null, onSaved } = {}) {
       <h2 style="margin-top:0;">${path ? 'Edit path' : 'New path'}</h2>
       <div class="field"><label>Title</label><input id="fpp-title" value="${esc(path ? path.title : '')}"></div>
       <div class="field"><label>Description</label><textarea id="fpp-description" dir="auto" rows="3">${esc(path ? path.description : '')}</textarea></div>
+      <div class="field">
+        <label>Thumbnail <span class="hint">(shown on the catalog card - optional, a plain color is used if you skip this)</span></label>
+        ${path && path.thumbnail_path ? `<div style="margin-bottom:6px;"><img src="${esc(thumbnailUrl(path.thumbnail_path))}" alt="" style="max-width:220px;border-radius:6px;display:block;"></div>` : ''}
+        <input id="fpp-thumbnail" type="file" accept="image/*">
+      </div>
       <div class="field"><label>Target audience</label><select id="fpp-audience">${optionsHtml(audienceList, path ? path.target_audience : '', true)}</select></div>
       <div class="field"><label>Session type</label><select id="fpp-session">
         <option value="regular" ${!path || path.session_type === 'regular' ? 'selected' : ''}>Regular (October-May)</option>
@@ -177,9 +211,18 @@ function openPathPopup({ path = null, onSaved } = {}) {
   document.getElementById('fpp-save').addEventListener('click', async () => {
     const title = document.getElementById('fpp-title').value.trim();
     if (!title) { alert('Title is required.'); return; }
+    let thumbnail_path = path ? path.thumbnail_path : null;
+    const file = document.getElementById('fpp-thumbnail').files[0];
+    if (file) {
+      const objectPath = `${Date.now()}-${file.name}`.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const { error } = await sb.storage.from(FORMATION_MEDIA_BUCKET).upload(objectPath, file, { upsert: true });
+      if (error) { alert('Could not upload the thumbnail: ' + error.message); return; }
+      thumbnail_path = objectPath;
+    }
     const row = {
       title,
       description: document.getElementById('fpp-description').value.trim() || null,
+      thumbnail_path,
       target_audience: document.getElementById('fpp-audience').value || null,
       session_type: document.getElementById('fpp-session').value,
       course_starts_at: document.getElementById('fpp-starts').value || null,
@@ -325,6 +368,7 @@ async function renderPathDetail(main, pathId) {
         <button class="btn secondary" id="fp-back">&larr; Formation Paths</button>
         <span class="hint">${badge}</span>
       </div>
+      ${thumbnailUrl(path.thumbnail_path) ? `<img src="${esc(thumbnailUrl(path.thumbnail_path))}" alt="" style="width:100%;max-height:220px;object-fit:cover;border-radius:8px;margin:8px 0;">` : ''}
       <h2 dir="auto">${esc(path.title)}</h2>
       ${path.description ? `<div dir="auto" style="margin-bottom:8px;">${esc(path.description)}</div>` : ''}
       <div class="hint">
