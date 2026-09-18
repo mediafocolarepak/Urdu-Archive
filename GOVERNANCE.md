@@ -1,16 +1,17 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.1 (2026-09-18) — decisions taken by the Owner; phases 1, 2a, 2b, 2c and the policy
-revision framework (§6.6) are built and merged (migrations 80–90). Team comments welcome, changes
-go through a new version.**
+**Status: v1.2 (2026-09-18) — decisions taken by the Owner; all of phases 1 through 3 are built and
+merged (migrations 80–93). Team comments welcome, changes go through a new version.**
 
-**What changed in v1.1:** v1.0 was written and frozen at phase 0, before any of §6 existed as
-code. Migrations 80 through 90 were then designed and merged over the following two days without
-a matching doc update, so by 2026-09-18 the document no longer described the real system. This
-revision reconciles the two: §5 now describes the software as it actually is, and §6 is trimmed
-to what is genuinely still open (Reward's compensation tooling, phase 3). No organisational
-decision from v1.0 changes — this is a "catch the docs up to the code" pass, not a policy
-revision.
+**What changed in v1.2:** same day as v1.1, later session. Reward's last open piece (compensation
+runs, the anomaly report) shipped (migration 91), closing phase 3 entirely — §6.4 moves from "to
+build" to §5 alongside everything else. Formation paths were also restructured at the owner's
+request: the "Years" level between a path and its modules is gone (migration 92 — Path → Module →
+Chapter → Post, one level shallower), modules/chapters are now shown as a numbered outline instead
+of a nested tree, and a thumbnail image can be set per path for the catalog (migration 93). A new
+printable Personnel & Team Applications report (Print Reports, Admin/HR) was added, reusing
+existing data sources — no new migration. No organisational decision changes here either; still a
+"catch the docs up to the code" pass.
 
 This document describes how the people who run the **Focolare Urdu Archive Manager** are
 organised: who does what, who decides what, and how that maps onto the software. It exists
@@ -73,7 +74,8 @@ Responsibilities:
 
 Needs from the software: a consolidated **HR view** (§5.3, built) — one screen with every team
 member, their role, qualifications, credits, reputation, last activity, outcome history, watch
-status, and pending applications.
+status, and pending applications — plus a **printable Personnel & Team Applications report**
+(§5.7, built) for bringing the same picture to a meeting.
 
 ### 2.2 Coordination
 
@@ -95,10 +97,11 @@ gives it a lead.
 *Mission:* build and run formation paths (courses) on the archive's material.
 
 Responsibilities:
-- Design formation paths: years → modules → chapters, with linked documents, quizzes, final
-  certificate. A path has one **owner** and any number of **co-authors** (other formatori
-  invited by the owner) who edit it together; the owner — or the Formation lead — publishes it.
-  Working together on a course is the preferred way, not the exception.
+- Design formation paths: modules → chapters, with linked documents, quizzes, final certificate
+  (simplified from an earlier modules-inside-years shape — §5.4). A path has one **owner** and
+  any number of **co-authors** (other formatori invited by the owner) who edit it together; the
+  owner — or the Formation lead — publishes it. Working together on a course is the preferred
+  way, not the exception.
 - Bring new material into the archive **through the normal document workflow** — a formatore
   uploading a text is an operator uploading a text: it goes through revision and approval like
   any other. Formation never becomes a side door into the archive.
@@ -128,9 +131,8 @@ Responsibilities:
 - Keep whatever records local law and the Movement's rules require.
 
 **Policy before software.** The biggest risk was never technical: it was that these rules were
-not written. They now are (`docs/REWARD_POLICY.md`, trial phase — §2.8, §8 item 6); most of the
-software Reward needs turned out to already exist or ship alongside HR's/Coordination's work
-(§5.5, §5.6) — what's genuinely still open is in §6.4.
+not written. They now are (`docs/REWARD_POLICY.md`, trial phase — §2.8, §8 item 6); the software
+Reward needs — credit circulation, compensation runs, the anomaly report — is now built (§5.5).
 
 ### 2.5 Communication
 
@@ -269,7 +271,7 @@ proposed.
 | 12 | Final publish / reject of a reviewed task | Revisor/Coordinator (verdict) | Admin | Person | `task_outcome_events` |
 | 13 | Change any policy table value (rates, tiers, thresholds — see §2.8 for who owns which) | Owning department's lead | Admin who is not the proposer, after team review (§2.8) | Owning department | `task_category_rates`, `task_reputation_tiers`, `policy_values` (with `updated_by_email`); per-department policy revision history (§2.8, §5.6) |
 | 14 | Compensation policy (credit → money) | Reward | Owner | Everyone | Policy document (repo), trial phase — see §2.8 |
-| 15 | Execute a compensation run | Reward | Lead Reward + Owner | Persons paid | Reward records (outside app for now) |
+| 15 | Execute a compensation run | Reward | Lead Reward + Owner | Persons paid | `compensation_runs`/`compensation_lines`, since migration 91 — Admin stands in for "Owner" (§5.5) |
 | 16 | Budget top-up | Owner | Owner | Reward | `budget_ledger` |
 | 17 | Publish a formation path | Formatore | Lead Formation | — | `formation_paths` |
 | 18 | Import formation material into the archive | Formatore | Normal document workflow (Coordination) | — | `documents` |
@@ -288,11 +290,12 @@ Rules that apply to the whole table:
 
 ---
 
-## 5. What the software already does (as of 2026-09-18, migrations 1–90)
+## 5. What the software already does (as of 2026-09-18, migrations 1–93)
 
 This section is here so the team designs on the real system, not an imagined one. Everything in
-§6.1, 6.1b, 6.1c, 6.2, 6.3 and 6.6 of v1.0 is now folded in here as shipped; §6 (below) keeps only
-what's genuinely still open.
+§6.1, 6.1b, 6.1c, 6.2, 6.3, 6.4 and 6.6 of v1.0 is now folded in here as shipped; §6 (below) keeps
+only what's genuinely still open — which as of v1.2 is just Communication (no code needed) and two
+low-priority known gaps.
 
 ### 5.1 Roles and qualifications
 - `user_roles`: one row per account — `role` (user/operator/coordinator/admin), `credits`,
@@ -342,6 +345,18 @@ what's genuinely still open.
 ### 5.4 Formation, boards and quiz import
 - `FORM` department membership (not `board_editors`) gates who may create formation paths;
   `board_editors` keeps its own, distinct meaning — who curates/moderates a given board.
+- **Structure (migration 92, restructured 2026-09-18):** `formation_paths` → `formation_modules`
+  → `formation_chapters` → `formation_posts`, one level shallower than the original design — the
+  "Years" level (`formation_years`) was dropped at the owner's request: a path is a sequence of
+  numbered modules, not a multi-year programme, in the vast majority of real cases. Modules and
+  chapters render as a numbered outline ("Module 1 — Title", "Chapter 1.2 — Title") instead of a
+  nested tree, closer to a table of contents a formatore would write by hand than to a database
+  schema. The "+ Path" popup used from a document's own page (Dashboard/My Space) can create a
+  new module and chapter inline, without a separate trip to the Formation Paths screen — the
+  course is built around the texts being filed into it, not the other way round.
+- `formation_paths.thumbnail_path` (migration 93): an optional cover image per path, shown on its
+  catalog card and detail page; a path with none gets a stable per-path colour placeholder with
+  its initial letter instead, so the catalog still reads as a finished grid of cards.
 - `formation_path_editors (path_id, user_id, added_by_email)`: a path has an owner plus any
   number of co-authors, added/removed by the owner (row 23). `can_edit_path()` = owner, co-author
   or Coordinator; publishing stays with the owner, the Formation lead, a Coordinator or Admin.
@@ -380,11 +395,24 @@ what's genuinely still open.
   while approval is pending; only the credit grant is gated.
 - `budget_ledger`: append-only top-ups, Admin only. Available budget is computed live.
   `reward_credit_overview()` (migration 88) gives Reward members a read-only breakdown (posted /
-  claimed / awaiting review / redeemed) without needing Admin's Budget tab.
-- Still true from v1.0: no history table for `task_category_rates`/`task_reputation_tiers`
-  changes (superseded in spirit by `policy_proposals`' own history, §5.6) and no record of
-  compensation actually paid — credits accumulate, conversion to money still happens outside the
-  app (§6.4).
+  claimed / awaiting review / redeemed) without needing Admin's Budget tab; RF members can also
+  read `task_outcome_events` directly (migration 91), not just this aggregate.
+- **Compensation runs (migration 91, closes decision matrix row 15):** `compensation_runs` /
+  `compensation_lines` record that credits were converted to money — append-only, no direct write
+  policy for anyone, written only through `propose_compensation_run()` (RF members) and
+  `decide_compensation_run()` (Admin, standing in for "Owner" since the schema has no separate
+  Owner identity — proposer never equals approver, enforced in SQL). `unsettled_credits()` stops
+  the same credits being counted into two runs. This is the "credits earned vs. credits paid"
+  reconciliation v1.0 asked for; `docs/REWARD_POLICY.md` still governs the conversion rate itself
+  (§2.8, §8 item 6), the schema only records that a conversion happened.
+- **Anomaly report (migration 91, §2.4):** `reward_extra_credit_tasks()` lists every task that
+  ever carried extra credits, whatever its approval status; `reward_operator_credit_anomalies()`
+  flags an operator once their approved-but-unpublished credits exceed both their published
+  credits and a policy floor (`reward_anomaly_backlog_credits`, default 100). Both are read-only
+  views in My Department → Reward, not stored flags.
+- Still true from v1.0: no separate history table for `task_category_rates`/
+  `task_reputation_tiers` changes — superseded in spirit by `policy_proposals`' own history
+  (§5.6), which was judged sufficient rather than building a second mechanism.
 
 ### 5.6 Policy revision framework (migration 86, was §6.6 in v1.0)
 - `policy_proposals` (department, target table/key, old/new value, rationale, proposer, status,
@@ -405,27 +433,35 @@ what's genuinely still open.
 
 ### 5.7 Who sees what today
 - **People tab** (My Department → HR): HR members, department leads, Admin.
+- **Personnel & Team Applications report** (Print Reports, migration-free, reuses `hr_people_
+  overview()` and `collaboration_applications`): HR members and Admin only — deliberately
+  narrower than the People tab's own gate, since `collaboration_applications`' RLS only lets HR
+  and Admin read it, not every department lead. A printable roster of every operator/department
+  member plus every admission request, for a meeting or a periodic review.
 - **Policy** (current values + propose/approve): read by everyone; propose by department leads;
   decide by Admin (not the proposer).
 - Team Applications: HR members + Admin (My Department → HR), no longer a separate tab.
 - Proofreading queue, everyone's outcome history: Coordinator+.
 - Budget (top-up), Options (option lists, departments): Admin only. Reward members get a
-  read-only view of credit circulation (§5.5) without Admin access.
+  read-only view of credit circulation, the outcome ledger, compensation runs and the anomaly
+  report (§5.5) without Admin access.
 
 The gap v1.0 flagged here — "an HR person who is not Admin cannot see the list of people they are
-supposed to follow, and a Reward person cannot see the ledgers" — is closed for HR (§5.3) and
-partially closed for Reward (§5.5); the rest of Reward's needs are in §6.4.
+supposed to follow, and a Reward person cannot see the ledgers" — is now closed for both HR (§5.3)
+and Reward (§5.5).
 
 ---
 
 ## 6. What's left to build
 
-Subsections 6.1–6.3 and 6.6 of v1.0 shipped as designed (with the naming differences noted
+Subsections 6.1–6.4 and 6.6 of v1.0 shipped as designed (with the naming differences noted
 inline in §5) and their content now lives in §5, where it describes the running system rather
 than a plan. The subsection numbers below are kept only so existing cross-references (§2, §4, §7)
-keep pointing at something; §6.1, 6.1b, 6.1c, 6.2, 6.3 and 6.6 are retired as "to-build" entries.
+keep pointing at something; §6.1, 6.1b, 6.1c, 6.2, 6.3, 6.4 and 6.6 are retired as "to-build"
+entries. As of v1.2, all of §6 that remains is Communication (§6.5, no code needed) and two
+low-priority known gaps (§6.7, §6.8) — nothing is actively "to build".
 
-### 6.1, 6.1b, 6.1c, 6.2, 6.3, 6.6 — shipped, see §5
+### 6.1, 6.1b, 6.1c, 6.2, 6.3, 6.4, 6.6 — shipped, see §5
 - Department model, `people_decisions`, `standing`, `policy_values` → **§5.1, §5.3** (migration 80)
 - Formation path co-authors → **§5.4** (migration 82)
 - Boards open to members with moderation → **§5.4** (migration 84)
@@ -434,24 +470,9 @@ keep pointing at something; §6.1, 6.1b, 6.1c, 6.2, 6.3 and 6.6 are retired as "
 - Policy revision framework → **§5.6** (migration 86)
 - Extra-credit approval (row 10 — not originally its own §6 subsection in v1.0, just a policy
   value with nothing reading it) → **§5.5** (migration 90)
-
-### 6.4 Reward — partially built, phase 3 continues
-What shipped: read-only credit-circulation numbers for `RF` members
-(`reward_credit_overview()`, migration 88 — posted / claimed / awaiting review / redeemed,
-plus `budget_ledger` read access) and, in spirit, an audit trail for policy changes via
-`policy_proposals` (§5.6) rather than a separate history table on `task_category_rates` /
-`task_reputation_tiers`.
-
-Still open:
-- `RF` members still cannot read `task_outcome_events` directly (only the aggregate numbers in
-  `reward_credit_overview()`) — needed for the anomaly report below.
-- `compensation_runs (id, period_from, period_to, prepared_by, approved_by, approved_at, note)`
-  and `compensation_lines (run_id, user_id, credits_settled, amount, currency, reference)`: the
-  record that credits were converted to money, so "credits earned" and "credits paid" can be
-  reconciled. Still optional until Naeem's review of `docs/REWARD_POLICY.md` lands (§8 item 6).
-- Anomaly report (task with extra credits above threshold — now flagged automatically via
-  `tasks.extra_credits_status`, §5.5; an operator whose credits grow without published tasks —
-  still needs a query, exposed as a report).
+- Reward: credit circulation, `task_outcome_events` read access, compensation runs, anomaly
+  report → **§5.5** (migrations 88, 91) — closed 2026-09-18, same session as the formation
+  restructure below.
 
 ### 6.5 Communication (no phase)
 - Nothing required. A "What's new" block on the Dashboard fed by Announcements is a nice-to-have.
@@ -461,12 +482,12 @@ Row 17 implies a Formatore proposes and the Formation lead approves publishing, 
 proposer/approver pair. In practice `can_edit_path()`'s publish check (§5.4) allows the owner
 (who is usually the same formatore who wrote it), the Formation lead, any Coordinator, or Admin —
 so an owner who is also a formatore can publish their own path without a second person's sign-off.
-Pre-dates migrations 80–90; not a regression, but not matched to the letter of the matrix either.
+Pre-dates migrations 80–93; not a regression, but not matched to the letter of the matrix either.
 Low priority: formation paths go through the same document revision/approval workflow before
 their content reaches the archive (row 18), so this doesn't bypass the archive's own review.
 
 ### 6.8 Known gap: two technical-role enforcement items from earlier handoffs
-Carried over, not touched by migrations 80–90:
+Carried over, not touched by migrations 80–93:
 - "Only the Owner appoints department leads" (row 8) is a written rule, not an RLS-enforced one —
   any Admin can currently write `department_members`. Harmless today (Owner is the sole Admin);
   revisit if/when a second Admin is added.
@@ -484,7 +505,7 @@ Carried over, not touched by migrations 80–90:
 | **2a** | People tab (HR view) + proposal/approval flows | **Sonnet** | An HR member who is not Admin can do everything in §2.1 from the app | ✅ Done |
 | **2b** | Quiz `.md` import + AI prompt; path co-authors (§5.4) | **Sonnet** | A formatore imports a 10-question quiz from a file; two formatori edit the same path | ✅ Done |
 | **2c** | Boards open to members with moderation, usage policy, promote-to-archive (§5.4) | **Sonnet** | A User submits a post, a board editor publishes it; an Operator posts directly | ✅ Done |
-| **3** | Policy revision framework (§5.6); Reward audit history, compensation runs, anomaly report (§6.4); extra-credit approval (§5.5, migration 90) | **Sonnet** | A compensation run can be recorded and reconciled | 🟡 Partial — policy framework and extra-credit approval done; compensation runs/anomaly report still open (§6.4) |
+| **3** | Policy revision framework (§5.6); Reward audit history, compensation runs, anomaly report (§5.5); extra-credit approval (§5.5, migration 90) | **Sonnet** | A compensation run can be recorded and reconciled | ✅ Done |
 | later | Operator training programme; "What's new" | — | — | Not started |
 
 The switch from Opus to Sonnet happens **after the migration 80 schema and the decision matrix
