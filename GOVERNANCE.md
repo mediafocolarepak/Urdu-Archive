@@ -1,6 +1,16 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.0 (2026-09-16) — decisions taken by the Owner; in force as the basis for phase 1. Team comments welcome, changes go through a new version.**
+**Status: v1.1 (2026-09-18) — decisions taken by the Owner; phases 1, 2a, 2b, 2c and the policy
+revision framework (§6.6) are built and merged (migrations 80–90). Team comments welcome, changes
+go through a new version.**
+
+**What changed in v1.1:** v1.0 was written and frozen at phase 0, before any of §6 existed as
+code. Migrations 80 through 90 were then designed and merged over the following two days without
+a matching doc update, so by 2026-09-18 the document no longer described the real system. This
+revision reconciles the two: §5 now describes the software as it actually is, and §6 is trimmed
+to what is genuinely still open (Reward's compensation tooling, phase 3). No organisational
+decision from v1.0 changes — this is a "catch the docs up to the code" pass, not a policy
+revision.
 
 This document describes how the people who run the **Focolare Urdu Archive Manager** are
 organised: who does what, who decides what, and how that maps onto the software. It exists
@@ -61,9 +71,9 @@ Responsibilities:
 - **Training** of operators — to be designed later (see §7); the Formation Paths tool can be
   used for onboarding courses today without new code.
 
-Needs from the software: a consolidated **HR view** (§6.2) — one screen with every team member,
-their role, qualifications, credits, reputation, last activity, outcome history, watch status,
-and pending applications.
+Needs from the software: a consolidated **HR view** (§5.3, built) — one screen with every team
+member, their role, qualifications, credits, reputation, last activity, outcome history, watch
+status, and pending applications.
 
 ### 2.2 Coordination
 
@@ -117,8 +127,10 @@ Responsibilities:
 - Sign off periodic compensation runs.
 - Keep whatever records local law and the Movement's rules require.
 
-**Policy before software.** The biggest risk today is not technical: it is that these rules are
-not written. Once they are, the software needed is small (§6.4).
+**Policy before software.** The biggest risk was never technical: it was that these rules were
+not written. They now are (`docs/REWARD_POLICY.md`, trial phase — §2.8, §8 item 6); most of the
+software Reward needs turned out to already exist or ship alongside HR's/Coordination's work
+(§5.5, §5.6) — what's genuinely still open is in §6.4.
 
 ### 2.5 Communication
 
@@ -210,9 +222,9 @@ This mirrors principle 2 (§1) — the one who proposes does not approve — app
 instead of people. It generalizes row 13 of the decision matrix (§4) beyond Reward's two tables,
 and formalizes what row 14 ("Compensation policy... recorded in Policy document (repo)") always
 implied: a policy document in the repo (e.g. `docs/REWARD_POLICY.md`) is the trial-phase
-substitute for this in-app workflow, not a replacement for it. Once §6.6 is built, in-app
-proposals become the record of truth; the repo document becomes a human-readable summary kept in
-sync with it, not the primary record.
+substitute for this in-app workflow, not a replacement for it. Now that §5.6 is built, in-app
+proposals are the record of truth; `docs/REWARD_POLICY.md` is a human-readable summary to be kept
+in sync with it, not the primary record.
 
 ---
 
@@ -245,17 +257,17 @@ proposed.
 |---|---|---|---|---|---|
 | 1 | Admit an applicant as Operator | HR | Lead HR or Admin (not the proposer) | Coordination | `collaboration_applications` (recommended → approved) |
 | 2 | Reject an applicant | HR | — (HR decides; applicant may reapply) | — | `collaboration_applications` |
-| 3 | Assign / remove a qualification | HR (or Coordination) | Admin applies | Person concerned | `user_qualifications` + people-decision log (§6.1) |
+| 3 | Assign / remove a qualification | HR (or Coordination) | Admin applies | Person concerned | `user_qualifications` + people-decision log (§5.3) |
 | 4 | Put a person on the watch list | HR | — (HR decides, must give reason) | Lead HR | people-decision log |
 | 5 | Suspend a person (no new tasks) | HR | Lead HR or Admin (not the proposer) | Coordination, person | people-decision log; `user_roles.standing` |
 | 6 | Exclude a person (remove access) | HR | Owner | All leads | people-decision log; role removal |
 | 7 | Promote to Coordinator / Admin | Owner or Lead HR | Owner | All leads | people-decision log |
 | 8 | Appoint / replace a department lead | Owner | Owner | Everyone | `department_members` |
 | 9 | Create a task, set its credits | Coordinator | — (within rate table) | — | `tasks` |
-| 10 | Grant extra credits beyond the rate | Coordinator (with note) | Lead Coordination if above the threshold in Options (§8.3) | Reward | `tasks.extra_credits`, note |
+| 10 | Grant extra credits beyond the rate | Coordinator (with note) | Lead Coordination if above the threshold in Options (§8.3) | Reward | `tasks.extra_credits`, note; enforced server-side since migration 90 (`tasks.extra_credits_status`, `approve_task_extra_credits()`) |
 | 11 | Reclaim a task (reputation penalty) | Coordinator | — (must give reason) | Person | `task_outcome_events` |
 | 12 | Final publish / reject of a reviewed task | Revisor/Coordinator (verdict) | Admin | Person | `task_outcome_events` |
-| 13 | Change any policy table value (rates, tiers, thresholds — see §2.8 for who owns which) | Owning department's lead | Admin who is not the proposer, after team review (§2.8) | Owning department | `task_category_rates`, `task_reputation_tiers`, `policy_values` (with `updated_by_email`); per-department policy revision history (§2.8, §6.6) |
+| 13 | Change any policy table value (rates, tiers, thresholds — see §2.8 for who owns which) | Owning department's lead | Admin who is not the proposer, after team review (§2.8) | Owning department | `task_category_rates`, `task_reputation_tiers`, `policy_values` (with `updated_by_email`); per-department policy revision history (§2.8, §5.6) |
 | 14 | Compensation policy (credit → money) | Reward | Owner | Everyone | Policy document (repo), trial phase — see §2.8 |
 | 15 | Execute a compensation run | Reward | Lead Reward + Owner | Persons paid | Reward records (outside app for now) |
 | 16 | Budget top-up | Owner | Owner | Reward | `budget_ledger` |
@@ -276,207 +288,204 @@ Rules that apply to the whole table:
 
 ---
 
-## 5. What the software already does (as-is, September 2026)
+## 5. What the software already does (as of 2026-09-18, migrations 1–90)
 
-This section is here so the team designs on the real system, not an imagined one.
+This section is here so the team designs on the real system, not an imagined one. Everything in
+§6.1, 6.1b, 6.1c, 6.2, 6.3 and 6.6 of v1.0 is now folded in here as shipped; §6 (below) keeps only
+what's genuinely still open.
 
 ### 5.1 Roles and qualifications
 - `user_roles`: one row per account — `role` (user/operator/coordinator/admin), `credits`,
-  `reputation`, `email`, `created_at`. Only Admin can change `role`.
+  `reputation`, `standing` (`active`/`watch`/`suspended`, migration 80), `email`, `created_at`.
+  Only Admin changes `role` directly; `standing` changes only through `people_decisions` (§5.6).
+  A trigger blocks a suspended person from claiming or being assigned a task.
 - `user_qualifications` (many-to-many, codes from `option_lists` list `operator_qualification`).
-  Only Admin assigns. `user_qualifies_for_category()` gates task claiming by category.
-- `user_profiles`: full name, city, phone, membership, plus the Join-the-Team profile fields
-  (academic level, availability, experience, skills, motivation).
+  Assigned by Admin, or proposed by HR/Coordination and applied via `people_decisions`.
+  `user_qualifies_for_category()` gates task claiming by category.
+- `user_profiles`: full name, city, phone, membership, age bracket and gender (migration 85,
+  new accounts only — existing accounts have both null, HR backfills separately), plus the
+  Join-the-Team profile fields (academic level, availability, experience, skills, motivation).
 
 ### 5.2 Applications ("Join the Team")
-- `collaboration_applications` with status `pending → recommended → approved | rejected`.
-- Coordinator+ can see applications and set **recommended** or **rejected**; only Admin can set
-  **approved** (and simultaneously promotes the role). **This is already the "propose → approve"
-  shape HR needs** — the department work is to route it to HR members rather than to all
-  coordinators, and to record who proposed.
+- `collaboration_applications` with status `pending → recommended → approved | rejected`,
+  `recommended_by` recorded on the recommend step.
+- **HR members** (department `HR`) and Admin review applications and set **recommended** or
+  **rejected**; a trigger refuses approval by the same person who recommended (migration 80/81).
+  Coordinators no longer see this queue on their own — HR does (§2.1, §5.6). Only Admin sets
+  **approved** (and simultaneously promotes the role).
 
-### 5.3 Formatori and boards
-- `board_editors`: who may post on which board. **Being a formatore is currently defined as
-  "has at least one `board_editors` row"** (`is_any_formatore()`). Formation paths (`formation_paths`,
-  years, modules, chapters, posts, enrolments, chat, quizzes, certificates) are created by
-  formatori and editable **only by the owner or any Coordinator** — there is no co-author
-  concept yet.
-- `board_posts`: title + body and/or a linked document; **only board editors and Coordinators
-  can post**, everyone with an account can read. No link/image fields, no moderation status:
-  a post is published the moment it is inserted.
-- Quiz questions are rows in `formation_quiz_questions` (`question_text`, `options` JSON array,
-  `correct_index`, `points`, `sequence_number`) — a flat shape that maps cleanly to a Markdown
-  import format (§6.3).
+### 5.3 Departments, people decisions and the HR view (migration 80, §2.8, §6.2 of v1.0)
+- `option_lists` list `department` (`HR`, `COORD`, `FORM`, `RF`, `COMM`) and
+  `department_members (department_code, user_id, is_lead, added_by_email)`, at most one lead per
+  department. Helpers `is_dept_member(code)`, `is_dept_lead(code)`, `is_any_dept_lead()`.
+  Appointing/replacing a lead (row 8) stays a direct Admin write to this table — not a
+  `people_decisions` proposal — since proposer and approver are both the Owner by construction.
+- `people_decisions`: append-only log (subject, type, payload, reason, proposer, status, decider,
+  note). Clients cannot insert or update it directly — the only entry points are
+  `propose_people_decision()` and `decide_people_decision()`, which enforce who may propose, who
+  may approve, and that the two are never the same person (checked in SQL, not just the UI).
+  Types: `qualification_add/remove`, `watch_on/off` (applied immediately, no approval — row 4),
+  `suspend`, `reinstate`, `exclude` (role → `user`, standing → `suspended`, department/board/
+  qualification rows dropped; account and every ledger kept — §8.7), `role_change`,
+  `board_misuse` / `board_block` / `board_unblock` (§5.4).
+- **People tab** (`hr_people_overview()`), visible to HR members, department leads and Admin:
+  role, standing, credits, reputation, qualifications, departments, last event, negative events
+  in the window, open tasks, pending decisions, and a **computed** `at_risk` badge (reputation <
+  40, or ≥ 2 negative events in 60 days — all three numbers live in `policy_values`, §5.6). The
+  stored thing is the HR decision (`watch`), never the heuristic itself.
+- **My Department**: one screen per department (HR, Coordination, Formation, Reward), each
+  showing that department's own working view (roster, applications/People for HR, task-flow
+  overview for Coordination, course pipeline for Formation, credit circulation for Reward) plus
+  the shared Policy section (§5.6). Team Applications no longer exists as a separate top-level
+  tab — it lives inside My Department → HR.
 
-### 5.4 Credits, reputation, money
+### 5.4 Formation, boards and quiz import
+- `FORM` department membership (not `board_editors`) gates who may create formation paths;
+  `board_editors` keeps its own, distinct meaning — who curates/moderates a given board.
+- `formation_path_editors (path_id, user_id, added_by_email)`: a path has an owner plus any
+  number of co-authors, added/removed by the owner (row 23). `can_edit_path()` = owner, co-author
+  or Coordinator; publishing stays with the owner, the Formation lead, a Coordinator or Admin.
+  A "Co-authors" section in the path editor searches by name/email among `FORM` members.
+- **Quiz import from Markdown**: a real parser in `formation.js` (one `##` per question,
+  `- [x]`/`- [ ]` options, optional `points:`), validated against the same constraints the DB
+  enforces (≥ 2 options, exactly one correct); valid questions import even if some in the file
+  fail. A standard AI prompt for drafting a module summary + quiz lives in Help and behind a
+  "Copy prompt" button in the module editor.
+- `board_posts` now carries `link_url`, `image_path` (Storage bucket `board-media`), and a real
+  moderation lifecycle: `status` (`pending`/`published`/`rejected`), `moderated_by_email`,
+  `moderated_at`, `moderation_note`. Any account can submit; a trigger auto-publishes for board
+  editors, Coordinators and Operators (§2.6) and marks everyone else `pending`. Editors get a
+  "Pending" queue in `boards.js` to publish/reject with a note, or remove a published post with a
+  reason (row 21). The board usage policy is shown once before a person's first post
+  (acknowledgement stored per user) and permanently in Help.
+- `board_misuse`/`board_block`/`board_unblock` are `people_decisions` types (never a direct write
+  by the editor) — a reputation penalty for an Operator, or loss of posting rights for a User
+  (row 22). "Promote to archive" (editors/Coordinators) creates a document in `revision` with a
+  back-reference to the originating post (row 24).
+
+### 5.5 Credits, reputation, money
 - `task_outcome_events` is the **append-only ledger**: every event (`review_ok`, `review_ok_but`,
-  `review_fail`, `admin_rejected`, `given_up`, `withdrawn`, reclaim…) carries `credit_delta`,
-  `reputation_delta`, `created_by_email`, `note`. A trigger applies the deltas to `user_roles`;
-  those columns are never written by hand. Reputation is clamped 0–100, starts at 50.
-- `task_category_rates` (credits per page by category) and `task_reputation_tiers` (deltas by
-  task size) are Admin-editable tables with `updated_by_email` — but no history of previous
-  values.
+  `review_fail`, `admin_rejected`, `given_up`, `withdrawn`, reclaim, `board_misuse`…) carries
+  `credit_delta`, `reputation_delta`, `created_by_email`, `note`. A trigger applies the deltas to
+  `user_roles`; those columns are never written by hand. Reputation is clamped 0–100, starts at
+  50.
+- `task_category_rates` and `task_reputation_tiers` can **no longer be written directly, even by
+  Admin** (migration 86 dropped that RLS) — the only path to a new value is
+  `propose_policy_change()` → `decide_policy_change()` (§5.6). `policy_values` is the same.
+- Extra credits above the policy threshold (30% of base, or 10 absolute, whichever is lower —
+  §8.3) cannot be paid out until the Coordination lead approves them: `tasks.extra_credits_status`
+  is recomputed server-side on every write, and `submit_task_review()` refuses a passing verdict
+  while it's `pending` (migration 90, closes row 10 — this was the one governance rule left
+  unenforced when v1.0 was written). The task itself can still be created, claimed and worked
+  while approval is pending; only the credit grant is gated.
 - `budget_ledger`: append-only top-ups, Admin only. Available budget is computed live.
-- There is **no notion of "standing"** (active / watch / suspended) on a person, no "at risk"
-  flag, and no log of decisions about people other than the application status.
-- There is no record of compensation actually paid: credits accumulate, conversion to money
-  happens outside the app.
+  `reward_credit_overview()` (migration 88) gives Reward members a read-only breakdown (posted /
+  claimed / awaiting review / redeemed) without needing Admin's Budget tab.
+- Still true from v1.0: no history table for `task_category_rates`/`task_reputation_tiers`
+  changes (superseded in spirit by `policy_proposals`' own history, §5.6) and no record of
+  compensation actually paid — credits accumulate, conversion to money still happens outside the
+  app (§6.4).
 
-### 5.5 Who sees what today
-- Users tab (roles, qualifications, credits, reputation, city, membership, phone, since): Admin only.
-- Team Applications, Proofreading queue, everyone's outcome history: Coordinator+.
-- Budget, Options (rates, tiers, lists), Announcements: Admin only.
+### 5.6 Policy revision framework (migration 86, was §6.6 in v1.0)
+- `policy_proposals` (department, target table/key, old/new value, rationale, proposer, status,
+  decider, decision note) is append-only and holds its own full history — nothing is ever
+  deleted, and it doubles as the audit trail v1.0's §6.4 asked for as a separate mechanism.
+- `propose_policy_change()`: any lead of the table's owning department (§2.8) may call it;
+  changes nothing until decided. `decide_policy_change(id, outcome, note)` — one function
+  covering both approve and reject, not the two separately-named functions v1.0 sketched — is
+  Admin-only and explicitly refuses the proposer as decider, checked in SQL.
+- `task_category_rates`, `task_reputation_tiers` and `policy_values` have **no direct
+  insert/update/delete policy left for anyone, Admin included** — the only writer is
+  `apply_policy_change()`, `security definer`, reachable only from `decide_policy_change()`. This
+  is the one governance rule (§8 item 8) verified end-to-end at the database level, not just by
+  team discipline.
+- UI (My Department → Policy): read-only current values for everyone signed in, a "Propose
+  change" action for department leads, a pending-proposals queue for Admin, and a per-department
+  history view.
 
-Consequence: today an HR person who is not Admin **cannot see the list of people they are
-supposed to follow**, and a Reward person cannot see the ledgers. That is the first
-gap to close.
+### 5.7 Who sees what today
+- **People tab** (My Department → HR): HR members, department leads, Admin.
+- **Policy** (current values + propose/approve): read by everyone; propose by department leads;
+  decide by Admin (not the proposer).
+- Team Applications: HR members + Admin (My Department → HR), no longer a separate tab.
+- Proofreading queue, everyone's outcome history: Coordinator+.
+- Budget (top-up), Options (option lists, departments): Admin only. Reward members get a
+  read-only view of credit circulation (§5.5) without Admin access.
+
+The gap v1.0 flagged here — "an HR person who is not Admin cannot see the list of people they are
+supposed to follow, and a Reward person cannot see the ledgers" — is closed for HR (§5.3) and
+partially closed for Reward (§5.5); the rest of Reward's needs are in §6.4.
 
 ---
 
-## 6. What must be built (to-be)
+## 6. What's left to build
 
-Ordered by dependency. Each item names the phase in §7.
+Subsections 6.1–6.3 and 6.6 of v1.0 shipped as designed (with the naming differences noted
+inline in §5) and their content now lives in §5, where it describes the running system rather
+than a plan. The subsection numbers below are kept only so existing cross-references (§2, §4, §7)
+keep pointing at something; §6.1, 6.1b, 6.1c, 6.2, 6.3 and 6.6 are retired as "to-build" entries.
 
-### 6.1 Department model (phase 1 — architecture) — **migration 80, written 2026-09-16**
-- `option_lists` list `department` (codes `HR`, `COORD`, `FORM`, `RF`, `COMM`): departments
-  are created/retired from the Options tab, not from code.
-- `department_members (department_code, user_id, is_lead, added_by_email, created_at)`, at most
-  one lead per department (partial unique index). Written by Admin only (executing row 8).
-  Helpers `is_dept_member(code)`, `is_dept_lead(code)`, `is_any_dept_lead()`.
-- `is_any_formatore()` is redefined as "member of `FORM`"; every existing board editor is
-  backfilled into `FORM` so nobody loses path-creation rights on migration day.
-- `user_roles.standing` (`active` / `watch` / `suspended`), changed only by the decision
-  functions below. A trigger on `tasks` blocks a suspended person from claiming or being
-  assigned a task, without touching the existing task policies.
-- `policy_values (key, value, label, updated_by_email)`: the numbers of §8.3 and §8.4 plus the
-  board-misuse penalty, Admin-editable from Options, read by everyone.
-- `people_decisions`: append-only log with subject, type, payload, reason, proposer, status
-  (`pending` / `approved` / `rejected` / `withdrawn`), decider, note. **Clients cannot
-  insert or update it**: the only entry points are `propose_people_decision()` and
-  `decide_people_decision()`, which enforce who may propose, who may approve, and that the
-  two are different people. Types: `qualification_add/remove`, `watch_on/off` (applied at
-  once, no approval — row 4), `suspend`, `reinstate`, `exclude` (role → user, standing →
-  suspended, department/board/qualification rows dropped; account and ledgers kept — §8.7),
-  `role_change`, `board_misuse` (writes a `task_outcome_events` row with a negative
-  reputation delta, so the existing trigger applies it).
-- Join the Team: `recommended_by` is recorded when an application is set to `recommended`;
-  a trigger refuses approval by the same person. HR members get access alongside
-  Coordinators; Coordinators are removed from these policies in phase 2a together with the
-  client change (`canReviewApplications()`).
-- `hr_people_overview()`: one function returning the whole People tab (role, standing, credits,
-  reputation, qualifications, departments, last event, negative events in the window, open
-  tasks, pending decisions, computed `at_risk`). Readable by HR members, leads and Admin.
-- **Decided (2026-09-16):** `FORM` department membership replaces `is_any_formatore()` as the
-  gate for creating formation paths; `board_editors` keeps its own meaning (who curates and
-  moderates a given board).
+### 6.1, 6.1b, 6.1c, 6.2, 6.3, 6.6 — shipped, see §5
+- Department model, `people_decisions`, `standing`, `policy_values` → **§5.1, §5.3** (migration 80)
+- Formation path co-authors → **§5.4** (migration 82)
+- Boards open to members with moderation → **§5.4** (migration 84)
+- HR / People tab → **§5.3** (migration 80, UI in `people.js`)
+- Quiz Markdown import + AI prompt → **§5.4** (migration 83, parser in `formation.js`)
+- Policy revision framework → **§5.6** (migration 86)
+- Extra-credit approval (row 10 — not originally its own §6 subsection in v1.0, just a policy
+  value with nothing reading it) → **§5.5** (migration 90)
 
-### 6.1b Formation paths with co-authors (phase 2 — small)
-- New table `formation_path_editors (path_id, user_id, added_by_email, created_at)`, primary
-  key (path_id, user_id); the owner adds/removes rows (row 23 in §4).
-- Helper `can_edit_path(pid)` = owner **or** co-author **or** Coordinator. All update/delete
-  policies of the path subtree (paths, years, modules, chapters, formation posts, quizzes,
-  questions — migrations 73–76) are redefined in one migration to use it instead of
-  `owner_id = auth.uid()`. Publishing (`status → published`) stays with the owner or the
-  Formation lead.
-- UI: a "Co-authors" section in the path editor (search by name/email among `FORM` members).
-  The existing path chat serves as the co-authors' workspace before publication.
+### 6.4 Reward — partially built, phase 3 continues
+What shipped: read-only credit-circulation numbers for `RF` members
+(`reward_credit_overview()`, migration 88 — posted / claimed / awaiting review / redeemed,
+plus `budget_ledger` read access) and, in spirit, an audit trail for policy changes via
+`policy_proposals` (§5.6) rather than a separate history table on `task_category_rates` /
+`task_reputation_tiers`.
 
-### 6.1c Boards open to members, with light moderation (phase 2 — medium)
-- `board_posts` gains `link_url text`, `image_path text` (Storage bucket `board-media`, size
-  limit, upload allowed to any authenticated account, read to everyone), `status text default
-  'published'` (`pending` / `published` / `rejected`), `moderated_by_email`, `moderated_at`,
-  `moderation_note`.
-- Insert policy opens to every account. A trigger sets `status = 'pending'` unless the author is
-  an editor of that board, a Coordinator, or an Operator (who publish directly — §2.6).
-  Select policy: `published` to everyone; `pending`/`rejected` to the author and the board's
-  editors/Coordinators.
-- Moderation UI in `boards.js`: a "Pending" counter and queue for editors of that board;
-  publish / reject with note; remove a published post with reason (row 21). Board usage policy
-  shown once before the first post (acknowledgement stored per user) and permanently in Help.
-- `board_misuse` becomes an event type in `task_outcome_events` (`task_id` null, negative
-  `reputation_delta` from a configurable value in Options); for Users a `standing = 'no_post'`
-  value blocks further submissions. Both written only through the people-decision approval
-  flow (row 22), never directly by the editor.
-- Search: a search box inside Boards; in Dashboard search a separate "From the boards" section,
-  never mixed with archive rows.
-- "Promote to archive" button for editors/Coordinators: creates a document in `revision` with
-  title/body pre-filled and a back-reference to the post (row 24).
-
-### 6.2 HR view (phase 2 — mostly presentation)
-- A new tab **People**, visible to HR members and Admin, that joins `user_roles`,
-  `user_profiles`, `user_qualifications`, `department_members`, aggregate of
-  `task_outcome_events` (last event, count of fails in the last N days, last activity), and
-  `standing`. Sortable and filterable; "at risk" is a **computed** badge (e.g. reputation < 40,
-  or ≥ 2 fail/reclaim events in 60 days — thresholds live in an option list so HR can tune
-  them), not a stored flag. The stored thing is the HR decision (`watch`), not the heuristic.
-- Application review moves from "Coordinator+" to "HR members + Admin"; the recommend step
-  records the proposer so the approver check in row 1 can be enforced.
-- Proposal/approval UI for rows 3–7 of §4, writing `people_decisions`.
-
-### 6.3 Formation tools (phase 2 — small, independent)
-- **Quiz import from Markdown**: define a format (one `##` per question, `- [x]`/`- [ ]` options,
-  optional `points:`), a parser in `formation.js`, and an "Import quiz (.md)" button that inserts
-  `formation_quiz_questions`. Validate against the same constraints the DB enforces (≥ 2 options,
-  exactly one correct).
-- **Standard AI prompt** for drafting a module summary and quiz in that format: a text block in
-  the Help tab and a "Copy prompt" button in the module editor. No backend.
-- Material import into the archive: **no new path** — document the rule (§2.3) in Help; if a
-  shortcut is wanted later, it is "create a document in draft from the formation module", which
-  still lands in the normal workflow.
-
-### 6.4 Reward (phase 3 — after the policy is written)
-- Read access to `budget_ledger`, `task_outcome_events`, rates and tiers for `RF` members.
-- History tables (or an audit trigger) for `task_category_rates` and `task_reputation_tiers`, so
-  a rate change is an event with before/after, not an overwrite.
+Still open:
+- `RF` members still cannot read `task_outcome_events` directly (only the aggregate numbers in
+  `reward_credit_overview()`) — needed for the anomaly report below.
 - `compensation_runs (id, period_from, period_to, prepared_by, approved_by, approved_at, note)`
   and `compensation_lines (run_id, user_id, credits_settled, amount, currency, reference)`: the
   record that credits were converted to money, so "credits earned" and "credits paid" can be
-  reconciled. Optional until the policy exists.
-- Anomaly report (task with extra credits above threshold; operator with credits growing without
-  published tasks): a query, exposed as a report.
+  reconciled. Still optional until Naeem's review of `docs/REWARD_POLICY.md` lands (§8 item 6).
+- Anomaly report (task with extra credits above threshold — now flagged automatically via
+  `tasks.extra_credits_status`, §5.5; an operator whose credits grow without published tasks —
+  still needs a query, exposed as a report).
 
 ### 6.5 Communication (no phase)
 - Nothing required. A "What's new" block on the Dashboard fed by Announcements is a nice-to-have.
 
-### 6.6 Policy revision framework (phase 3, cross-department — see §2.8)
-Not started. Technical design pending; sketch below to guide it, not a spec to build from as-is.
-- A `policy_proposals` table (or similarly named): department_code, target table, target
-  key/row, proposed field changes (old/new), rationale, proposed_by, status
-  (pending/approved/rejected/withdrawn), decided_by, decided_at, decision note. Append-only, like
-  `task_outcome_events` and the people-decision log — nothing is ever deleted.
-- `propose_policy_change(...)`: any lead of the owning department (§2.8) may call it; inserts a
-  pending proposal, changes nothing yet.
-- `approve_policy_change(id)` / `reject_policy_change(id, note)`: Admin only, and not the same
-  user who proposed. Approving writes the new value into the real table
-  (`task_category_rates` / `task_reputation_tiers` / `policy_values`) inside the same
-  transaction, with `updated_by_email` pointing at the approving Admin and a reference back to
-  the proposal.
-- RLS: remove the current direct `admin_update` policy on `task_category_rates`,
-  `task_reputation_tiers` and `policy_values` (today any Admin can write them unilaterally —
-  exactly what §2.8 says must stop). All writes to these tables go through
-  `approve_policy_change()`, `security definer`, which is the only path that can move a value
-  from proposed to live.
-- UI: a read-only "Current policy" view for everyone (replaces direct editing in the existing
-  Departments/Policy values admin panels); a "Propose change" action for department leads; a
-  "Pending proposals" queue for Admin (approve/reject with note); a per-department "Policy
-  history" view (mirrors the People tab's per-person decision history, §6.2).
-- Until this is built, policy changes are made the trial-phase way: an Admin edits the table
-  directly, but only after a decision recorded in a document like `docs/REWARD_POLICY.md` — the
-  same discipline the schema will later enforce, applied by hand.
+### 6.7 Known gap: formation path publish doesn't fully match §4 row 17
+Row 17 implies a Formatore proposes and the Formation lead approves publishing, as a distinct
+proposer/approver pair. In practice `can_edit_path()`'s publish check (§5.4) allows the owner
+(who is usually the same formatore who wrote it), the Formation lead, any Coordinator, or Admin —
+so an owner who is also a formatore can publish their own path without a second person's sign-off.
+Pre-dates migrations 80–90; not a regression, but not matched to the letter of the matrix either.
+Low priority: formation paths go through the same document revision/approval workflow before
+their content reaches the archive (row 18), so this doesn't bypass the archive's own review.
+
+### 6.8 Known gap: two technical-role enforcement items from earlier handoffs
+Carried over, not touched by migrations 80–90:
+- "Only the Owner appoints department leads" (row 8) is a written rule, not an RLS-enforced one —
+  any Admin can currently write `department_members`. Harmless today (Owner is the sole Admin);
+  revisit if/when a second Admin is added.
+- Internal team communications (a private lead-to-team channel, distinct from the public,
+  moderated Boards) — explicitly deferred by the Owner, no design started.
 
 ---
 
 ## 7. Implementation phases and who works on them
 
-| Phase | Content | Model / people | Exit criterion |
-|---|---|---|---|
-| **0** | This document agreed; policy skeleton for Reward written by the Reward lead / Owner | Team | §8 questions answered |
-| **1** | Department model: migration 80 (written; to be run and verified), then a minimal Admin UI to assign members/leads and edit policy values | Migration: Claude **Opus** (done) → UI: **Sonnet**; Sheril reviews the PR | HR and Admin can be assigned to departments; suspending a user blocks task claiming |
-| **2a** | People tab (HR view) + proposal/approval flows | **Sonnet** + Sheril (front end) | An HR member who is not Admin can do everything in §2.1 from the app |
-| **2b** | Quiz `.md` import + AI prompt; path co-authors (§6.1b) | **Sonnet** / Sheril | A formatore imports a 10-question quiz from a file; two formatori edit the same path |
-| **2c** | Boards open to members with moderation, usage policy, promote-to-archive (§6.1c) | **Sonnet** / Sheril | A User submits a post, a board editor publishes it; an Operator posts directly |
-| **3** | Reward: audit history, compensation runs, anomaly report | Sonnet, after the policy | A compensation run can be recorded and reconciled |
-| later | Operator training programme; "What's new" | — | — |
+| Phase | Content | Model / people | Exit criterion | Status |
+|---|---|---|---|---|
+| **0** | This document agreed; policy skeleton for Reward written by the Reward lead / Owner | Team | §8 questions answered | ✅ Done |
+| **1** | Department model (migration 80), then a minimal Admin UI to assign members/leads and edit policy values | Migration: Claude **Opus** → UI: **Sonnet** | HR and Admin can be assigned to departments; suspending a user blocks task claiming | ✅ Done |
+| **2a** | People tab (HR view) + proposal/approval flows | **Sonnet** | An HR member who is not Admin can do everything in §2.1 from the app | ✅ Done |
+| **2b** | Quiz `.md` import + AI prompt; path co-authors (§5.4) | **Sonnet** | A formatore imports a 10-question quiz from a file; two formatori edit the same path | ✅ Done |
+| **2c** | Boards open to members with moderation, usage policy, promote-to-archive (§5.4) | **Sonnet** | A User submits a post, a board editor publishes it; an Operator posts directly | ✅ Done |
+| **3** | Policy revision framework (§5.6); Reward audit history, compensation runs, anomaly report (§6.4); extra-credit approval (§5.5, migration 90) | **Sonnet** | A compensation run can be recorded and reconciled | 🟡 Partial — policy framework and extra-credit approval done; compensation runs/anomaly report still open (§6.4) |
+| later | Operator training programme; "What's new" | — | — | Not started |
 
 The switch from Opus to Sonnet happens **after the migration 80 schema and the decision matrix
 are frozen** — from that point the remaining work is views, forms and parsers, which Sonnet does
@@ -490,7 +499,8 @@ and applies unchanged. Every session that touches this area ends with a new
 
 ## 8. Decisions log
 
-Answered by the Owner on 2026-09-16 unless noted. One item still open (8.6).
+Answered by the Owner on 2026-09-16 unless noted. Item 6 was still open when v1.0 was written;
+it was answered 2026-09-17 (see its own entry below) and nothing here remains open as of v1.1.
 
 1. **May one person lead two departments?** Yes, **temporarily**, whichever departments they
    are: this is an experimental phase, the system has to be tested while suitable people are
@@ -526,6 +536,7 @@ Answered by the Owner on 2026-09-16 unless noted. One item still open (8.6).
 8. **Policy tables must stay revisable for the whole life of the project, never frozen as
    "final"** (decided 2026-09-17, prompted by writing the first Reward policy in the trial
    phase): every change is a team decision an Admin applies, never a single Admin's unilateral
-   edit. Process in §2.8; the in-app framework to enforce it technically is planned (§6.6,
-   phase 3) but not yet built — until then the discipline is applied by hand, through a policy
-   document like `docs/REWARD_POLICY.md`.
+   edit. Process in §2.8; the in-app framework that enforces it technically is now built and live
+   (§5.6, migration 86 — direct admin writes to the policy tables are gone at the RLS level, not
+   just discouraged). `docs/REWARD_POLICY.md` remains the human-readable summary of Reward's own
+   trial-phase values, kept in sync with the in-app history rather than being the primary record.
