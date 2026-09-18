@@ -2,7 +2,7 @@
 // Cache name is keyed to the same ?v= deploy version already used across the app's own
 // script/style tags (see index.html), so a new deploy gets a fresh cache automatically -
 // old caches are dropped in 'activate' below.
-const CACHE_VERSION = '20260901221500';
+const CACHE_VERSION = '20260918180126';
 const CACHE_NAME = 'urdu-archive-' + CACHE_VERSION;
 
 // Only same-origin static assets are ever cached. Supabase (API/Auth/Storage) and Google
@@ -35,7 +35,14 @@ self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin || event.request.method !== 'GET') return; // network only
 
-  const isVersionedScript = url.pathname.startsWith('/js/') || url.pathname === '/index.html' || url.pathname === '/';
+  // Path checks are substring/suffix-based, not startsWith('/js/') or === '/index.html', because
+  // this app is served from a GitHub Pages *project* site (https://.../Urdu-Archive/...), not a
+  // domain root - the real pathname is "/Urdu-Archive/js/app.js" etc, which never matched those
+  // exact-prefix checks. That silently made every request - including this file's own app.js/
+  // index.html - fall into the cache-first branch below instead of network-first, so nobody ever
+  // saw a new deploy without manually clearing site data (found 2026-09-18, chasing why several
+  // same-session deploys weren't showing up in a browser that had used the app before).
+  const isVersionedScript = url.pathname.includes('/js/') || url.pathname.endsWith('.html') || url.pathname.endsWith('/');
   if (isVersionedScript) {
     // network-first: these carry a ?v= cache-buster already, but network-first also means
     // a user is never stuck on stale app code just because the SW cache wasn't evicted yet.
