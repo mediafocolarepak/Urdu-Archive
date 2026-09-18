@@ -1,7 +1,14 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.3 (2026-09-18) — decisions taken by the Owner; all of phases 1 through 3 are built and
+**Status: v1.4 (2026-09-18) — decisions taken by the Owner; all of phases 1 through 3 are built and
 merged (migrations 80–93). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.4:** same day as v1.1–v1.3, later session, no new migration. The formation
+path editor gained a "Generate image prompt" button (§5.4): composes a ready-to-paste AI-image
+prompt from the path's own title/description/target audience, for the formatore to run through
+whatever image tool they use and then upload via the existing thumbnail field (v1.2/migration 93).
+Deliberately not automatic image generation - no paid API, no secret key to keep, same reasoning
+already applied to the quiz-drafting AI prompt.
 
 **What changed in v1.3:** same day as v1.1/v1.2, later session, no new migration. The Personnel
 report (added in v1.2) now separates the actual team (operators and up) from plain Users, who can
@@ -364,7 +371,11 @@ low-priority known gaps.
   course is built around the texts being filed into it, not the other way round.
 - `formation_paths.thumbnail_path` (migration 93): an optional cover image per path, shown on its
   catalog card and detail page; a path with none gets a stable per-path colour placeholder with
-  its initial letter instead, so the catalog still reads as a finished grid of cards.
+  its initial letter instead, so the catalog still reads as a finished grid of cards. The path
+  editor's "Generate image prompt" button (v1.4) composes a prompt from the path's own title/
+  description/target audience for an external AI image tool - no image generation happens inside
+  the app itself, the formatore pastes the prompt elsewhere and uploads the result through the
+  same thumbnail field.
 - **No more native `prompt()`/`confirm()` dialogs (v1.3):** every create/rename/delete action in
   Formation Paths uses a styled in-app popup instead (`confirmPopup()`, new in `core.js` and
   reusable by other modules; `openChapterPopup()`/`openModulePopup()` for the two text inputs).
