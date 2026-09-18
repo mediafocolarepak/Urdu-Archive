@@ -10,7 +10,7 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails } from './core.js?v=20260918004854';
+import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails } from './core.js?v=20260918171904';
 
 // Standard prompt for drafting a quiz with an AI tool (GOVERNANCE.md §2.3), shared by the
 // "Copy prompt" button below and the matching Help entry (see supabase/83_formation_ai_prompt_help.sql)
@@ -232,9 +232,10 @@ async function renderPathDetail(main, pathId) {
   const path = await withStatus(sb.from('formation_paths').select('*').eq('id', pathId).maybeSingle());
   if (!path) { State.formationSelectedPathId = null; return renderFormationView(main); }
 
-  const years = await withStatus(sb.from('formation_years').select('*').eq('path_id', pathId).order('sequence_number').order('id'));
-  const yearIds = years.map(y => y.id);
-  const modules = yearIds.length ? await withStatus(sb.from('formation_modules').select('*').in('year_id', yearIds).order('sequence_number').order('id')) : [];
+  // Flattened structure (migration 92): Path -> Module -> Chapter -> Post, one level shallower
+  // than the original Path -> Year -> Module -> Chapter -> Post - "Anni" added a hierarchy level
+  // almost nobody used (see PROJECT_HANDOFF_v29+ / GOVERNANCE.md session notes 2026-09-18).
+  const modules = await withStatus(sb.from('formation_modules').select('*').eq('path_id', pathId).order('sequence_number').order('id'));
   const moduleIds = modules.map(m => m.id);
   const chapters = moduleIds.length ? await withStatus(sb.from('formation_chapters').select('*').in('module_id', moduleIds).order('sequence_number').order('id')) : [];
   const chapterIds = chapters.map(c => c.id);
@@ -272,7 +273,6 @@ async function renderPathDetail(main, pathId) {
   const canEdit = path.owner_id === user.id || isCoAuthor || canReviewApplications();
   const canSeeEnrollees = canEdit;  // owner or Coordinator/Admin - formation_enrollees() checks this itself too
 
-  const modulesOf = yearId => modules.filter(m => m.year_id === yearId);
   const chaptersOf = moduleId => chapters.filter(c => c.module_id === moduleId);
   const postsOf = chapterId => posts.filter(p => p.chapter_id === chapterId);
 
@@ -360,8 +360,8 @@ async function renderPathDetail(main, pathId) {
       </div>` : ''}
       <hr style="margin:16px 0;">
       <div id="fp-tree">
-        ${canEdit ? '<div class="btn-row" style="margin-bottom:10px;"><button class="btn" id="fp-add-year">+ Add year</button></div>' : ''}
-        ${years.length ? years.map(y => renderYearBlock(y, modulesOf(y.id), chaptersOf, postsOf, canEdit, quizCtx, docById, textById)).join('') : '<div class="empty-msg">No years yet.</div>'}
+        ${canEdit ? '<div class="btn-row" style="margin-bottom:10px;"><button class="btn" id="fp-add-module">+ Add module</button></div>' : ''}
+        ${modules.length ? modules.map((m, i) => renderModuleBlock(m, i + 1, chaptersOf(m.id), postsOf, canEdit, quizCtx, docById, textById)).join('') : '<div class="empty-msg">No modules yet.</div>'}
       </div>
     </div>`;
 
@@ -397,7 +397,7 @@ async function renderPathDetail(main, pathId) {
   if (canEdit) {
     document.getElementById('fp-edit-details').addEventListener('click', () => openPathPopup({ path, onSaved: () => renderPathDetail(main, pathId) }));
     document.getElementById('fp-delete-path').addEventListener('click', async () => {
-      if (!confirm('Delete this whole path, with all its years/modules/chapters/posts? This cannot be undone.')) return;
+      if (!confirm('Delete this whole path, with all its modules/chapters/posts? This cannot be undone.')) return;
       await withStatus(sb.from('formation_paths').delete().eq('id', pathId), 'Deleting...');
       State.formationSelectedPathId = null;
       renderFormationView(main);
@@ -412,13 +412,8 @@ async function renderPathDetail(main, pathId) {
       await withStatus(sb.from('formation_paths').update({ status: 'archived' }).eq('id', pathId), 'Saving...');
       renderPathDetail(main, pathId);
     });
-    document.getElementById('fp-add-year').addEventListener('click', async () => {
-      const n = prompt('Year number (1, 2, 3...):', String(years.length + 1));
-      if (n === null) return;
-      const year_number = parseInt(n, 10);
-      if (!Number.isFinite(year_number)) { alert('Not a valid number.'); return; }
-      await withStatus(sb.from('formation_years').insert({ path_id: pathId, year_number, sequence_number: years.length }), 'Saving...');
-      renderPathDetail(main, pathId);
+    document.getElementById('fp-add-module').addEventListener('click', () => {
+      openModulePopup({ pathId, sequence: modules.length, onSaved: () => renderPathDetail(main, pathId) });
     });
   }
 
@@ -427,7 +422,7 @@ async function renderPathDetail(main, pathId) {
   wireCoAuthorsActions(main, pathId, canManageCoAuthors);
   wireQuizActions(main, pathId, quizzes);
 
-  wireTreeActions(main, pathId, years, modules, chapters, posts, canEdit);
+  wireTreeActions(main, pathId, modules, chapters, posts, canEdit);
 }
 
 // ---------- Co-authors (migration 82) ----------
@@ -523,39 +518,60 @@ async function refreshChatThread(main, pathId, channel) {
   });
 }
 
-function renderYearBlock(y, modules, chaptersOf, postsOf, canEdit, quizCtx, docById, textById) {
+// Numbered like a table of contents someone would write by hand ("Module 1", "Chapter 1.2") -
+// the whole point of flattening away "Years" (migration 92) was to make this outline read like
+// a course index, not a database tree, for formatori who are far more at home with paper/Word/
+// Excel than with nested admin screens.
+function renderModuleBlock(m, moduleNumber, chapters, postsOf, canEdit, quizCtx, docById, textById) {
   return `
-  <div class="panel" style="margin-bottom:10px;" data-year-block="${y.id}">
+  <div class="panel" style="margin-bottom:10px;" data-module-block="${m.id}">
     <div class="btn-row" style="justify-content:space-between;">
-      <h3 style="margin:0;">Year ${esc(y.year_number)}</h3>
-      ${canEdit ? `<div class="btn-row">
-        <button class="btn secondary" data-move-year-up="${y.id}" style="padding:2px 8px;">&#9650;</button>
-        <button class="btn secondary" data-move-year-down="${y.id}" style="padding:2px 8px;">&#9660;</button>
-        <button class="btn secondary" data-add-module="${y.id}" style="padding:2px 8px;">+ Module</button>
-        <button class="btn danger" data-delete-year="${y.id}" style="padding:2px 8px;">Delete</button>
-      </div>` : ''}
-    </div>
-    ${modules.length ? modules.map(m => renderModuleBlock(m, chaptersOf(m.id), postsOf, canEdit, quizCtx, docById, textById)).join('') : '<div class="hint">No modules yet.</div>'}
-  </div>`;
-}
-
-function renderModuleBlock(m, chapters, postsOf, canEdit, quizCtx, docById, textById) {
-  return `
-  <div style="margin:10px 0 10px 12px;" data-module-block="${m.id}">
-    <div class="btn-row" style="justify-content:space-between;">
-      <div style="font-weight:600;" dir="auto">${esc(m.title)}</div>
+      <div style="font-weight:600;" dir="auto">Module ${moduleNumber} &mdash; ${esc(m.title)}</div>
       ${canEdit ? `<div class="btn-row">
         <button class="btn secondary" data-move-module-up="${m.id}" style="padding:2px 6px;">&#9650;</button>
         <button class="btn secondary" data-move-module-down="${m.id}" style="padding:2px 6px;">&#9660;</button>
-        <button class="btn secondary" data-rename-module="${m.id}" style="padding:2px 6px;">Rename</button>
+        <button class="btn secondary" data-edit-module="${m.id}" style="padding:2px 6px;">Edit</button>
         <button class="btn secondary" data-add-chapter="${m.id}" style="padding:2px 6px;">+ Chapter</button>
         <button class="btn danger" data-delete-module="${m.id}" style="padding:2px 6px;">Delete</button>
       </div>` : ''}
     </div>
     ${m.description ? `<div class="hint" dir="auto">${esc(m.description)}</div>` : ''}
     ${(quizCtx.canManage || quizCtx.canTake) ? quizBlockHtml('module', m.id, quizCtx.quizByModule[m.id], quizCtx) : ''}
-    ${chapters.length ? chapters.map(c => renderChapterBlock(c, postsOf(c.id), canEdit, docById, textById)).join('') : '<div class="hint">No chapters yet.</div>'}
+    ${chapters.length ? chapters.map((c, i) => renderChapterBlock(c, `${moduleNumber}.${i + 1}`, postsOf(c.id), canEdit, docById, textById)).join('') : '<div class="hint">No chapters yet.</div>'}
   </div>`;
+}
+
+// Title + description, used both to create a new module (pathId given, module null) and to
+// edit an existing one (module given) - same shape as openPathPopup/openPostPopup elsewhere in
+// this file.
+function openModulePopup({ pathId, module = null, sequence = 0, onSaved }) {
+  document.getElementById('fm-module-popup')?.remove();
+  const backdrop = document.createElement('div');
+  backdrop.id = 'fm-module-popup';
+  backdrop.className = 'overlay-backdrop';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel">
+      <h2 style="margin-top:0;">${module ? 'Edit module' : 'New module'}</h2>
+      <div class="field"><label>Title</label><input id="fm-module-title" dir="auto" value="${esc(module ? module.title : '')}"></div>
+      <div class="field"><label>Description <span class="hint">(optional)</span></label><textarea id="fm-module-desc" dir="auto" rows="3">${esc(module ? module.description || '' : '')}</textarea></div>
+      <div class="hint" id="fm-module-error"></div>
+      <div class="btn-row" style="justify-content:flex-end;">
+        <button class="btn secondary" id="fm-module-cancel">Cancel</button>
+        <button class="btn" id="fm-module-save">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+  document.getElementById('fm-module-cancel').addEventListener('click', () => backdrop.remove());
+  document.getElementById('fm-module-save').addEventListener('click', async () => {
+    const title = document.getElementById('fm-module-title').value.trim();
+    const description = document.getElementById('fm-module-desc').value.trim() || null;
+    if (!title) { document.getElementById('fm-module-error').textContent = 'Title is required.'; return; }
+    if (module) await withStatus(sb.from('formation_modules').update({ title, description }).eq('id', module.id), 'Saving...');
+    else await withStatus(sb.from('formation_modules').insert({ path_id: pathId, title, description, sequence_number: sequence }), 'Saving...');
+    backdrop.remove();
+    onSaved();
+  });
 }
 
 // ---------- Quiz & certificate (Fase D) ----------
@@ -799,12 +815,12 @@ function wireQuizActions(main, pathId, quizzes) {
   });
 }
 
-function renderChapterBlock(c, posts, canEdit, docById, textById) {
+function renderChapterBlock(c, chapterLabel, posts, canEdit, docById, textById) {
   const isOpen = expandedChapters.has(c.id);
   return `
   <div style="margin:8px 0 8px 16px;padding:8px;border:1px solid var(--accent-soft);border-radius:6px;" data-chapter-block="${c.id}">
     <div class="btn-row" style="justify-content:space-between;">
-      <span style="font-weight:600;cursor:pointer;" data-toggle-chapter="${c.id}" dir="auto">${isOpen ? '&#9662;' : '&#9656;'} ${esc(c.title)} <span class="hint">(${posts.length})</span></span>
+      <span style="font-weight:600;cursor:pointer;" data-toggle-chapter="${c.id}" dir="auto">${isOpen ? '&#9662;' : '&#9656;'} Chapter ${esc(chapterLabel)} &mdash; ${esc(c.title)} <span class="hint">(${posts.length})</span></span>
       ${canEdit ? `<div class="btn-row">
         <button class="btn secondary" data-move-chapter-up="${c.id}" style="padding:2px 6px;">&#9650;</button>
         <button class="btn secondary" data-move-chapter-down="${c.id}" style="padding:2px 6px;">&#9660;</button>
@@ -851,7 +867,7 @@ async function reorderSibling(table, siblings, id, dir, onDone) {
   onDone();
 }
 
-function wireTreeActions(main, pathId, years, modules, chapters, posts, canEdit) {
+function wireTreeActions(main, pathId, modules, chapters, posts, canEdit) {
   const refresh = () => renderPathDetail(main, pathId);
 
   document.querySelectorAll('[data-toggle-chapter]').forEach(el => el.addEventListener('click', () => {
@@ -867,38 +883,17 @@ function wireTreeActions(main, pathId, years, modules, chapters, posts, canEdit)
 
   if (!canEdit) return;
 
-  document.querySelectorAll('[data-move-year-up]').forEach(el => el.addEventListener('click', () =>
-    reorderSibling('formation_years', years, parseInt(el.dataset.moveYearUp, 10), -1, refresh)));
-  document.querySelectorAll('[data-move-year-down]').forEach(el => el.addEventListener('click', () =>
-    reorderSibling('formation_years', years, parseInt(el.dataset.moveYearDown, 10), 1, refresh)));
-  document.querySelectorAll('[data-delete-year]').forEach(el => el.addEventListener('click', async () => {
-    if (!confirm('Delete this year with all its modules/chapters/posts?')) return;
-    await withStatus(sb.from('formation_years').delete().eq('id', el.dataset.deleteYear), 'Deleting...');
-    refresh();
-  }));
-  document.querySelectorAll('[data-add-module]').forEach(el => el.addEventListener('click', async () => {
-    const yearId = parseInt(el.dataset.addModule, 10);
-    const title = prompt('Module title:');
-    if (!title || !title.trim()) return;
-    const siblingCount = modules.filter(m => m.year_id === yearId).length;
-    await withStatus(sb.from('formation_modules').insert({ year_id: yearId, title: title.trim(), sequence_number: siblingCount }), 'Saving...');
-    refresh();
-  }));
-
   document.querySelectorAll('[data-move-module-up]').forEach(el => el.addEventListener('click', () => {
     const m = modules.find(x => x.id === parseInt(el.dataset.moveModuleUp, 10));
-    reorderSibling('formation_modules', modules.filter(x => x.year_id === m.year_id), m.id, -1, refresh);
+    reorderSibling('formation_modules', modules, m.id, -1, refresh);
   }));
   document.querySelectorAll('[data-move-module-down]').forEach(el => el.addEventListener('click', () => {
     const m = modules.find(x => x.id === parseInt(el.dataset.moveModuleDown, 10));
-    reorderSibling('formation_modules', modules.filter(x => x.year_id === m.year_id), m.id, 1, refresh);
+    reorderSibling('formation_modules', modules, m.id, 1, refresh);
   }));
-  document.querySelectorAll('[data-rename-module]').forEach(el => el.addEventListener('click', async () => {
-    const m = modules.find(x => x.id === parseInt(el.dataset.renameModule, 10));
-    const title = prompt('New module title:', m.title);
-    if (!title || !title.trim()) return;
-    await withStatus(sb.from('formation_modules').update({ title: title.trim() }).eq('id', m.id), 'Saving...');
-    refresh();
+  document.querySelectorAll('[data-edit-module]').forEach(el => el.addEventListener('click', () => {
+    const m = modules.find(x => x.id === parseInt(el.dataset.editModule, 10));
+    openModulePopup({ pathId, module: m, onSaved: refresh });
   }));
   document.querySelectorAll('[data-delete-module]').forEach(el => el.addEventListener('click', async () => {
     if (!confirm('Delete this module with all its chapters/posts?')) return;
