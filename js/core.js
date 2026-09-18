@@ -299,6 +299,13 @@ export const State = {
 // (archive-files) because it's public-read and has a much smaller per-file size cap.
 export const BOARD_MEDIA_BUCKET = 'board-media';
 
+// Storage bucket for department-channel message images (94_department_messages.sql) - unlike
+// BOARD_MEDIA_BUCKET this one is NOT public-read: the whole point of the department channel is
+// that it's private to that department's members, so images in it must be too. Objects are keyed
+// "<department_code>/<filename>"; the storage policies check the department_code prefix against
+// is_dept_member()/is_dept_lead(), so reading one back needs a signed URL, not a public URL.
+export const DEPARTMENT_MEDIA_BUCKET = 'department-media';
+
 // Records that the signed-in user has seen and accepted the board usage policy (js/boards.js
 // shows it once before their first post). Never re-shown once set.
 export async function ackBoardPolicy() {

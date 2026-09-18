@@ -3,10 +3,13 @@
 // Department list is fully data-driven from option_lists ('department') and department_members
 // - departments can be added, renamed or retired from Options without touching this file.
 
-import { sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260918191206';
-import { renderPolicySection } from './policy.js?v=20260918191206';
-import { renderPeopleSection } from './people.js?v=20260918191206';
-import { renderApplicationsView } from './collaboration.js?v=20260918191206';
+import {
+  sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe,
+  nameMapForEmails, DEPARTMENT_MEDIA_BUCKET,
+} from './core.js?v=20260918193251';
+import { renderPolicySection } from './policy.js?v=20260918193251';
+import { renderPeopleSection } from './people.js?v=20260918193251';
+import { renderApplicationsView } from './collaboration.js?v=20260918193251';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -36,6 +39,7 @@ export async function renderMyDepartmentView(main) {
         : `<p class="hint">${esc(deptLabel(selected))}</p>`}
     </div>
     <div id="mydept-roster-box"></div>
+    <div id="mydept-channel-box"></div>
     ${selected === 'HR' ? '<div id="mydept-applications-box"></div>' : ''}
     ${selected === 'HR' ? '<div id="mydept-people-box"></div>' : ''}
     ${selected === 'RF' ? '<div id="mydept-credits-box"></div>' : ''}
@@ -53,6 +57,7 @@ export async function renderMyDepartmentView(main) {
   }
 
   await renderRoster(selected);
+  await renderDeptChannel(document.getElementById('mydept-channel-box'), selected);
   // HR's work starts with Team Applications (screening candidates before they're even Operators)
   // and continues with the People roster (GOVERNANCE.md §6.2) once they're on the team - both
   // belong here, per the owner's request 2026-09-17/18, so an HR lead doesn't have to bounce
@@ -510,4 +515,180 @@ async function renderRoster(code) {
     if (error) { alert(error.message); return; }
     renderRoster(code);
   }));
+}
+
+// ---------- Team channel (94_department_messages.sql, PROJECT_HANDOFF_v33.md) ----------
+// One flat, chronological message thread per department, visible only to that department's
+// members and Admin - distinct from Boards (public, moderated) and the admin<->user chat
+// (chat_messages: 1:1 ticketing). Any member can post; the department lead (or Admin) can pin;
+// the author can edit/delete their own message within a short window after posting. The
+// server-side window (the migration's trigger/RLS) is the real gate - this constant only decides
+// when the client stops offering the Edit/Delete links, so don't rely on it for anything else.
+const DEPT_MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
+
+function deptChatDateTime(iso) { return esc((iso || '').slice(0, 16).replace('T', ' ')); }
+
+async function renderDeptChannel(box, code) {
+  markDeptSeen(code);
+  const canPin = isDeptLead(code) || isAdmin();
+  const { data: { user } } = await sb.auth.getUser();
+
+  const rows = await withStatus(sb.from('department_messages').select('*').eq('department_code', code).order('created_at'));
+  const nameMap = await nameMapForEmails(rows.map(r => r.user_email));
+
+  const imagePaths = rows.filter(r => r.image_path).map(r => r.image_path);
+  let signedUrlByPath = {};
+  if (imagePaths.length) {
+    const { data } = await sb.storage.from(DEPARTMENT_MEDIA_BUCKET).createSignedUrls(imagePaths, 3600);
+    (data || []).forEach(d => { if (d && d.signedUrl) signedUrlByPath[d.path] = d.signedUrl; });
+  }
+
+  // Each message renders exactly once as an interactive bubble (in the chronological thread) -
+  // a pinned message additionally gets a plain, non-interactive reminder in the pinned section
+  // above. Two interactive copies of the same message would mean two elements sharing the same
+  // data-edit-id/data-delete-id/data-pin-id, and querySelector (singular) in the click handlers
+  // below would always act on the first one regardless of which copy was actually clicked.
+  const bubble = r => {
+    const mine = r.user_id === user.id;
+    const withinEditWindow = (Date.now() - new Date(r.created_at).getTime()) < DEPT_MESSAGE_EDIT_WINDOW_MS;
+    const img = r.image_path && signedUrlByPath[r.image_path]
+      ? `<div style="margin-top:6px;"><img src="${esc(signedUrlByPath[r.image_path])}" style="max-width:100%;max-height:240px;border-radius:8px;"></div>` : '';
+    return `
+      <div class="chat-bubble ${mine ? 'from-me' : 'from-other'} ${r.pinned ? 'pinned' : ''}" data-msg-id="${r.id}">
+        <div class="chat-meta">${esc(nameMap[r.user_email] || r.user_email)} &middot; ${deptChatDateTime(r.created_at)}${r.edited_at ? ' &middot; edited' : ''}${r.pinned ? ' &middot; 📌 pinned' : ''}</div>
+        <div class="dept-msg-body" dir="auto" style="white-space:pre-wrap;">${esc(r.body)}</div>
+        ${img}
+        <div class="btn-row" style="margin-top:6px;">
+          ${mine && withinEditWindow ? `<span class="hint" style="cursor:pointer;text-decoration:underline;" data-edit-id="${r.id}">Edit</span>` : ''}
+          ${mine && withinEditWindow ? `<span class="hint" style="cursor:pointer;text-decoration:underline;" data-delete-id="${r.id}">Delete</span>` : ''}
+          ${canPin ? `<span class="hint" style="cursor:pointer;text-decoration:underline;" data-pin-id="${r.id}" data-pin-next="${!r.pinned}">${r.pinned ? 'Unpin' : 'Pin'}</span>` : ''}
+        </div>
+      </div>`;
+  };
+  const pinnedReminder = r => `
+    <div class="chat-bubble pinned from-other">
+      <div class="chat-meta">📌 ${esc(nameMap[r.user_email] || r.user_email)} &middot; ${deptChatDateTime(r.created_at)}</div>
+      <div dir="auto" style="white-space:pre-wrap;">${esc(r.body)}</div>
+    </div>`;
+
+  const pinned = rows.filter(r => r.pinned);
+
+  box.innerHTML = `
+    <div class="panel">
+      <h2>Team channel <span class="hint">— private to ${esc(deptLabel(code))}, not visible outside the department</span></h2>
+      ${pinned.length ? `<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px;">${pinned.map(pinnedReminder).join('')}</div>` : ''}
+      <div class="chat-thread" id="dept-chat-thread">${rows.length ? rows.map(bubble).join('') : '<div class="empty-msg">No messages yet - start the conversation below.</div>'}</div>
+      <div class="field"><textarea id="dept-msg-text" dir="auto" rows="2" placeholder="Message the ${esc(deptLabel(code))} team..."></textarea></div>
+      <div class="field"><label>Image <span class="hint">(optional)</span></label><input id="dept-msg-image" type="file" accept="image/*"></div>
+      <div class="hint" id="dept-msg-error"></div>
+      <div class="btn-row"><button class="btn" id="dept-msg-send">Send</button></div>
+    </div>`;
+
+  const thread = document.getElementById('dept-chat-thread');
+  thread.scrollTop = thread.scrollHeight;
+
+  document.getElementById('dept-msg-send').addEventListener('click', async () => {
+    const errBox = document.getElementById('dept-msg-error');
+    errBox.textContent = '';
+    const body = document.getElementById('dept-msg-text').value.trim();
+    const file = document.getElementById('dept-msg-image').files[0];
+    if (!body && !file) { errBox.textContent = 'Write a message or attach an image.'; return; }
+    let image_path = null;
+    if (file) {
+      const path = `${code}/${Date.now()}-${file.name}`.replace(/[^a-zA-Z0-9._/-]/g, '_');
+      const { error } = await sb.storage.from(DEPARTMENT_MEDIA_BUCKET).upload(path, file, { upsert: true });
+      if (error) { errBox.textContent = 'Could not upload the image: ' + error.message; return; }
+      image_path = path;
+    }
+    await withStatus(sb.from('department_messages').insert({
+      department_code: code, user_id: user.id, user_email: user.email, body: body || null, image_path,
+    }), 'Sending...');
+    await renderDeptChannel(box, code);
+  });
+
+  box.querySelectorAll('[data-edit-id]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.editId;
+    const r = rows.find(x => String(x.id) === id);
+    const bubbleEl = box.querySelector(`[data-msg-id="${id}"]`);
+    bubbleEl.querySelector('.dept-msg-body').outerHTML = `
+      <textarea class="dept-msg-edit-input" dir="auto" rows="2" style="width:100%;">${esc(r.body || '')}</textarea>
+      <div class="btn-row" style="margin-top:4px;">
+        <button class="btn secondary" id="dept-edit-cancel" style="padding:3px 8px;">Cancel</button>
+        <button class="btn" id="dept-edit-save" style="padding:3px 8px;">Save</button>
+      </div>`;
+    bubbleEl.querySelector('#dept-edit-cancel').addEventListener('click', () => renderDeptChannel(box, code));
+    bubbleEl.querySelector('#dept-edit-save').addEventListener('click', async () => {
+      const next = bubbleEl.querySelector('.dept-msg-edit-input').value.trim();
+      if (!next && !r.image_path) { alert('A message cannot be empty.'); return; }
+      await withStatus(sb.from('department_messages').update({ body: next || null }).eq('id', id), 'Saving...');
+      await renderDeptChannel(box, code);
+    });
+  }));
+
+  box.querySelectorAll('[data-delete-id]').forEach(el => el.addEventListener('click', async () => {
+    if (!confirm('Delete this message? This cannot be undone.')) return;
+    await withStatus(sb.from('department_messages').delete().eq('id', el.dataset.deleteId), 'Deleting...');
+    await renderDeptChannel(box, code);
+  }));
+
+  box.querySelectorAll('[data-pin-id]').forEach(el => el.addEventListener('click', async () => {
+    const pinned_next = el.dataset.pinNext === 'true';
+    await withStatus(sb.from('department_messages').update({ pinned: pinned_next }).eq('id', el.dataset.pinId), 'Saving...');
+    await renderDeptChannel(box, code);
+  }));
+}
+
+// ---------- Live "new message" notifications, same pattern as chat.js's initChatNotifications
+// (localStorage "seen" timestamp per department+user + a Supabase Realtime subscription + one
+// shared toast). Kept here rather than in chat.js since only this module's data is involved, and
+// modules never import each other (core.js star-import convention). ----------
+
+function deptSeenKey(code, uid) { return `deptMsgSeenAt_${code}_${uid}`; }
+function getDeptSeenAt(code, uid) { return localStorage.getItem(deptSeenKey(code, uid)) || '1970-01-01T00:00:00.000Z'; }
+async function markDeptSeen(code) {
+  const { data: { user } } = await sb.auth.getUser();
+  if (user) localStorage.setItem(deptSeenKey(code, user.id), new Date().toISOString());
+}
+
+function showDeptMessageToast(deptCode, onView) {
+  document.querySelectorAll('.toast-notification').forEach(t => t.remove());
+  const toast = document.createElement('div');
+  toast.className = 'toast-notification';
+  toast.innerHTML = `
+    <div class="toast-title">New team message</div>
+    <div class="toast-body">A new message in the ${esc(deptLabel(deptCode))} channel.</div>
+    <div class="btn-row" style="margin:8px 0 0;">
+      <button class="btn" id="toast-view-btn" style="padding:4px 10px;">View</button>
+      <button class="btn secondary" id="toast-close-btn" style="padding:4px 10px;">Dismiss</button>
+    </div>`;
+  document.body.appendChild(toast);
+  document.getElementById('toast-close-btn').addEventListener('click', () => toast.remove());
+  document.getElementById('toast-view-btn').addEventListener('click', () => { toast.remove(); onView(deptCode); });
+}
+
+let deptNotifyChannel = null;
+
+// Called once per login (from app.js, after the dashboard is first shown), same convention as
+// initChatNotifications/initTaskNotifications. navigateToMyDepartment(code) should switch to My
+// Department with that department selected - passed in to avoid a circular import with app.js.
+export async function initDeptMessageNotifications(navigateToMyDepartment) {
+  if (deptNotifyChannel) { sb.removeChannel(deptNotifyChannel); deptNotifyChannel = null; }
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return;
+  const codes = myDepartmentCodes();
+  if (!codes.length) return;
+
+  for (const code of codes) {
+    const { data } = await sb.from('department_messages').select('id')
+      .eq('department_code', code).neq('user_id', user.id).gt('created_at', getDeptSeenAt(code, user.id));
+    if (data && data.length) { showDeptMessageToast(code, navigateToMyDepartment); break; } // one toast is enough at login
+  }
+
+  deptNotifyChannel = sb.channel('dept-messages-notify')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'department_messages' }, payload => {
+      const row = payload.new;
+      if (row.user_id === user.id || !codes.includes(row.department_code)) return;
+      showDeptMessageToast(row.department_code, navigateToMyDepartment);
+    })
+    .subscribe();
 }
