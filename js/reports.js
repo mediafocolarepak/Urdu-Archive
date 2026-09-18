@@ -1,6 +1,19 @@
-import { sb, State, esc, labelOf, optionsHtml, withStatus, withStatusCount } from './core.js?v=20260918173943';
+import { sb, State, esc, labelOf, optionsHtml, withStatus, withStatusCount, isDeptMember, isAdmin, reportTable, nameMapForEmails } from './core.js?v=20260918180126';
+
+const APPLICATION_STATUS_LABEL = {
+  pending: 'Pending', recommended: 'Recommended to Admin', approved: 'Approved', rejected: 'Rejected',
+};
 
 export function renderReportsView(main) {
+  // Personnel report (owner's request, session of 2026-09-18): a printable roster of everyone
+  // employed as an operator or department member, plus Join-the-Team admission requests, for
+  // Admin/HR to bring to a meeting. Deliberately narrower than the People tab's own gate
+  // (isDeptMember('HR') || isAnyDeptLead() || isAdmin()): collaboration_applications' RLS
+  // (81_team_applications_hr_only.sql) only lets HR members and Admin read it, not every
+  // department lead - a Coordination/Reward/Formation lead would otherwise see this button and
+  // get a half-empty report (roster fine, applications silently filtered to nothing by RLS).
+  const canSeePersonnel = isDeptMember('HR') || isAdmin();
+
   main.innerHTML = `
     <div class="panel no-print">
       <h2>Print Reports</h2>
@@ -20,11 +33,71 @@ export function renderReportsView(main) {
         <button class="btn secondary" id="r-print">Print / Export PDF</button>
       </div>
     </div>
+    ${canSeePersonnel ? `
+    <div class="panel no-print">
+      <h2>Personnel &amp; Team Applications <span class="hint">(Admin / HR)</span></h2>
+      <p class="hint">Every operator, coordinator and department member, plus every Join-the-Team application - one printable snapshot for a meeting or a periodic review.</p>
+      <div class="btn-row">
+        <button class="btn" id="r-generate-personnel">Generate</button>
+        <button class="btn secondary" id="r-print-personnel">Print / Export PDF</button>
+      </div>
+    </div>` : ''}
     <div id="report-area"></div>
+    <div id="personnel-report-area"></div>
     <style>@media print { @page { size: A4 landscape; } }</style>
   `;
   document.getElementById('r-generate').addEventListener('click', generateFilteredReport);
   document.getElementById('r-print').addEventListener('click', () => window.print());
+  if (canSeePersonnel) {
+    document.getElementById('r-generate-personnel').addEventListener('click', generatePersonnelReport);
+    document.getElementById('r-print-personnel').addEventListener('click', () => window.print());
+  }
+}
+
+async function generatePersonnelReport() {
+  const area = document.getElementById('personnel-report-area');
+  area.innerHTML = '<div class="empty-msg">Loading...</div>';
+
+  const [people, applications] = await Promise.all([
+    withStatus(sb.rpc('hr_people_overview'), 'Generating report...'),
+    withStatus(sb.from('collaboration_applications').select('*').order('created_at', { ascending: false })),
+  ]);
+
+  const nameMap = await nameMapForEmails(applications.map(a => a.user_email));
+
+  const peopleCols = [
+    { key: 'full_name', label: 'Name' }, { key: 'email', label: 'Email' },
+    { key: 'roleLabel', label: 'Role' }, { key: 'departments', label: 'Departments' },
+    { key: 'qualifications', label: 'Qualifications' }, { key: 'standingLabel', label: 'Standing' },
+    { key: 'credits', label: 'Credits' }, { key: 'reputation', label: 'Reputation' },
+    { key: 'sinceLabel', label: 'Since' }, { key: 'riskLabel', label: 'At risk' },
+  ];
+  const peopleRows = people.map(p => ({
+    ...p,
+    roleLabel: p.role ? p.role.charAt(0).toUpperCase() + p.role.slice(1) : '—',
+    standingLabel: p.standing ? p.standing.charAt(0).toUpperCase() + p.standing.slice(1) : '—',
+    sinceLabel: (p.since || '').slice(0, 10),
+    riskLabel: p.at_risk ? 'At risk' : '',
+  })).sort((a, b) => (a.full_name || a.email).localeCompare(b.full_name || b.email));
+
+  const appCols = [
+    { key: 'nameLabel', label: 'Applicant' }, { key: 'user_email', label: 'Email' },
+    { key: 'statusLabel', label: 'Status' }, { key: 'submittedLabel', label: 'Submitted' },
+    { key: 'recommended_by_email', label: 'Recommended by' },
+    { key: 'reviewed_by_email', label: 'Decided by' }, { key: 'coordinator_note', label: 'Note' },
+  ];
+  // Open requests (pending/recommended) first - the ones a meeting actually needs to act on -
+  // then the historical record, newest first within each group.
+  const statusOrder = { pending: 0, recommended: 1, approved: 2, rejected: 3 };
+  const appRows = applications.map(a => ({
+    ...a,
+    nameLabel: nameMap[a.user_email] || '—',
+    statusLabel: APPLICATION_STATUS_LABEL[a.status] || a.status,
+    submittedLabel: (a.created_at || '').slice(0, 10),
+  })).sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9) || (b.created_at || '').localeCompare(a.created_at || ''));
+
+  area.innerHTML = reportTable('Personnel Roster', peopleRows, peopleCols)
+    + reportTable('Team Applications', appRows, appCols);
 }
 
 async function generateFilteredReport() {
