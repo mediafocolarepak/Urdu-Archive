@@ -3,10 +3,10 @@
 // Department list is fully data-driven from option_lists ('department') and department_members
 // - departments can be added, renamed or retired from Options without touching this file.
 
-import { sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260918130800';
-import { renderPolicySection } from './policy.js?v=20260918130800';
-import { renderPeopleSection } from './people.js?v=20260918130800';
-import { renderApplicationsView } from './collaboration.js?v=20260918130800';
+import { sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260918154150';
+import { renderPolicySection } from './policy.js?v=20260918154150';
+import { renderPeopleSection } from './people.js?v=20260918154150';
+import { renderApplicationsView } from './collaboration.js?v=20260918154150';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -39,6 +39,8 @@ export async function renderMyDepartmentView(main) {
     ${selected === 'HR' ? '<div id="mydept-applications-box"></div>' : ''}
     ${selected === 'HR' ? '<div id="mydept-people-box"></div>' : ''}
     ${selected === 'RF' ? '<div id="mydept-credits-box"></div>' : ''}
+    ${selected === 'RF' ? '<div id="mydept-compensation-box"></div>' : ''}
+    ${selected === 'RF' ? '<div id="mydept-anomalies-box"></div>' : ''}
     ${selected === 'COORD' ? '<div id="mydept-tasks-box"></div>' : ''}
     ${selected === 'FORM' ? '<div id="mydept-formation-box"></div>' : ''}
     <div id="mydept-policy-box"></div>`;
@@ -62,6 +64,10 @@ export async function renderMyDepartmentView(main) {
   // runs (GOVERNANCE.md §6.4, migration 88) - same numbers Admin already sees in Tasks -> Budget,
   // read-only here (topping up the budget stays an Owner/Admin action, decision matrix row 16).
   if (selected === 'RF') await renderRewardCredits(document.getElementById('mydept-credits-box'));
+  // GOVERNANCE.md §6.4 (migration 91): "credits earned" vs "credits paid" reconciliation and an
+  // anomaly report - the two pieces migration 88 left open.
+  if (selected === 'RF') await renderCompensationRuns(document.getElementById('mydept-compensation-box'));
+  if (selected === 'RF') await renderRewardAnomalies(document.getElementById('mydept-anomalies-box'));
   // Coordination needs a live flow overview - counts plus who to follow up with - since
   // Tasks -> Team overview (js/tasks.js) only ever shows a filtered list, no counts, and
   // excludes open (unclaimed) tasks entirely. Read-only here: reassigning/reclaiming a task
@@ -257,6 +263,190 @@ async function renderRewardCredits(box) {
         <tbody>${ledgerRows.length ? ledgerRows.map(r => `
           <tr><td>${esc((r.created_at || '').slice(0, 10))}</td><td>${esc(r.amount)}</td><td>${esc(r.note) || '—'}</td><td>${esc(r.created_by_email) || '—'}</td></tr>
         `).join('') : '<tr><td colspan="4" class="empty-msg">No top-ups recorded yet.</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+}
+
+// ---------- Compensation runs (migration 91, GOVERNANCE.md §6.4 / decision matrix row 15) ----------
+// "Reward proposes, Lead Reward + Owner approves" - here, Admin stands in for Owner (the schema
+// has no separate Owner identity), and proposer never equals approver, enforced in
+// decide_compensation_run() itself, not just by hiding the button.
+
+async function renderCompensationRuns(box) {
+  const runs = await withStatus(sb.from('compensation_runs').select('*').order('created_at', { ascending: false }));
+  const lineRows = runs.length
+    ? await withStatus(sb.from('compensation_lines').select('*').in('run_id', runs.map(r => r.id)))
+    : [];
+  const linesByRun = {};
+  for (const l of lineRows) (linesByRun[l.run_id] = linesByRun[l.run_id] || []).push(l);
+  const { data: { user } } = await sb.auth.getUser();
+
+  const runRowHtml = r => {
+    const lines = linesByRun[r.id] || [];
+    const totalCredits = lines.reduce((s, l) => s + l.credits_settled, 0);
+    const canDecide = r.status === 'pending' && isAdmin() && r.prepared_by_email !== user.email;
+    const canWithdraw = r.status === 'pending' && r.prepared_by_email === user.email;
+    return `<tr>
+      <td>${esc(r.period_from)} &rarr; ${esc(r.period_to)}</td>
+      <td>${lines.length} ${lines.length === 1 ? 'person' : 'people'}, ${esc(totalCredits)} credits</td>
+      <td>${esc(r.status)}</td>
+      <td>${esc(r.prepared_by_email)}</td>
+      <td>
+        <button class="btn secondary mydept-comp-details-btn" data-id="${esc(r.id)}" style="padding:2px 8px;">Details</button>
+        ${canDecide ? `<button class="btn mydept-comp-approve-btn" data-id="${esc(r.id)}" style="padding:2px 8px;">Approve</button>
+          <button class="btn danger mydept-comp-reject-btn" data-id="${esc(r.id)}" style="padding:2px 8px;">Reject</button>` : ''}
+        ${canWithdraw ? `<button class="btn secondary mydept-comp-withdraw-btn" data-id="${esc(r.id)}" style="padding:2px 8px;">Withdraw</button>` : ''}
+      </td>
+    </tr>
+    <tr class="mydept-comp-details-row" data-for="${esc(r.id)}" style="display:none;">
+      <td colspan="5">
+        ${r.note ? `<p class="hint">${esc(r.note)}</p>` : ''}
+        <table class="grid"><thead><tr><th>Person</th><th>Credits settled</th><th>Amount</th><th>Reference</th></tr></thead>
+        <tbody>${lines.map(l => `<tr><td>${esc(l.user_email)}</td><td>${esc(l.credits_settled)}</td><td>${esc(l.amount)} ${esc(l.currency)}</td><td>${esc(l.reference) || '—'}</td></tr>`).join('')}</tbody></table>
+        ${r.decided_by_email ? `<p class="hint" style="margin-top:6px;">${esc(r.status)} by ${esc(r.decided_by_email)} on ${esc((r.decided_at || '').slice(0, 10))}${r.decision_note ? ' — ' + esc(r.decision_note) : ''}</p>` : ''}
+      </td>
+    </tr>`;
+  };
+
+  box.innerHTML = `
+    <div class="panel">
+      <h2>Compensation runs <span class="hint">— GOVERNANCE.md §6.4, decision matrix row 15</span></h2>
+      <p class="hint">Records that credits were converted to money - it never moves money itself, only the record that a payment happened. ${isRfMember() ? '<button class="btn" id="mydept-new-comp-run-btn" style="margin-left:8px;">New compensation run</button>' : ''}</p>
+      <div class="grid-wrap"><table class="grid">
+        <thead><tr><th>Period</th><th>Lines</th><th>Status</th><th>Prepared by</th><th></th></tr></thead>
+        <tbody>${runs.length ? runs.map(runRowHtml).join('') : '<tr><td colspan="5" class="empty-msg">No compensation runs yet.</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+
+  box.querySelectorAll('.mydept-comp-details-btn').forEach(btn => btn.addEventListener('click', () => {
+    const row = box.querySelector(`.mydept-comp-details-row[data-for="${btn.dataset.id}"]`);
+    row.style.display = row.style.display === 'none' ? '' : 'none';
+  }));
+  box.querySelectorAll('.mydept-comp-approve-btn').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Approve this compensation run? This records that these credits have been paid.')) return;
+    const { error } = await sb.rpc('decide_compensation_run', { p_run_id: parseInt(btn.dataset.id, 10), p_outcome: 'approved' });
+    if (error) { alert(error.message); return; }
+    renderCompensationRuns(box);
+  }));
+  box.querySelectorAll('.mydept-comp-reject-btn').forEach(btn => btn.addEventListener('click', async () => {
+    const note = prompt('Reason for rejecting this compensation run?');
+    if (!note || !note.trim()) return;
+    const { error } = await sb.rpc('decide_compensation_run', { p_run_id: parseInt(btn.dataset.id, 10), p_outcome: 'rejected', p_note: note.trim() });
+    if (error) { alert(error.message); return; }
+    renderCompensationRuns(box);
+  }));
+  box.querySelectorAll('.mydept-comp-withdraw-btn').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Withdraw this compensation run?')) return;
+    const { error } = await sb.rpc('decide_compensation_run', { p_run_id: parseInt(btn.dataset.id, 10), p_outcome: 'withdrawn' });
+    if (error) { alert(error.message); return; }
+    renderCompensationRuns(box);
+  }));
+  const newBtn = document.getElementById('mydept-new-comp-run-btn');
+  if (newBtn) newBtn.addEventListener('click', () => openNewCompensationRunPopup(box));
+}
+
+// propose_compensation_run() (migration 91) requires real RF membership - matches the decision
+// matrix's "Reward proposes" exactly, unlike deciding it (Admin, standing in for Owner). Admin
+// alone, without an RF row, still sees this whole view (My Department shows every department to
+// Admin) but can't propose from it - only decide.
+function isRfMember() {
+  return State.myDepartments.some(d => d.department_code === 'RF');
+}
+
+async function openNewCompensationRunPopup(box) {
+  const unsettled = await withStatus(sb.rpc('reward_unsettled_credits'));
+
+  const overlay = document.createElement('div');
+  overlay.id = 'new-comp-run-popup';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:2100;background:rgba(20,16,10,.55);display:flex;align-items:center;justify-content:center;overflow:auto;padding:24px 16px;';
+  overlay.innerHTML = '<div class="panel" style="max-width:640px;width:100%;margin:0;"></div>';
+  document.body.appendChild(overlay);
+  const panel = overlay.querySelector('.panel');
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  panel.innerHTML = `
+    <h2 style="margin-top:0;">New compensation run</h2>
+    <div class="field-grid">
+      <div class="field"><label>Period from</label><input id="comp-from" type="date"></div>
+      <div class="field"><label>Period to</label><input id="comp-to" type="date"></div>
+      <div class="field" style="grid-column:1/-1;"><label>Note <span class="hint">(optional)</span></label><input id="comp-note"></div>
+    </div>
+    <h3>Lines</h3>
+    <p class="hint">Only people with unsettled credits are listed. Check who is included in this run, and set the amount actually paid.</p>
+    <div class="grid-wrap"><table class="grid">
+      <thead><tr><th></th><th>Person</th><th>Unsettled</th><th>Credits to settle</th><th>Amount</th><th>Currency</th><th>Reference</th></tr></thead>
+      <tbody>${unsettled.length ? unsettled.map(u => `<tr>
+        <td><input type="checkbox" class="comp-line-check" data-uid="${esc(u.user_id)}"></td>
+        <td>${esc(u.full_name) || esc(u.email)}</td>
+        <td>${esc(u.unsettled)}</td>
+        <td><input type="number" class="comp-line-credits" data-uid="${esc(u.user_id)}" min="1" max="${esc(u.unsettled)}" value="${esc(u.unsettled)}" style="width:80px;"></td>
+        <td><input type="number" class="comp-line-amount" data-uid="${esc(u.user_id)}" min="0" step="0.01" style="width:100px;"></td>
+        <td><input type="text" class="comp-line-currency" data-uid="${esc(u.user_id)}" value="PKR" style="width:70px;"></td>
+        <td><input type="text" class="comp-line-reference" data-uid="${esc(u.user_id)}" style="width:120px;"></td>
+      </tr>`).join('') : '<tr><td colspan="7" class="empty-msg">Nobody has unsettled credits right now.</td></tr>'}</tbody>
+    </table></div>
+    <div class="btn-row" style="margin-top:12px;"><button class="btn" id="comp-submit">Create run</button><button class="btn secondary" id="comp-cancel">Cancel</button></div>`;
+
+  panel.querySelector('#comp-cancel').addEventListener('click', close);
+  panel.querySelector('#comp-submit').addEventListener('click', async () => {
+    const from = panel.querySelector('#comp-from').value;
+    const to = panel.querySelector('#comp-to').value;
+    if (!from || !to) { alert('Please set both dates for the period.'); return; }
+    const checked = [...panel.querySelectorAll('.comp-line-check:checked')];
+    if (!checked.length) { alert('Select at least one person.'); return; }
+    const lines = [];
+    for (const chk of checked) {
+      const uid = chk.dataset.uid;
+      const credits = parseInt(panel.querySelector(`.comp-line-credits[data-uid="${uid}"]`).value, 10);
+      const amount = parseFloat(panel.querySelector(`.comp-line-amount[data-uid="${uid}"]`).value);
+      const currency = panel.querySelector(`.comp-line-currency[data-uid="${uid}"]`).value.trim() || 'PKR';
+      const reference = panel.querySelector(`.comp-line-reference[data-uid="${uid}"]`).value.trim() || null;
+      if (!credits || credits <= 0) { alert('Credits to settle must be a positive number for every selected person.'); return; }
+      if (!amount || amount <= 0) { alert('Amount must be a positive number for every selected person.'); return; }
+      lines.push({ user_id: uid, credits_settled: credits, amount, currency, reference });
+    }
+    const { error } = await sb.rpc('propose_compensation_run', {
+      p_period_from: from, p_period_to: to, p_note: panel.querySelector('#comp-note').value.trim() || null, p_lines: lines,
+    });
+    if (error) { alert(error.message); return; }
+    close();
+    renderCompensationRuns(box);
+  });
+}
+
+// ---------- Anomaly report (migration 91, GOVERNANCE.md §2.4/§6.4) ----------
+
+async function renderRewardAnomalies(box) {
+  const [extraCreditTasks, operatorAnomalies] = await Promise.all([
+    withStatus(sb.rpc('reward_extra_credit_tasks')),
+    withStatus(sb.rpc('reward_operator_credit_anomalies')),
+  ]);
+  const flagged = operatorAnomalies.filter(o => o.flagged);
+
+  box.innerHTML = `
+    <div class="panel">
+      <h2>Anomaly report <span class="hint">— GOVERNANCE.md §2.4/§6.4</span></h2>
+
+      <h3>Tasks with extra credits <span class="count-badge">${extraCreditTasks.length}</span></h3>
+      <div class="grid-wrap"><table class="grid">
+        <thead><tr><th>Task</th><th>Category</th><th>Status</th><th>Base</th><th>Extra</th><th>Reason</th><th>Extra-credit approval</th><th>Proposed by</th></tr></thead>
+        <tbody>${extraCreditTasks.length ? extraCreditTasks.map(t => `<tr>
+          <td>${esc(t.title)}</td><td>${esc(t.category)}</td><td>${esc(t.status)}</td>
+          <td>${esc(t.base_credits ?? 0)}</td><td>${esc(t.extra_credits)}</td><td>${esc(t.extra_credits_note) || '—'}</td>
+          <td>${esc(t.extra_credits_status)}${t.extra_credits_approved_by_email ? ' — ' + esc(t.extra_credits_approved_by_email) : ''}</td>
+          <td>${esc(t.created_by_email) || '—'}</td>
+        </tr>`).join('') : '<tr><td colspan="8" class="empty-msg">No task has ever carried extra credits.</td></tr>'}</tbody>
+      </table></div>
+
+      <h3 style="margin-top:16px;">Operators with credits ahead of published work <span class="count-badge">${flagged.length}</span></h3>
+      <p class="hint">Flagged once approved-but-unpublished credits exceed both their published credits and the policy floor (My Department &rarr; Policy, "reward_anomaly_backlog_credits").</p>
+      <div class="grid-wrap"><table class="grid">
+        <thead><tr><th>Person</th><th>Credits</th><th>Reputation</th><th>Approved, unpublished</th><th>Published</th><th>Published tasks</th></tr></thead>
+        <tbody>${flagged.length ? flagged.map(o => `<tr>
+          <td>${esc(o.full_name) || esc(o.email)}</td><td>${esc(o.credits)}</td><td>${esc(o.reputation)}</td>
+          <td>${esc(o.approved_not_published_credits)}</td><td>${esc(o.published_credits)}</td><td>${esc(o.published_task_count)}</td>
+        </tr>`).join('') : '<tr><td colspan="6" class="empty-msg">Nobody is flagged right now.</td></tr>'}</tbody>
       </table></div>
     </div>`;
 }
