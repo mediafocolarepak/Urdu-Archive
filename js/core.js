@@ -824,6 +824,36 @@ export function isDocPostable(doc) {
   return doc.language === 'URD' && (doc.workflow_status == null || ['APPR', 'STOR', 'published'].includes(doc.workflow_status));
 }
 
+// Styled stand-in for the native confirm() dialog - resolves to true/false like confirm() does,
+// so a call site just becomes `if (!(await confirmPopup('...'))) return;`. Two things confirm()
+// can't do that this fixes: it never picks up the app's own styling (looks like a jarring OS
+// dialog to someone who otherwise never sees one), and it silently blocks automated browser
+// testing (PROJECT_HANDOFF_v18.md §3, v30.md §0.2 - the "residual, needs a human" item).
+// Started in Formation Paths (owner's request, session of 2026-09-18) since that's the area
+// meant to feel the least like "expert software"; other modules can adopt it the same way.
+export function confirmPopup(message, { title = 'Are you sure?', danger = false, confirmLabel = 'Confirm' } = {}) {
+  return new Promise(resolve => {
+    document.getElementById('confirm-popup')?.remove();
+    const backdrop = document.createElement('div');
+    backdrop.id = 'confirm-popup';
+    backdrop.className = 'overlay-backdrop';
+    backdrop.innerHTML = `
+      <div class="panel overlay-panel" style="max-width:420px;">
+        <h2 style="margin-top:0;">${esc(title)}</h2>
+        <p style="white-space:pre-wrap;">${esc(message)}</p>
+        <div class="btn-row" style="justify-content:flex-end;">
+          <button class="btn secondary" id="confirm-cancel">Cancel</button>
+          <button class="btn ${danger ? 'danger' : ''}" id="confirm-ok">${esc(confirmLabel)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    const finish = ok => { backdrop.remove(); resolve(ok); };
+    backdrop.addEventListener('click', e => { if (e.target === backdrop) finish(false); });
+    document.getElementById('confirm-cancel').addEventListener('click', () => finish(false));
+    document.getElementById('confirm-ok').addEventListener('click', () => finish(true));
+  });
+}
+
 // Shared popup for a board post - used by docdetail.js's "+ Board" (post with a document) and
 // boards.js's "+ New post" (free post). Lives here, not in either of them, because those two
 // modules can't import each other (project convention: modules import only from core.js).

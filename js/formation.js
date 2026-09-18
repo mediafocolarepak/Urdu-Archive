@@ -10,7 +10,7 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails } from './core.js?v=20260918182542';
+import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, confirmPopup } from './core.js?v=20260918183522';
 
 // Thumbnails (migration 93, owner's request to make the catalog "look like Coursera") - a public
 // bucket, same shape as board post images (BOARD_MEDIA_BUCKET in core.js), but not shared outside
@@ -421,7 +421,7 @@ async function renderPathDetail(main, pathId) {
   });
   const withdrawBtn = document.getElementById('fp-withdraw');
   if (withdrawBtn) withdrawBtn.addEventListener('click', async () => {
-    if (!confirm('Withdraw from this path? You will lose access to its chatroom, quizzes and certificate once those are built - the path content itself stays visible.')) return;
+    if (!(await confirmPopup('You will lose access to its chatroom, quizzes and certificate once those are built - the path content itself stays visible.', { title: 'Withdraw from this path?', confirmLabel: 'Withdraw' }))) return;
     await withStatus(sb.rpc('withdraw_from_formation_path', { pid: pathId }), 'Withdrawing...');
     renderPathDetail(main, pathId);
   });
@@ -441,7 +441,7 @@ async function renderPathDetail(main, pathId) {
   if (canEdit) {
     document.getElementById('fp-edit-details').addEventListener('click', () => openPathPopup({ path, onSaved: () => renderPathDetail(main, pathId) }));
     document.getElementById('fp-delete-path').addEventListener('click', async () => {
-      if (!confirm('Delete this whole path, with all its modules/chapters/posts? This cannot be undone.')) return;
+      if (!(await confirmPopup('All its modules, chapters and posts will be deleted with it. This cannot be undone.', { title: 'Delete this whole path?', danger: true, confirmLabel: 'Delete path' }))) return;
       await withStatus(sb.from('formation_paths').delete().eq('id', pathId), 'Deleting...');
       State.formationSelectedPathId = null;
       renderFormationView(main);
@@ -506,7 +506,7 @@ function wireCoAuthorsActions(main, pathId, canManageCoAuthors) {
     renderPathDetail(main, pathId);
   });
   document.querySelectorAll('[data-remove-coauthor]').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('Remove this co-author? They will lose edit access to this path.')) return;
+    if (!(await confirmPopup('They will lose edit access to this path.', { title: 'Remove this co-author?', danger: true, confirmLabel: 'Remove' }))) return;
     await withStatus(sb.from('formation_path_editors').delete().eq('path_id', pathId).eq('user_id', btn.dataset.removeCoauthor), 'Removing...');
     renderPathDetail(main, pathId);
   }));
@@ -613,6 +613,37 @@ function openModulePopup({ pathId, module = null, sequence = 0, onSaved }) {
     if (!title) { document.getElementById('fm-module-error').textContent = 'Title is required.'; return; }
     if (module) await withStatus(sb.from('formation_modules').update({ title, description }).eq('id', module.id), 'Saving...');
     else await withStatus(sb.from('formation_modules').insert({ path_id: pathId, title, description, sequence_number: sequence }), 'Saving...');
+    backdrop.remove();
+    onSaved();
+  });
+}
+
+// Title-only counterpart to openModulePopup above, for creating/renaming a chapter - replaces
+// the plain prompt() this used to be (session of 2026-09-18, same pass that replaced confirm()
+// with confirmPopup() throughout this file).
+function openChapterPopup({ moduleId, chapter = null, sequence = 0, onSaved }) {
+  document.getElementById('fm-chapter-popup')?.remove();
+  const backdrop = document.createElement('div');
+  backdrop.id = 'fm-chapter-popup';
+  backdrop.className = 'overlay-backdrop';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel">
+      <h2 style="margin-top:0;">${chapter ? 'Rename chapter' : 'New chapter'}</h2>
+      <div class="field"><label>Title</label><input id="fm-chapter-title" dir="auto" value="${esc(chapter ? chapter.title : '')}"></div>
+      <div class="hint" id="fm-chapter-error"></div>
+      <div class="btn-row" style="justify-content:flex-end;">
+        <button class="btn secondary" id="fm-chapter-cancel">Cancel</button>
+        <button class="btn" id="fm-chapter-save">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+  document.getElementById('fm-chapter-cancel').addEventListener('click', () => backdrop.remove());
+  document.getElementById('fm-chapter-save').addEventListener('click', async () => {
+    const title = document.getElementById('fm-chapter-title').value.trim();
+    if (!title) { document.getElementById('fm-chapter-error').textContent = 'Title is required.'; return; }
+    if (chapter) await withStatus(sb.from('formation_chapters').update({ title }).eq('id', chapter.id), 'Saving...');
+    else await withStatus(sb.from('formation_chapters').insert({ module_id: moduleId, title, sequence_number: sequence }), 'Saving...');
     backdrop.remove();
     onSaved();
   });
@@ -777,7 +808,7 @@ async function renderQuizManagePanel(main, pathId, quiz) {
     } });
   });
   box.querySelector('[data-delete-quiz]').addEventListener('click', async () => {
-    if (!confirm('Delete this quiz and all its questions and attempts? This cannot be undone.')) return;
+    if (!(await confirmPopup('All its questions and every attempt at it will be deleted too. This cannot be undone.', { title: 'Delete this quiz?', danger: true, confirmLabel: 'Delete quiz' }))) return;
     await withStatus(sb.from('formation_quizzes').delete().eq('id', quiz.id), 'Deleting...');
     renderPathDetail(main, pathId);
   });
@@ -796,7 +827,7 @@ async function renderQuizManagePanel(main, pathId, quiz) {
     openQuestionPopup({ quizId: quiz.id, question: q, onSaved: () => renderPathDetail(main, pathId) });
   }));
   box.querySelectorAll('[data-delete-question]').forEach(el => el.addEventListener('click', async () => {
-    if (!confirm('Delete this question?')) return;
+    if (!(await confirmPopup('This cannot be undone.', { title: 'Delete this question?', danger: true, confirmLabel: 'Delete' }))) return;
     await withStatus(sb.from('formation_quiz_questions').delete().eq('id', el.dataset.deleteQuestion), 'Deleting...');
     renderPathDetail(main, pathId);
   }));
@@ -940,17 +971,14 @@ function wireTreeActions(main, pathId, modules, chapters, posts, canEdit) {
     openModulePopup({ pathId, module: m, onSaved: refresh });
   }));
   document.querySelectorAll('[data-delete-module]').forEach(el => el.addEventListener('click', async () => {
-    if (!confirm('Delete this module with all its chapters/posts?')) return;
+    if (!(await confirmPopup('All its chapters and posts will be deleted with it.', { title: 'Delete this module?', danger: true, confirmLabel: 'Delete module' }))) return;
     await withStatus(sb.from('formation_modules').delete().eq('id', el.dataset.deleteModule), 'Deleting...');
     refresh();
   }));
-  document.querySelectorAll('[data-add-chapter]').forEach(el => el.addEventListener('click', async () => {
+  document.querySelectorAll('[data-add-chapter]').forEach(el => el.addEventListener('click', () => {
     const moduleId = parseInt(el.dataset.addChapter, 10);
-    const title = prompt('Chapter title:');
-    if (!title || !title.trim()) return;
     const siblingCount = chapters.filter(c => c.module_id === moduleId).length;
-    await withStatus(sb.from('formation_chapters').insert({ module_id: moduleId, title: title.trim(), sequence_number: siblingCount }), 'Saving...');
-    refresh();
+    openChapterPopup({ moduleId, sequence: siblingCount, onSaved: refresh });
   }));
 
   document.querySelectorAll('[data-move-chapter-up]').forEach(el => el.addEventListener('click', () => {
@@ -961,15 +989,12 @@ function wireTreeActions(main, pathId, modules, chapters, posts, canEdit) {
     const c = chapters.find(x => x.id === parseInt(el.dataset.moveChapterDown, 10));
     reorderSibling('formation_chapters', chapters.filter(x => x.module_id === c.module_id), c.id, 1, refresh);
   }));
-  document.querySelectorAll('[data-rename-chapter]').forEach(el => el.addEventListener('click', async () => {
+  document.querySelectorAll('[data-rename-chapter]').forEach(el => el.addEventListener('click', () => {
     const c = chapters.find(x => x.id === parseInt(el.dataset.renameChapter, 10));
-    const title = prompt('New chapter title:', c.title);
-    if (!title || !title.trim()) return;
-    await withStatus(sb.from('formation_chapters').update({ title: title.trim() }).eq('id', c.id), 'Saving...');
-    refresh();
+    openChapterPopup({ moduleId: c.module_id, chapter: c, onSaved: refresh });
   }));
   document.querySelectorAll('[data-delete-chapter]').forEach(el => el.addEventListener('click', async () => {
-    if (!confirm('Delete this chapter with all its posts?')) return;
+    if (!(await confirmPopup('All its posts will be deleted with it.', { title: 'Delete this chapter?', danger: true, confirmLabel: 'Delete chapter' }))) return;
     await withStatus(sb.from('formation_chapters').delete().eq('id', el.dataset.deleteChapter), 'Deleting...');
     refresh();
   }));
@@ -993,7 +1018,7 @@ function wireTreeActions(main, pathId, modules, chapters, posts, canEdit) {
     openPostPopup({ chapterId: p.chapter_id, post: p, onSaved: refresh });
   }));
   document.querySelectorAll('[data-delete-post]').forEach(el => el.addEventListener('click', async () => {
-    if (!confirm('Delete this post?')) return;
+    if (!(await confirmPopup('This cannot be undone.', { title: 'Delete this post?', danger: true, confirmLabel: 'Delete' }))) return;
     await withStatus(sb.from('formation_posts').delete().eq('id', el.dataset.deletePost), 'Deleting...');
     refresh();
   }));
