@@ -3,10 +3,10 @@
 // Department list is fully data-driven from option_lists ('department') and department_members
 // - departments can be added, renamed or retired from Options without touching this file.
 
-import { sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260918185130';
-import { renderPolicySection } from './policy.js?v=20260918185130';
-import { renderPeopleSection } from './people.js?v=20260918185130';
-import { renderApplicationsView } from './collaboration.js?v=20260918185130';
+import { sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe } from './core.js?v=20260918191206';
+import { renderPolicySection } from './policy.js?v=20260918191206';
+import { renderPeopleSection } from './people.js?v=20260918191206';
+import { renderApplicationsView } from './collaboration.js?v=20260918191206';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
