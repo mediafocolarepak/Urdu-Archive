@@ -17,19 +17,11 @@ where m.year_id = y.id and m.path_id is null;
 
 alter table public.formation_modules alter column path_id set not null;
 
--- 2. Drop the old column/index, add the new index, then drop formation_years entirely - nothing
--- else references it (checked: only formation_modules.year_id did).
-drop index if exists public.idx_formation_modules_year;
-alter table public.formation_modules drop column if exists year_id;
-create index if not exists idx_formation_modules_path on public.formation_modules (path_id, sequence_number);
-
-drop trigger if exists trg_touch_formation_years on public.formation_years;
-drop table if exists public.formation_years;
-
--- 3. Redefine every RLS policy that walked through formation_years to reach formation_paths -
--- one join level shorter now. current_role_is('coordinator') / can_edit_path() branches are
--- carried over unchanged from their last definition (82_formation_co_authors.sql); only the
--- year hop is removed.
+-- 2. Redefine every RLS policy that walked through formation_years to reach formation_paths -
+-- BEFORE dropping year_id below, since these old policies still reference it (Postgres refuses
+-- to drop a column any policy depends on). One join level shorter now than the 82_formation_co_
+-- authors.sql versions being replaced; current_role_is('coordinator') / can_edit_path() branches
+-- are carried over unchanged, only the year hop is removed.
 
 drop policy if exists "formation_modules_select" on public.formation_modules;
 create policy "formation_modules_select" on public.formation_modules
@@ -82,6 +74,15 @@ create policy "formation_posts_write" on public.formation_posts
             where c.id = chapter_id and public.can_edit_path(m.path_id))
     and (document_id is null or public.document_is_postable(document_id))
   );
+
+-- 3. Now that nothing depends on year_id any more, drop the old column/index, add the new index,
+-- then drop formation_years entirely - nothing else references it.
+drop index if exists public.idx_formation_modules_year;
+alter table public.formation_modules drop column if exists year_id;
+create index if not exists idx_formation_modules_path on public.formation_modules (path_id, sequence_number);
+
+drop trigger if exists trg_touch_formation_years on public.formation_years;
+drop table if exists public.formation_years;
 
 notify pgrst, 'reload schema';
 
