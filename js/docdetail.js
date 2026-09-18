@@ -8,7 +8,7 @@ import {
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup,
-} from './core.js?v=20260918185130';
+} from './core.js?v=20260918191206';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -45,11 +45,44 @@ function renderDocTextBox(text) {
     <div class="field">
       <div class="btn-row" style="justify-content:space-between;align-items:center;">
         <label style="margin:0;">Text <span class="hint">(${chars.toLocaleString()} characters)</span></label>
-        <span style="cursor:pointer;text-decoration:underline;font-size:12.5px;" id="doc-text-toggle">Show</span>
+        <div class="btn-row" style="margin:0;">
+          <span style="cursor:pointer;text-decoration:underline;font-size:12.5px;" id="doc-text-open">Open editable text</span>
+          <span style="cursor:pointer;text-decoration:underline;font-size:12.5px;" id="doc-text-toggle">Show</span>
+        </div>
       </div>
       ${!text.reviewed ? '<div class="hint" style="color:var(--danger, #b3261e);">Unverified automatic transcription - not yet reviewed by a human.</div>' : ''}
       <div id="doc-text-body" dir="auto" style="display:none;white-space:pre-wrap;font-size:14px;line-height:1.8;margin-top:6px;max-height:60vh;overflow-y:auto;">${esc(text.body)}</div>
     </div>`;
+}
+
+// "Open editable text" (PROJECT_HANDOFF_v31.md §2 point 1) - a plain, selectable/copyable form of
+// the same document_texts row the box above shows styled. Needed because the styled preview above
+// is a plain <div>, not an <input>/<textarea>, so mobile browsers and some desktop ones don't offer
+// a normal copy affordance on it. Read-only textarea + explicit Copy/Close, same popup shell as
+// confirmPopup/openBoardPostPopup in core.js (overlay-backdrop + panel overlay-panel), but kept
+// here rather than core.js since only this module needs it.
+function openDocTextPopup(text) {
+  document.getElementById('doc-text-popup')?.remove();
+  const backdrop = document.createElement('div');
+  backdrop.id = 'doc-text-popup';
+  backdrop.className = 'overlay-backdrop';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel">
+      <h2 style="margin-top:0;">Text</h2>
+      ${!text.reviewed ? '<div class="hint" style="color:var(--danger, #b3261e);">Unverified automatic transcription - not yet reviewed by a human.</div>' : ''}
+      <textarea readonly dir="auto" style="width:100%;min-height:50vh;font-size:14px;line-height:1.8;">${esc(text.body)}</textarea>
+      <div class="btn-row" style="justify-content:flex-end;margin-top:8px;">
+        <button class="btn secondary" id="doc-text-popup-close">Close</button>
+        <button class="btn" id="doc-text-popup-copy">Copy</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+  document.getElementById('doc-text-popup-close').addEventListener('click', () => backdrop.remove());
+  document.getElementById('doc-text-popup-copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(text.body); alert('Text copied.'); }
+    catch { alert('Could not copy - select the text and copy manually.'); }
+  });
 }
 
 export function renderDocDetailConsultation(box, doc, workSiblings, docCollections, canEdit, text) {
@@ -90,6 +123,8 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     body.style.display = isOpen ? 'none' : 'block';
     textToggle.textContent = isOpen ? 'Show' : 'Hide';
   });
+  const textOpen = document.getElementById('doc-text-open');
+  if (textOpen) textOpen.addEventListener('click', () => openDocTextPopup(text));
   document.getElementById('doc-fav').addEventListener('click', async () => {
     const btn = document.getElementById('doc-fav');
     const { data: { user } } = await sb.auth.getUser();
