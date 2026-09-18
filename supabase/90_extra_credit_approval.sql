@@ -96,11 +96,12 @@ create trigger set_extra_credit_status_trigger
   for each row execute function public.set_extra_credit_status();
 
 -- Backfill every task written before this migration existed - the trigger only fires on writes
--- from now on. A no-op UPDATE (id = id) is enough to make it run its own logic for every row;
--- since extra_credits_status was just added as 'none' for all of them, this lands exactly on
--- 'pending' for anything already above threshold and 'none' otherwise - the same place a fresh
--- insert would.
-update public.tasks set id = id;
+-- from now on. A no-op UPDATE of extra_credits (not id - id is a GENERATED ALWAYS identity
+-- column and rejects being "updated" even to its own value) is enough to make the trigger run
+-- its own logic for every row; since extra_credits_status was just added as 'none' for all of
+-- them, this lands exactly on 'pending' for anything already above threshold and 'none'
+-- otherwise - the same place a fresh insert would.
+update public.tasks set extra_credits = extra_credits;
 
 -- 4. Entry point: a Coordination lead approves a pending extra-credit amount. Proposer never
 -- equals approver (GOVERNANCE.md §1 principle 2) even when the same person happens to be both a
