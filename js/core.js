@@ -889,13 +889,17 @@ export function openBoardPostPopup({ doc = null, boardCode = null, post = null, 
 
 // Shared popup for attaching a document to a formation path chapter - the formation-paths
 // equivalent of openBoardPostPopup above, used by docdetail.js's "+ Path" (Dashboard) and
-// myspace.js's "+ Path" (My Space). Unlike board posts (one fixed board per popup), a path has
-// a year/module/chapter hierarchy the formatore doesn't necessarily have open in front of them,
-// so the popup asks for all four levels with cascading dropdowns instead of assuming context.
-// Lives here, not in formation.js, for the same reason as openBoardPostPopup: docdetail.js and
-// myspace.js can't import from formation.js (project convention: modules import only from
-// core.js). Only lets you pick a path you can actually write to (owner, or Coordinator/Admin) -
-// the real gate is still formation_posts_write's RLS (see 79_formation_post_documents.sql).
+// myspace.js's "+ Path" (My Space). A path has a module/chapter hierarchy (migration 92 dropped
+// the "Years" level that used to sit above modules - Path -> Module -> Chapter -> Post now) the
+// formatore doesn't necessarily have open in front of them, so the popup asks for both levels
+// with cascading dropdowns - each one also offering "+ Create new..." inline, so building the
+// course structure never requires leaving the document you're looking at (owner's request,
+// session of 2026-09-18: "si parte dai testi", the course is assembled around them, not the
+// other way round). Lives here, not in formation.js, for the same reason as openBoardPostPopup:
+// docdetail.js and myspace.js can't import from formation.js (project convention: modules import
+// only from core.js). Only lets you pick a path you can actually write to (owner, co-author, or
+// Coordinator/Admin) - the real gate is still formation_posts_write's RLS (92_formation_flatten_
+// modules.sql).
 export function openFormationPostPopup({ doc = null, onSaved } = {}) {
   document.getElementById('fp-add-popup')?.remove();
   const backdrop = document.createElement('div');
@@ -906,15 +910,24 @@ export function openFormationPostPopup({ doc = null, onSaved } = {}) {
       <h2 style="margin-top:0;">Add to formation path</h2>
       ${doc ? `<div class="field"><label>Document</label><div style="font-size:13px;padding:4px 0;">#${esc(doc.document_id)} &mdash; ${esc(doc.en_title) || '<span class="hint">(no title)</span>'}</div></div>` : ''}
       <div class="field"><label>Path</label><select id="fap-path"><option value="">Loading...</option></select></div>
-      <div class="field"><label>Year</label><select id="fap-year" disabled><option value="">Select a path first</option></select></div>
-      <div class="field"><label>Module</label><select id="fap-module" disabled><option value="">Select a year first</option></select></div>
-      <div class="field"><label>Chapter</label><select id="fap-chapter" disabled><option value="">Select a module first</option></select></div>
+
+      <div class="field"><label>Module</label><select id="fap-module" disabled><option value="">Select a path first</option></select></div>
+      <div id="fap-new-module-fields" style="display:none;margin-left:12px;">
+        <div class="field"><label>New module title</label><input id="fap-new-module-title" dir="auto"></div>
+        <div class="field"><label>New module description <span class="hint">(optional)</span></label><textarea id="fap-new-module-desc" dir="auto" rows="2"></textarea></div>
+      </div>
+
+      <div class="field" id="fap-chapter-field" style="display:none;"><label>Chapter</label><select id="fap-chapter" disabled><option value="">Select a module first</option></select></div>
+      <div id="fap-new-chapter-fields" style="display:none;margin-left:12px;">
+        <div class="field"><label>New chapter title</label><input id="fap-new-chapter-title" dir="auto"></div>
+      </div>
+
       <div class="field"><label>Title</label><input id="fap-title" value="${esc(doc ? doc.en_title || '' : '')}"></div>
       <div class="field"><label>Text</label><textarea id="fap-body" dir="auto" rows="6"></textarea></div>
       <div class="hint" id="fap-error"></div>
       <div class="btn-row" style="justify-content:flex-end;">
         <button class="btn secondary" id="fap-cancel">Cancel</button>
-        <button class="btn" id="fap-save" disabled>Save</button>
+        <button class="btn" id="fap-save">Save</button>
       </div>
     </div>`;
   document.body.appendChild(backdrop);
@@ -922,16 +935,16 @@ export function openFormationPostPopup({ doc = null, onSaved } = {}) {
   document.getElementById('fap-cancel').addEventListener('click', () => backdrop.remove());
 
   const pathSel = document.getElementById('fap-path');
-  const yearSel = document.getElementById('fap-year');
   const moduleSel = document.getElementById('fap-module');
+  const chapterField = document.getElementById('fap-chapter-field');
   const chapterSel = document.getElementById('fap-chapter');
-  const saveBtn = document.getElementById('fap-save');
+  const newModuleFields = document.getElementById('fap-new-module-fields');
+  const newChapterFields = document.getElementById('fap-new-chapter-fields');
 
   function resetSelect(sel, placeholder) {
     sel.innerHTML = `<option value="">${placeholder}</option>`;
     sel.disabled = true;
   }
-  const updateSaveEnabled = () => { saveBtn.disabled = !chapterSel.value; };
 
   sb.auth.getUser().then(async ({ data: { user } }) => {
     const paths = await withStatus(sb.from('formation_paths').select('id,title,owner_id'));
@@ -945,51 +958,87 @@ export function openFormationPostPopup({ doc = null, onSaved } = {}) {
   });
 
   pathSel.addEventListener('change', async () => {
-    resetSelect(yearSel, 'Select a path first');
-    resetSelect(moduleSel, 'Select a year first');
+    resetSelect(moduleSel, 'Select a path first');
+    chapterField.style.display = 'none';
     resetSelect(chapterSel, 'Select a module first');
-    updateSaveEnabled();
+    newModuleFields.style.display = 'none';
+    newChapterFields.style.display = 'none';
     if (!pathSel.value) return;
-    const years = await withStatus(sb.from('formation_years').select('id,year_number').eq('path_id', pathSel.value).order('sequence_number'));
-    if (!years.length) { resetSelect(yearSel, 'No years in this path yet'); return; }
-    yearSel.innerHTML = '<option value="">Select a year...</option>' + years.map(y => `<option value="${y.id}">Year ${esc(y.year_number)}</option>`).join('');
-    yearSel.disabled = false;
-  });
-
-  yearSel.addEventListener('change', async () => {
-    resetSelect(moduleSel, 'Select a year first');
-    resetSelect(chapterSel, 'Select a module first');
-    updateSaveEnabled();
-    if (!yearSel.value) return;
-    const modules = await withStatus(sb.from('formation_modules').select('id,title').eq('year_id', yearSel.value).order('sequence_number'));
-    if (!modules.length) { resetSelect(moduleSel, 'No modules in this year yet'); return; }
-    moduleSel.innerHTML = '<option value="">Select a module...</option>' + modules.map(m => `<option value="${m.id}">${esc(m.title)}</option>`).join('');
+    const modules = await withStatus(sb.from('formation_modules').select('id,title').eq('path_id', pathSel.value).order('sequence_number'));
+    moduleSel.innerHTML = (modules.length ? '<option value="">Select a module...</option>' : '')
+      + modules.map(m => `<option value="${m.id}">${esc(m.title)}</option>`).join('')
+      + '<option value="__new__">+ Create new module...</option>';
     moduleSel.disabled = false;
+    if (!modules.length) { moduleSel.value = '__new__'; moduleSel.dispatchEvent(new Event('change')); }
   });
 
   moduleSel.addEventListener('change', async () => {
+    chapterField.style.display = 'none';
     resetSelect(chapterSel, 'Select a module first');
-    updateSaveEnabled();
+    if (moduleSel.value === '__new__') {
+      // A brand-new module can't have existing chapters yet - go straight to "new chapter"
+      // instead of showing an empty dropdown with nothing to pick.
+      newModuleFields.style.display = 'block';
+      newChapterFields.style.display = 'block';
+      return;
+    }
+    newModuleFields.style.display = 'none';
+    newChapterFields.style.display = 'none';
     if (!moduleSel.value) return;
+    chapterField.style.display = 'block';
     const chapters = await withStatus(sb.from('formation_chapters').select('id,title').eq('module_id', moduleSel.value).order('sequence_number'));
-    if (!chapters.length) { resetSelect(chapterSel, 'No chapters in this module yet'); return; }
-    chapterSel.innerHTML = '<option value="">Select a chapter...</option>' + chapters.map(c => `<option value="${c.id}">${esc(c.title)}</option>`).join('');
+    chapterSel.innerHTML = (chapters.length ? '<option value="">Select a chapter...</option>' : '')
+      + chapters.map(c => `<option value="${c.id}">${esc(c.title)}</option>`).join('')
+      + '<option value="__new__">+ Create new chapter...</option>';
     chapterSel.disabled = false;
+    if (!chapters.length) { chapterSel.value = '__new__'; chapterSel.dispatchEvent(new Event('change')); }
   });
 
-  chapterSel.addEventListener('change', updateSaveEnabled);
+  chapterSel.addEventListener('change', () => {
+    newChapterFields.style.display = chapterSel.value === '__new__' ? 'block' : 'none';
+  });
 
-  saveBtn.addEventListener('click', async () => {
-    const chapterId = chapterSel.value;
-    if (!chapterId) return;
+  document.getElementById('fap-save').addEventListener('click', async () => {
+    const errBox = document.getElementById('fap-error');
+    errBox.textContent = '';
+    if (!pathSel.value) { errBox.textContent = 'Please select a path.'; return; }
+    if (!moduleSel.value) { errBox.textContent = 'Please select or create a module.'; return; }
+
+    let moduleId = moduleSel.value;
+    if (moduleId === '__new__') {
+      const title = document.getElementById('fap-new-module-title').value.trim();
+      if (!title) { errBox.textContent = 'Please enter a title for the new module.'; return; }
+      const description = document.getElementById('fap-new-module-desc').value.trim() || null;
+      const siblingModules = await withStatus(sb.from('formation_modules').select('id').eq('path_id', pathSel.value));
+      const { data: newModule, error: moduleErr } = await sb.from('formation_modules')
+        .insert({ path_id: parseInt(pathSel.value, 10), title, description, sequence_number: siblingModules.length })
+        .select('id').single();
+      if (moduleErr) { errBox.textContent = moduleErr.message; return; }
+      moduleId = newModule.id;
+    }
+
+    let chapterId = chapterField.style.display === 'none' ? '__new__' : chapterSel.value;
+    if (!chapterId) { errBox.textContent = 'Please select or create a chapter.'; return; }
+    if (chapterId === '__new__') {
+      const title = document.getElementById('fap-new-chapter-title').value.trim();
+      if (!title) { errBox.textContent = 'Please enter a title for the new chapter.'; return; }
+      const siblingCount = await withStatus(sb.from('formation_chapters').select('id').eq('module_id', moduleId));
+      const { data: newChapter, error: chapterErr } = await sb.from('formation_chapters')
+        .insert({ module_id: parseInt(moduleId, 10), title, sequence_number: siblingCount.length })
+        .select('id').single();
+      if (chapterErr) { errBox.textContent = chapterErr.message; return; }
+      chapterId = newChapter.id;
+    }
+
     const title = document.getElementById('fap-title').value.trim();
     const body = document.getElementById('fap-body').value.trim();
     const document_id = doc ? doc.document_id : null;
-    if (!title) { alert('Title is required.'); return; }
-    if (!document_id && !body) { alert('Either a document or some text is required.'); return; }
-    const siblings = await withStatus(sb.from('formation_posts').select('id').eq('chapter_id', chapterId));
-    const row = { chapter_id: parseInt(chapterId, 10), document_id, title, body: body || null, sequence_number: siblings.length };
-    await withStatus(sb.from('formation_posts').insert(row), 'Saving...');
+    if (!title) { errBox.textContent = 'Title is required.'; return; }
+    if (!document_id && !body) { errBox.textContent = 'Either a document or some text is required.'; return; }
+    const siblingPosts = await withStatus(sb.from('formation_posts').select('id').eq('chapter_id', chapterId));
+    const row = { chapter_id: parseInt(chapterId, 10), document_id, title, body: body || null, sequence_number: siblingPosts.length };
+    const { error: postErr } = await sb.from('formation_posts').insert(row);
+    if (postErr) { errBox.textContent = postErr.message; return; }
     backdrop.remove();
     if (onSaved) onSaved();
   });
