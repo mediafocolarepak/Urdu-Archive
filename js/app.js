@@ -1,25 +1,25 @@
-import { State, canWrite, isAdmin, canReviewApplications, isDeptMember, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20260918191206';
-import { renderDashboardView } from './dashboard.js?v=20260918191206';
-import { renderReportsView } from './reports.js?v=20260918191206';
-import { renderHayatView } from './hayatindex.js?v=20260918191206';
-import { renderMatchReviewView } from './matchreview.js?v=20260918191206';
-import { renderBulkImportView } from './bulkimport.js?v=20260918191206';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260918191206';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260918191206';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260918191206';
-import { renderHayatEditorView } from './hayateditor.js?v=20260918191206';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260918191206';
-import { renderUserGuideView } from './userguide.js?v=20260918191206';
-import { renderJoinTeamView } from './collaboration.js?v=20260918191206';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260918191206';
-import { renderMyProfileView } from './profile.js?v=20260918191206';
-import { renderMySpaceView } from './myspace.js?v=20260918191206';
-import { renderBoardsView } from './boards.js?v=20260918191206';
-import { renderFormationView } from './formation.js?v=20260918191206';
-import { renderPeopleView } from './people.js?v=20260918191206';
-import { renderMyDepartmentView } from './mydepartment.js?v=20260918191206';
-import { renderRereadView } from './reread.js?v=20260918191206';
-import { registerServiceWorker } from './pwa-register.js?v=20260918191206';
+import { State, canWrite, isAdmin, canReviewApplications, isDeptMember, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20260918193251';
+import { renderDashboardView } from './dashboard.js?v=20260918193251';
+import { renderReportsView } from './reports.js?v=20260918193251';
+import { renderHayatView } from './hayatindex.js?v=20260918193251';
+import { renderMatchReviewView } from './matchreview.js?v=20260918193251';
+import { renderBulkImportView } from './bulkimport.js?v=20260918193251';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260918193251';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260918193251';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260918193251';
+import { renderHayatEditorView } from './hayateditor.js?v=20260918193251';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260918193251';
+import { renderUserGuideView } from './userguide.js?v=20260918193251';
+import { renderJoinTeamView } from './collaboration.js?v=20260918193251';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260918193251';
+import { renderMyProfileView } from './profile.js?v=20260918193251';
+import { renderMySpaceView } from './myspace.js?v=20260918193251';
+import { renderBoardsView } from './boards.js?v=20260918193251';
+import { renderFormationView } from './formation.js?v=20260918193251';
+import { renderPeopleView } from './people.js?v=20260918193251';
+import { renderMyDepartmentView, initDeptMessageNotifications } from './mydepartment.js?v=20260918193251';
+import { renderRereadView } from './reread.js?v=20260918193251';
+import { registerServiceWorker } from './pwa-register.js?v=20260918193251';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -118,5 +118,10 @@ function renderTab(id) {
 window.__renderTab = renderTab;
 
 wireAuthButtons();
-boot(() => { initTopbar(); renderTab('dashboard'); initChatNotifications(() => renderTab('chat')); initTaskNotifications(() => renderTab('tasks')); });
+boot(() => {
+  initTopbar(); renderTab('dashboard');
+  initChatNotifications(() => renderTab('chat'));
+  initTaskNotifications(() => renderTab('tasks'));
+  initDeptMessageNotifications(code => { State.myDeptSelected = code; renderTab('mydepartment'); });
+});
 registerServiceWorker();
