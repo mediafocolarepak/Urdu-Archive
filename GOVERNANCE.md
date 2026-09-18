@@ -1,17 +1,25 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.2 (2026-09-18) — decisions taken by the Owner; all of phases 1 through 3 are built and
+**Status: v1.3 (2026-09-18) — decisions taken by the Owner; all of phases 1 through 3 are built and
 merged (migrations 80–93). Team comments welcome, changes go through a new version.**
 
-**What changed in v1.2:** same day as v1.1, later session. Reward's last open piece (compensation
-runs, the anomaly report) shipped (migration 91), closing phase 3 entirely — §6.4 moves from "to
-build" to §5 alongside everything else. Formation paths were also restructured at the owner's
-request: the "Years" level between a path and its modules is gone (migration 92 — Path → Module →
-Chapter → Post, one level shallower), modules/chapters are now shown as a numbered outline instead
-of a nested tree, and a thumbnail image can be set per path for the catalog (migration 93). A new
-printable Personnel & Team Applications report (Print Reports, Admin/HR) was added, reusing
-existing data sources — no new migration. No organisational decision changes here either; still a
-"catch the docs up to the code" pass.
+**What changed in v1.3:** same day as v1.1/v1.2, later session, no new migration. The Personnel
+report (added in v1.2) now separates the actual team (operators and up) from plain Users, who can
+be very numerous and aren't who a HR/Admin printout is meant to be about, and adds two grouped
+views — by department and by qualification (§5.7). Separately, every native `prompt()`/`confirm()`
+dialog in Formation Paths was replaced with a styled in-app popup (`confirmPopup()` in `core.js`,
+reusable elsewhere) — closer to the rest of the app's look, and it also removes the one thing that
+was blocking automated browser testing of that area (§5.4).
+
+**What changed in v1.2:** Reward's last open piece (compensation runs, the anomaly report) shipped
+(migration 91), closing phase 3 entirely — §6.4 moves from "to build" to §5 alongside everything
+else. Formation paths were also restructured at the owner's request: the "Years" level between a
+path and its modules is gone (migration 92 — Path → Module → Chapter → Post, one level shallower),
+modules/chapters are now shown as a numbered outline instead of a nested tree, and a thumbnail
+image can be set per path for the catalog (migration 93). A new printable Personnel & Team
+Applications report (Print Reports, Admin/HR) was added, reusing existing data sources — no new
+migration. No organisational decision changes in v1.2 or v1.3 either; both are "catch the docs up
+to the code" passes.
 
 This document describes how the people who run the **Focolare Urdu Archive Manager** are
 organised: who does what, who decides what, and how that maps onto the software. It exists
@@ -357,6 +365,12 @@ low-priority known gaps.
 - `formation_paths.thumbnail_path` (migration 93): an optional cover image per path, shown on its
   catalog card and detail page; a path with none gets a stable per-path colour placeholder with
   its initial letter instead, so the catalog still reads as a finished grid of cards.
+- **No more native `prompt()`/`confirm()` dialogs (v1.3):** every create/rename/delete action in
+  Formation Paths uses a styled in-app popup instead (`confirmPopup()`, new in `core.js` and
+  reusable by other modules; `openChapterPopup()`/`openModulePopup()` for the two text inputs).
+  Closer to the rest of the app's look for the "not a computer expert" audience this redesign
+  targets, and it also closed the one long-standing gap in browser-testing this area (native
+  dialogs silently block automation - PROJECT_HANDOFF_v18.md §3 first raised this).
 - `formation_path_editors (path_id, user_id, added_by_email)`: a path has an owner plus any
   number of co-authors, added/removed by the owner (row 23). `can_edit_path()` = owner, co-author
   or Coordinator; publishing stays with the owner, the Formation lead, a Coordinator or Admin.
@@ -436,8 +450,13 @@ low-priority known gaps.
 - **Personnel & Team Applications report** (Print Reports, migration-free, reuses `hr_people_
   overview()` and `collaboration_applications`): HR members and Admin only — deliberately
   narrower than the People tab's own gate, since `collaboration_applications`' RLS only lets HR
-  and Admin read it, not every department lead. A printable roster of every operator/department
-  member plus every admission request, for a meeting or a periodic review.
+  and Admin read it, not every department lead. Three views of the same data (v1.3): a **Team
+  Roster** (operator and up only) kept separate from a compact **Users** table (plain Users, the
+  general readership, can run to hundreds/thousands of rows and have no team-specific columns to
+  show); **by department** and **by qualification**, each exploding `hr_people_overview()`'s
+  comma-joined summary columns back into one row per membership and grouping with the resolved
+  option-list label, not the raw code. Team Applications is included in every view. All printable
+  for a meeting or a periodic review.
 - **Policy** (current values + propose/approve): read by everyone; propose by department leads;
   decide by Admin (not the proposer).
 - Team Applications: HR members + Admin (My Department → HR), no longer a separate tab.
