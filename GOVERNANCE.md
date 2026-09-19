@@ -1,7 +1,15 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.6 (2026-09-19) — decisions taken by the Owner; all of phases 1 through 3 are built and
+**Status: v1.7 (2026-09-19) — decisions taken by the Owner; all of phases 1 through 3 are built and
 merged (migrations 80–96). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.7:** same day as v1.6, later pass, no new migration. §1 gains a sixth
+principle — the reasoning behind "Start Here"/"Share with us" (v1.6) had only been written down as
+software (§5.8) and as a decision-log entry (§8 item 10), not as a standing principle for how the
+organisation treats the people it serves. Written down now because it should outlive this one
+feature: design for whoever finds it hardest, ship a staged-but-honest version rather than wait
+for a complete one, and keep a technical report and a shared feeling going to structurally
+different places. §5.8 now opens with a one-line pointer back to it.
 
 **What changed in v1.6:** next session, two new migrations. A new first-run experience for Users,
 scoped in a long conversation with the Owner (sociological/psychological/marketing framing) about
@@ -92,6 +100,15 @@ the team, session by session).
    (`task_outcome_events`): the same append-only pattern is extended to people decisions.
 5. **One lead per department.** The lead is accountable for the department's decisions and is
    the approver of last resort inside it. Leads are appointed by the project owner.
+6. **A User's first encounter, and a User's voice, deserve the same deliberate design as any
+   internal process does.** Design for the person who will find it hardest — someone with little
+   English and basic Urdu literacy, on a phone, who has never used the platform — not for the
+   average case; what serves them serves everyone. A full solution (translating everything,
+   building everything) is not required before a smaller, honest one (bilingual content, a warmer
+   first tab) ships — staged is not lesser, as long as what's deferred is written down, not
+   forgotten (§5.8). And what a User shares is heard by leadership directly, not filtered through
+   a support queue: a technical report and a shared feeling are structurally different things and
+   go to different places, because treating them the same would flatten both.
 
 ---
 
@@ -544,6 +561,9 @@ supposed to follow, and a Reward person cannot see the ledgers" — is now close
 and Reward (§5.5).
 
 ### 5.8 Onboarding hub and Share with us (migrations 95–96)
+
+The software below exists to carry out §1.6 — read that first for the reasoning; what follows is
+only the mechanism.
 
 **"Start Here"** replaces the technical Help tab for Users only — Operators/Coordinators/Admin
 keep Help exactly as before. Content lives in `onboarding_cards` (bilingual: `title_ur`/`body_ur`
