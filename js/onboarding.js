@@ -5,7 +5,7 @@
 // its own editor in My Department -> Communication (see renderOnboardingCardsManager in
 // mydepartment.js) - this module only ever reads onboarding_cards, never writes it.
 
-import { sb, esc, withStatus, ONBOARDING_MEDIA_BUCKET } from './core.js?v=20260919171502';
+import { sb, esc, withStatus, ONBOARDING_MEDIA_BUCKET } from './core.js?v=20260919171812';
 
 const thumbnailUrl = path => path ? sb.storage.from(ONBOARDING_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl : null;
 
