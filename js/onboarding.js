@@ -7,7 +7,7 @@
 // written directly in Supabase by Communication/Admin (RLS already allows it; no in-app editor
 // yet, same bootstrapping gap `help_pages` had before this session).
 
-import { sb, State, esc, withStatus } from './core.js?v=20260919110557';
+import { sb, State, esc, withStatus } from './core.js?v=20260919113506';
 
 const ONBOARDING_MEDIA_BUCKET = 'onboarding-media';
 const thumbnailUrl = path => path ? sb.storage.from(ONBOARDING_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl : null;
