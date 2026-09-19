@@ -285,6 +285,7 @@ export const State = {
   optionListsByName: {},  // option_lists rows grouped by list_name, as [code,label] pairs - generic lookup used by SessionCache/combobox
   hayatEditorEdition: '',
   taskPrefill: null,  // { title, description, document_id, document_pages } - set by chat.js's "Create task" button, consumed once by tasks.js's new-task form
+  chatMessagePrefill: null,  // string - set by docdetail.js's "Report a problem" buttons (optionally with a copied/selected text passage), consumed once by chat.js's compose textarea
   isFormatore: false,  // true if I'm a FORM department member - see boot(); mirrors is_any_formatore() server-side, used to gate "+ New formation path" and "My paths"
   formationSelectedPathId: null,
   myDepartments: [],  // [{department_code, is_lead}] for the signed-in user - see GOVERNANCE.md

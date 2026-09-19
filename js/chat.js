@@ -3,7 +3,7 @@
 // admins see every message and can reply + dismiss. Everything stays in chat_messages
 // forever - "dismiss" is a soft flag hiding a row from the admin's default list, not a delete.
 
-import { sb, State, esc, canReviewApplications, withStatus, nameMapForEmails, labelOf } from './core.js?v=20260919163625';
+import { sb, State, esc, canReviewApplications, withStatus, nameMapForEmails, labelOf } from './core.js?v=20260919165023';
 
 // Report types are admin-editable from Options ("Report type" list) - see OPTION_LIST_NAMES
 // in core.js and 55_report_types.sql for the seed. Read fresh each time rather than cached in
@@ -29,9 +29,10 @@ export async function renderChatView(main) {
         </div>
         <div class="field"><label>Document ID <span class="hint">(optional)</span></label><input id="chat-document-id" type="number" min="1" value="${State.selectedDocId ? esc(State.selectedDocId) : ''}"></div>
       </div>
-      <div class="field"><label>Tell us in detail about the problem, and any suggestions or thoughts you have</label><textarea id="chat-message-text" rows="3"></textarea></div>
+      <div class="field"><label>Tell us in detail about the problem, and any suggestions or thoughts you have</label><textarea id="chat-message-text" rows="3">${State.chatMessagePrefill ? esc(State.chatMessagePrefill) : ''}</textarea></div>
       <div class="btn-row"><button class="btn" id="chat-send-btn">Send</button></div>
     </div>`;
+  State.chatMessagePrefill = null;
   await refreshChatThread();
 
   document.getElementById('chat-send-btn').addEventListener('click', async () => {
