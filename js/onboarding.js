@@ -1,15 +1,12 @@
 // "Start Here" (95_onboarding_and_share_with_us.sql, PROJECT_HANDOFF for this session): replaces
 // the technical Help tab for Users only - a first-run orientation hub, not a reference manual.
 // Three sections (what this is / how to use it / how to collaborate), filled with bilingual cards
-// (Urdu title/body + an optional English gloss) authored by the Communication department. Content
-// is data (onboarding_cards), never hardcoded here, so Communication can add/update cards from
-// Options-adjacent tooling without a code change once that editor exists - for now, rows are
-// written directly in Supabase by Communication/Admin (RLS already allows it; no in-app editor
-// yet, same bootstrapping gap `help_pages` had before this session).
+// (Urdu title/body + an optional English gloss) authored by the Communication department through
+// its own editor in My Department -> Communication (see renderOnboardingCardsManager in
+// mydepartment.js) - this module only ever reads onboarding_cards, never writes it.
 
-import { sb, State, esc, withStatus } from './core.js?v=20260919113506';
+import { sb, esc, withStatus, ONBOARDING_MEDIA_BUCKET } from './core.js?v=20260919162927';
 
-const ONBOARDING_MEDIA_BUCKET = 'onboarding-media';
 const thumbnailUrl = path => path ? sb.storage.from(ONBOARDING_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl : null;
 
 const SECTIONS = [
