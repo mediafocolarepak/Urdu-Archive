@@ -7,8 +7,8 @@ import {
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
-  openFormationPostPopup,
-} from './core.js?v=20260919162927';
+  openFormationPostPopup, canReviewApplications,
+} from './core.js?v=20260919163625';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -93,7 +93,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
         ${canEdit ? '<button class="btn secondary" id="doc-open-editor">Edit</button>' : ''}
         <button class="btn secondary" id="doc-fav">${favLabel(doc.document_id)}</button>
         ${State.myBoards.size > 0 && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-board">+ Board</button>' : ''}
-        ${State.isFormatore && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-path">+ Path</button>' : ''}
+        ${(State.isFormatore || canReviewApplications()) && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-path">+ Path</button>' : ''}
         <button class="btn" id="doc-download-gdrive">Open</button>
       </div>
     </div>
@@ -140,7 +140,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
   if (State.myBoards.size > 0 && isDocPostable(doc)) {
     document.getElementById('doc-add-board').addEventListener('click', () => openBoardPostPopup({ doc, onSaved: () => {} }));
   }
-  if (State.isFormatore && isDocPostable(doc)) {
+  if ((State.isFormatore || canReviewApplications()) && isDocPostable(doc)) {
     document.getElementById('doc-add-path').addEventListener('click', () => openFormationPostPopup({ doc, onSaved: () => {} }));
   }
   if (canEdit) {

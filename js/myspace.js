@@ -2,7 +2,7 @@
 // PROJECT_HANDOFF_v15.md). Personal and private: each user only ever sees their own favorites,
 // enforced by RLS on user_favorites, not by anything in this module.
 
-import { sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup, openFormationPostPopup } from './core.js?v=20260919162927';
+import { sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup, openFormationPostPopup, canReviewApplications } from './core.js?v=20260919163625';
 
 export async function renderMySpaceView(main) {
   const rows = await withStatus(sb.from('user_favorites')
@@ -23,7 +23,7 @@ export async function renderMySpaceView(main) {
     docsById[doc.document_id] = doc;
     const title = esc(doc.en_title) || '<span class="hint">(no title)</span>';
     const canAddToBoard = State.myBoards.size > 0 && isDocPostable(doc);
-    const canAddToPath = State.isFormatore && isDocPostable(doc);
+    const canAddToPath = (State.isFormatore || canReviewApplications()) && isDocPostable(doc);
     return `<div class="dash-card" data-id="${esc(doc.document_id)}">
       <div class="dash-card-title">${title}</div>
       ${doc.ur_title ? `<div dir="auto">${esc(doc.ur_title)}</div>` : ''}
