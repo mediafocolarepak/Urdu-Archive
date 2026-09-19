@@ -1,25 +1,27 @@
-import { State, canWrite, isAdmin, canReviewApplications, isDeptMember, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20260918193251';
-import { renderDashboardView } from './dashboard.js?v=20260918193251';
-import { renderReportsView } from './reports.js?v=20260918193251';
-import { renderHayatView } from './hayatindex.js?v=20260918193251';
-import { renderMatchReviewView } from './matchreview.js?v=20260918193251';
-import { renderBulkImportView } from './bulkimport.js?v=20260918193251';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260918193251';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260918193251';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260918193251';
-import { renderHayatEditorView } from './hayateditor.js?v=20260918193251';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260918193251';
-import { renderUserGuideView } from './userguide.js?v=20260918193251';
-import { renderJoinTeamView } from './collaboration.js?v=20260918193251';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260918193251';
-import { renderMyProfileView } from './profile.js?v=20260918193251';
-import { renderMySpaceView } from './myspace.js?v=20260918193251';
-import { renderBoardsView } from './boards.js?v=20260918193251';
-import { renderFormationView } from './formation.js?v=20260918193251';
-import { renderPeopleView } from './people.js?v=20260918193251';
-import { renderMyDepartmentView, initDeptMessageNotifications } from './mydepartment.js?v=20260918193251';
-import { renderRereadView } from './reread.js?v=20260918193251';
-import { registerServiceWorker } from './pwa-register.js?v=20260918193251';
+import { State, canWrite, isAdmin, canReviewApplications, isDeptMember, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20260919110557';
+import { renderDashboardView } from './dashboard.js?v=20260919110557';
+import { renderReportsView } from './reports.js?v=20260919110557';
+import { renderHayatView } from './hayatindex.js?v=20260919110557';
+import { renderMatchReviewView } from './matchreview.js?v=20260919110557';
+import { renderBulkImportView } from './bulkimport.js?v=20260919110557';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260919110557';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260919110557';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260919110557';
+import { renderHayatEditorView } from './hayateditor.js?v=20260919110557';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260919110557';
+import { renderUserGuideView } from './userguide.js?v=20260919110557';
+import { renderJoinTeamView } from './collaboration.js?v=20260919110557';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260919110557';
+import { renderMyProfileView } from './profile.js?v=20260919110557';
+import { renderMySpaceView } from './myspace.js?v=20260919110557';
+import { renderBoardsView } from './boards.js?v=20260919110557';
+import { renderFormationView } from './formation.js?v=20260919110557';
+import { renderPeopleView } from './people.js?v=20260919110557';
+import { renderMyDepartmentView, initDeptMessageNotifications } from './mydepartment.js?v=20260919110557';
+import { renderRereadView } from './reread.js?v=20260919110557';
+import { renderOnboardingView } from './onboarding.js?v=20260919110557';
+import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20260919110557';
+import { registerServiceWorker } from './pwa-register.js?v=20260919110557';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -66,7 +68,14 @@ function getTabs() {
   // Persistently visible invitation for read-only accounts - collaborators (Operator+)
   // already have other ways to reach out, see the "Join the Team" module for why.
   if (isUser) { tabs.push({ id: 'jointeam', label: 'Join the Team' }); }
-  tabs.push({ id: 'help', label: 'Help' });
+  // Users get a first-run orientation hub instead of the technical Help tab (95_onboarding_and_
+  // share_with_us.sql, PROJECT_HANDOFF for this session) - everyone else keeps Help unchanged.
+  if (isUser) { tabs.push({ id: 'onboarding', label: 'Start Here' }); } else { tabs.push({ id: 'help', label: 'Help' }); }
+  // "Share with us": Users can write (from the compose view); every department lead and Admin
+  // can read every share (from the inbox view) - see sharewithus.js for why this isn't the same
+  // channel as "Report a Problem or Suggestion" above. Operators/Coordinators without a lead role
+  // don't get the tab for now (RLS already lets them post regardless, if that changes later).
+  if (isUser || isAnyDeptLead() || isAdmin()) { tabs.push({ id: 'sharewithus', label: 'Share with us' }); }
 
   // Operators work the Tasks queue first and foremost - reorder so Dashboard, Tasks, then
   // the renamed Chat lead the tab bar, with everything else following in its usual order.
@@ -111,6 +120,8 @@ function renderTab(id) {
   else if (id === 'jointeam') renderJoinTeamView(main);
   else if (id === 'profile') renderMyProfileView(main);
   else if (id === 'help') renderUserGuideView(main);
+  else if (id === 'onboarding') renderOnboardingView(main);
+  else if (id === 'sharewithus') { (isAnyDeptLead() || isAdmin()) ? renderShareInboxView(main) : renderShareComposeView(main); }
 }
 
 // Escape hatch so docdetail.js's Print Tracking Sheet "Back" button can navigate without
@@ -123,5 +134,6 @@ boot(() => {
   initChatNotifications(() => renderTab('chat'));
   initTaskNotifications(() => renderTab('tasks'));
   initDeptMessageNotifications(code => { State.myDeptSelected = code; renderTab('mydepartment'); });
+  initShareNotifications(() => renderTab('sharewithus'));
 });
 registerServiceWorker();

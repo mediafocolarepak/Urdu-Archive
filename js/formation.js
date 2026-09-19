@@ -10,7 +10,7 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, confirmPopup } from './core.js?v=20260918193251';
+import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, confirmPopup } from './core.js?v=20260919110557';
 
 // Thumbnails (migration 93, owner's request to make the catalog "look like Coursera") - a public
 // bucket, same shape as board post images (BOARD_MEDIA_BUCKET in core.js), but not shared outside
@@ -159,10 +159,14 @@ function renderPathCard(p, audienceList, isMine) {
       ${cardCoverHtml(p)}
       <div style="padding:12px;flex:1;display:flex;flex-direction:column;">
         <div class="btn-row" style="justify-content:space-between;align-items:flex-start;">
-          <div style="font-weight:600;" dir="auto">${esc(p.title)}</div>
+          <div dir="auto">
+            <div style="font-weight:600;">${esc(p.title)}</div>
+            ${p.title_en ? `<div class="hint">${esc(p.title_en)}</div>` : ''}
+          </div>
           ${isMine ? `<span class="hint" style="white-space:nowrap;">${badge}</span>` : ''}
         </div>
         ${p.description ? `<div class="hint" style="margin-top:4px;" dir="auto">${esc(textPreview(p.description, 140))}</div>` : ''}
+        ${p.description_en ? `<div class="hint" style="margin-top:2px;">${esc(textPreview(p.description_en, 140))}</div>` : ''}
         <div class="hint" style="margin-top:auto;padding-top:8px;">
           ${esc(labelOf(audienceList, p.target_audience))}
           ${p.session_type === 'summer' ? ' &middot; Summer session' : ' &middot; Regular path'}
@@ -183,8 +187,10 @@ function openPathPopup({ path = null, onSaved } = {}) {
   backdrop.innerHTML = `
     <div class="panel overlay-panel">
       <h2 style="margin-top:0;">${path ? 'Edit path' : 'New path'}</h2>
-      <div class="field"><label>Title</label><input id="fpp-title" value="${esc(path ? path.title : '')}"></div>
+      <div class="field"><label>Title</label><input id="fpp-title" dir="auto" value="${esc(path ? path.title : '')}"></div>
       <div class="field"><label>Description</label><textarea id="fpp-description" dir="auto" rows="3">${esc(path ? path.description : '')}</textarea></div>
+      <div class="field"><label>English title <span class="hint">(optional gloss, shown alongside the title above)</span></label><input id="fpp-title-en" value="${esc(path ? path.title_en : '')}"></div>
+      <div class="field"><label>English description <span class="hint">(optional)</span></label><textarea id="fpp-description-en" rows="2">${esc(path ? path.description_en : '')}</textarea></div>
       <div class="field"><label>Target audience</label><select id="fpp-audience">${optionsHtml(audienceList, path ? path.target_audience : '', true)}</select></div>
       <div class="field">
         <label>Thumbnail <span class="hint">(shown on the catalog card - optional, a plain color is used if you skip this)</span></label>
@@ -257,6 +263,8 @@ function openPathPopup({ path = null, onSaved } = {}) {
     const row = {
       title,
       description: document.getElementById('fpp-description').value.trim() || null,
+      title_en: document.getElementById('fpp-title-en').value.trim() || null,
+      description_en: document.getElementById('fpp-description-en').value.trim() || null,
       thumbnail_path,
       target_audience: document.getElementById('fpp-audience').value || null,
       session_type: document.getElementById('fpp-session').value,
@@ -405,7 +413,9 @@ async function renderPathDetail(main, pathId) {
       </div>
       ${thumbnailUrl(path.thumbnail_path) ? `<img src="${esc(thumbnailUrl(path.thumbnail_path))}" alt="" style="width:100%;max-height:220px;object-fit:cover;border-radius:8px;margin:8px 0;">` : ''}
       <h2 dir="auto">${esc(path.title)}</h2>
-      ${path.description ? `<div dir="auto" style="margin-bottom:8px;">${esc(path.description)}</div>` : ''}
+      ${path.title_en ? `<div class="hint" style="margin-top:-6px;margin-bottom:6px;">${esc(path.title_en)}</div>` : ''}
+      ${path.description ? `<div dir="auto" style="margin-bottom:4px;">${esc(path.description)}</div>` : ''}
+      ${path.description_en ? `<div class="hint" style="margin-bottom:8px;">${esc(path.description_en)}</div>` : ''}
       <div class="hint">
         ${esc(labelOf(audienceList, path.target_audience))}
         ${path.session_type === 'summer' ? ' &middot; Summer session' : ' &middot; Regular path'}
