@@ -1,7 +1,25 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.5 (2026-09-18) — decisions taken by the Owner; all of phases 1 through 3 are built and
-merged (migrations 80–94). Team comments welcome, changes go through a new version.**
+**Status: v1.6 (2026-09-19) — decisions taken by the Owner; all of phases 1 through 3 are built and
+merged (migrations 80–96). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.6:** next session, two new migrations. A new first-run experience for Users,
+scoped in a long conversation with the Owner (sociological/psychological/marketing framing) about
+a real gap: a new User with little English and basic Urdu literacy had no orientation — the old
+Help tab was a technical English walkthrough built for operators.
+- **"Start Here"** replaces Help for Users only (§5.8, migration 95): three sections (what this
+  is / how to use it / how to collaborate), filled with bilingual (Urdu + English gloss) cards —
+  text, image or linked-video — **authored by Communication**, the department's first real
+  software responsibility (§2.5 updated accordingly).
+- **Formation Paths** get the same bilingual title/description treatment on their catalog cards.
+- **"Share with us"** (§5.8, migrations 95–96): a new, deliberately separate channel from the
+  existing technical "Report a Problem or Suggestion" chat — for sharing an experience, feeling or
+  idea, not a bug. Read by **every department lead and Admin**, each of whom can thank a share
+  and/or reply independently. Phase 1a shipped text-only; phase 1b (this session) added voice
+  messages, for someone who finds typing a second script on a phone hard.
+- Deliberately **not** done in this pass: translating the app's existing UI chrome into Urdu — a
+  separate, larger project, waiting on Asci/Sheril's availability, using the current CSS/layout
+  (no RTL mirroring) once it starts.
 
 **What changed in v1.5:** same day as v1.1–v1.4, later session, one new migration. Two additions,
 requested together when the Owner asked for a plain-language map of how the whole system fits
@@ -175,15 +193,27 @@ Reward needs — credit circulation, compensation runs, the anomaly report — i
 
 ### 2.5 Communication
 
-*Mission:* people know the platform exists, know what is new, and know how to use it.
+*Mission:* people know the platform exists, know what is new, and know how to use it — and, for a
+first-time User, feel welcomed into it before anything else.
 
 Responsibilities:
-- Video tutorials and short guides; keep the in-app Help aligned with them.
+- **Author and keep fresh the "Start Here" cards** (§5.8) a new User sees in place of a technical
+  Help tab: bilingual (Urdu + English gloss), warm rather than instructional, in whatever mix of
+  text, image and short linked video best explains what the archive is, how to use it, and how to
+  get more involved. This is the friendly face of the platform for someone who has never used it —
+  not a manual, a welcome.
+- **Keep "Share with us" alive** (§5.8): read what Users and the team share — an experience, a
+  difficulty, an idea — thank it, and write back. This is reciprocal, not a support queue: every
+  department lead and Admin sees the same shares Communication does, but Communication is the
+  department whose whole mission is to make sure nobody who shares something goes unheard.
+- Video tutorials and short guides; keep the in-app Help aligned with them (Operators and up).
 - Announce releases and new features (in-app Announcements tab + social channels).
-- Promote recruitment campaigns on HR's behalf.
+- Promote recruitment campaigns on HR's behalf — including toward Users who see what's shared and
+  might join the team themselves.
 
-Needs from the software: almost nothing — possibly a "What's new" section. This department is
-people work, not code work.
+Needs from the software: writable access to the "Start Here" cards and read/reply access to
+"Share with us" (both §5.8, migration 95) — Communication's first real software responsibility,
+where before this department needed almost none.
 
 ### 2.6 Boards — a shared space, distinct from the archive
 
@@ -329,12 +359,12 @@ Rules that apply to the whole table:
 
 ---
 
-## 5. What the software already does (as of 2026-09-18, migrations 1–93)
+## 5. What the software already does (as of 2026-09-19, migrations 1–96)
 
 This section is here so the team designs on the real system, not an imagined one. Everything in
-§6.1, 6.1b, 6.1c, 6.2, 6.3, 6.4 and 6.6 of v1.0 is now folded in here as shipped; §6 (below) keeps
-only what's genuinely still open — which as of v1.2 is just Communication (no code needed) and two
-low-priority known gaps.
+§6.1, 6.1b, 6.1c, 6.2, 6.3, 6.4 and 6.6 of v1.0 is now folded in here as shipped, and as of v1.6
+so is Communication's own software (§5.8/§6.5); §6 (below) keeps only what's genuinely still
+open — two low-priority known gaps.
 
 ### 5.1 Roles and qualifications
 - `user_roles`: one row per account — `role` (user/operator/coordinator/admin), `credits`,
@@ -513,6 +543,35 @@ The gap v1.0 flagged here — "an HR person who is not Admin cannot see the list
 supposed to follow, and a Reward person cannot see the ledgers" — is now closed for both HR (§5.3)
 and Reward (§5.5).
 
+### 5.8 Onboarding hub and Share with us (migrations 95–96)
+
+**"Start Here"** replaces the technical Help tab for Users only — Operators/Coordinators/Admin
+keep Help exactly as before. Content lives in `onboarding_cards` (bilingual: `title_ur`/`body_ur`
+required, `title_en`/`body_en` optional gloss), grouped into three sections — `about`,
+`how_to_use`, `how_to_collaborate` — writable by Communication (`is_dept_member('COMM')`) or
+Admin, readable by every signed-in user. A card can carry an image (`onboarding-media`, a public
+bucket like `board-media` — this is outreach content, nothing sensitive) or link to a video
+already published elsewhere (YouTube/Facebook/Instagram — no video hosting was built). One
+"how to collaborate" card is the tutorial for Share with us, linking into that tab via
+`media_url = 'tab:sharewithus'` rather than an external URL.
+
+Formation Paths (§5.4) got the same bilingual treatment: `title_en`/`description_en`, nullable,
+shown alongside the (already-Urdu) title/description on the catalog card and path detail page.
+
+**"Share with us"** is not the technical "Report a Problem or Suggestion" chat (`chat_messages`,
+unchanged) — it's for an experience, a feeling, an idea, framed by the Owner as reciprocal
+("amore che va e che torna"), not a ticket queue. `share_with_us_messages`: any signed-in team
+member may post (not narrowed to Users — an Operator or Coordinator may want to share too);
+`share_with_us_reactions` (a "thank you", one per lead per message, toggleable) and
+`share_with_us_replies` (several leads can each reply independently, unlike `chat_messages`'
+single `reply_text` column) are both readable by the original sharer and by **every** department
+lead and Admin — not gated to one department, unlike the Team channel (§5.3). Phase 1b (migration
+96) added voice messages: `audio_path`/`audio_mime_type` on the message row, a **private** storage
+bucket `share-with-us-audio` keyed `<user_id>/<filename>` (only the author uploads into their own
+folder; the author or any lead/Admin can read it back via a signed URL) — recorded client-side
+with plain `MediaRecorder`/`getUserMedia`, no library, and simply not offered on a browser that
+doesn't support it.
+
 ---
 
 ## 6. What's left to build
@@ -521,8 +580,8 @@ Subsections 6.1–6.4 and 6.6 of v1.0 shipped as designed (with the naming diffe
 inline in §5) and their content now lives in §5, where it describes the running system rather
 than a plan. The subsection numbers below are kept only so existing cross-references (§2, §4, §7)
 keep pointing at something; §6.1, 6.1b, 6.1c, 6.2, 6.3, 6.4 and 6.6 are retired as "to-build"
-entries. As of v1.2, all of §6 that remains is Communication (§6.5, no code needed) and two
-low-priority known gaps (§6.7, §6.8) — nothing is actively "to build".
+entries; as of v1.6, §6.5 (Communication) joins them, shipped — see §5.8. All that remains open in
+§6 is two low-priority known gaps (§6.7, §6.8) — nothing is actively "to build".
 
 ### 6.1, 6.1b, 6.1c, 6.2, 6.3, 6.4, 6.6 — shipped, see §5
 - Department model, `people_decisions`, `standing`, `policy_values` → **§5.1, §5.3** (migration 80)
@@ -537,8 +596,10 @@ low-priority known gaps (§6.7, §6.8) — nothing is actively "to build".
   report → **§5.5** (migrations 88, 91) — closed 2026-09-18, same session as the formation
   restructure below.
 
-### 6.5 Communication (no phase)
-- Nothing required. A "What's new" block on the Dashboard fed by Announcements is a nice-to-have.
+### 6.5 Communication — shipped, see §5.8
+What used to read "nothing required" turned out to need real software after all: authoring
+"Start Here" and reading/replying to "Share with us" (migration 95, §5.8, §2.5). A "What's new"
+block on the Dashboard fed by Announcements remains a nice-to-have, still not built.
 
 ### 6.7 Known gap: formation path publish doesn't fully match §4 row 17
 Row 17 implies a Formatore proposes and the Formation lead approves publishing, as a distinct
@@ -550,7 +611,7 @@ Low priority: formation paths go through the same document revision/approval wor
 their content reaches the archive (row 18), so this doesn't bypass the archive's own review.
 
 ### 6.8 Known gap: department-lead appointment isn't RLS-enforced
-Carried over, not touched by migrations 80–94:
+Carried over, not touched by migrations 80–96:
 - "Only the Owner appoints department leads" (row 8) is a written rule, not an RLS-enforced one —
   any Admin can currently write `department_members`. Harmless today (Owner is the sole Admin);
   revisit if/when a second Admin is added.
@@ -632,3 +693,11 @@ it was answered 2026-09-17 (see its own entry below) and nothing here remains op
    The department lead (or Admin) may pin a message; the author may edit or delete their own
    message for 15 minutes after posting, a fixed UX allowance rather than a `policy_values` entry —
    it isn't a governance decision the propose/approve framework needs to own.
+10. **"Start Here" and "Share with us" (§5.8, migrations 95–96), scoped 2026-09-18/19:** bilingual
+    cards over a full Urdu UI for now — a separate, larger project (translating all existing UI
+    chrome) waits on Asci/Sheril, not blocking this. Video cards link to content Communication
+    already publishes elsewhere; no video hosting was built. Share with us is open to anyone
+    signed in, not just Users, and every department lead/Admin reads every share (not gated to one
+    department, unlike the Team channel) — the Owner's framing: reciprocal, not a ticket queue.
+    Voice messages (phase 1b) were deliberately sequenced after the text-only launch, to keep the
+    newest technical territory (browser audio recording) from blocking the rest.
