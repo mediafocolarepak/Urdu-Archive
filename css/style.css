@@ -173,6 +173,10 @@ table.grid th:hover { color: var(--accent); }
 table.grid tbody tr { cursor: pointer; }
 table.grid tbody tr:hover { background: var(--accent-soft); }
 table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600; }
+/* Fixed layout only for the Dashboard grid (scoped by id, not the shared .grid class every other
+   table also uses) so its <colgroup> percentages (dashboard.js) are enforced instead of just
+   hinted - otherwise auto layout keeps giving Author/Place more room than their content needs. */
+#dash-grid { table-layout: fixed; }
 .grid-wrap { max-height: 46vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
 
 /* Dashboard grid: columns are wider than the panel can fit, so the wrapper above scrolls
