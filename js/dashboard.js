@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260919171812';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260919171812';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260919172343';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260919172343';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
@@ -156,16 +156,26 @@ async function filterByCollection(rows) {
 // the CSS) since they need to see both title fields as entered/edited.
 const DASH_SORTABLE_USER = { document_id: 'ID', en_title: 'Title', author: 'Author', place: 'Place', category: 'Category', recipient: 'Recipient(s)', ref_date: 'Ref. date' };
 
+// Column widths (% of table width, each set sums to 100) - #dash-grid uses table-layout:fixed
+// (style.css) so these are enforced, not just hints; overflow/ellipsis (also style.css) truncates
+// whatever doesn't fit. Author/Place are deliberately narrow in the User set - they're rarely the
+// field someone is scanning for - freeing width for Category/Recipient(s)/Ref. date to actually be
+// visible without horizontal scrolling (owner's request).
+const DASH_COL_WIDTHS_USER = { document_id: 6, en_title: 26, author: 10, place: 8, category: 16, recipient: 24, ref_date: 10 };
+const DASH_COL_WIDTHS_ADMIN = { document_id: 6, title: 24, original_title: 22, author: 16, place: 12, category: 20 };
+
 export async function refreshDashGrid() {
   const grid = document.getElementById('dash-grid');
   if (!grid) return;
   const isUser = State.currentRole === 'user' || State.currentRole === 'operator';
   const cols = isUser ? DASH_SORTABLE_USER : DASH_SORTABLE;
+  const colWidths = isUser ? DASH_COL_WIDTHS_USER : DASH_COL_WIDTHS_ADMIN;
   let rows = await withStatus((await buildDashQuery(false)).q.order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Searching...');
   rows = await filterByCollection(rows);
   document.getElementById('dash-count').textContent = rows.length;
   const arrow = (col) => col !== State.dashSort.col ? '' : (State.dashSort.asc ? ' &uarr;' : ' &darr;');
-  grid.innerHTML = `<thead><tr>${Object.entries(cols).map(([col, label]) =>
+  grid.innerHTML = `<colgroup>${Object.keys(cols).map(col => `<col style="width:${colWidths[col]}%">`).join('')}</colgroup>
+    <thead><tr>${Object.entries(cols).map(([col, label]) =>
       `<th data-sort="${col}">${label}${arrow(col)}</th>`).join('')}</tr></thead>
     <tbody>${rows.map(r => {
       const star = r.is_preferred ? '&#9733; ' : '';
