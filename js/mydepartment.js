@@ -5,11 +5,11 @@
 
 import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe,
-  nameMapForEmails, DEPARTMENT_MEDIA_BUCKET,
-} from './core.js?v=20260919113506';
-import { renderPolicySection } from './policy.js?v=20260919113506';
-import { renderPeopleSection } from './people.js?v=20260919113506';
-import { renderApplicationsView } from './collaboration.js?v=20260919113506';
+  nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET,
+} from './core.js?v=20260919162927';
+import { renderPolicySection } from './policy.js?v=20260919162927';
+import { renderPeopleSection } from './people.js?v=20260919162927';
+import { renderApplicationsView } from './collaboration.js?v=20260919162927';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -47,6 +47,7 @@ export async function renderMyDepartmentView(main) {
     ${selected === 'RF' ? '<div id="mydept-anomalies-box"></div>' : ''}
     ${selected === 'COORD' ? '<div id="mydept-tasks-box"></div>' : ''}
     ${selected === 'FORM' ? '<div id="mydept-formation-box"></div>' : ''}
+    ${selected === 'COMM' ? '<div id="mydept-onboarding-box"></div>' : ''}
     <div id="mydept-policy-box"></div>`;
 
   if (codes.length > 1) {
@@ -83,6 +84,9 @@ export async function renderMyDepartmentView(main) {
   // (including drafts) and the formatori-only chat channel via existing RLS (is_any_formatore()
   // == FORM membership since migration 80), so no new migration is needed here, only the view.
   if (selected === 'FORM') await renderFormationPipeline(document.getElementById('mydept-formation-box'));
+  // Communication authors the "Start Here" cards (95_onboarding_and_share_with_us.sql) from here -
+  // onboarding.js only ever reads onboarding_cards, this is the one place that writes it.
+  if (selected === 'COMM') await renderOnboardingCardsManager(document.getElementById('mydept-onboarding-box'));
   await renderPolicySection(document.getElementById('mydept-policy-box'), { departmentFilter: selected });
 }
 
@@ -691,4 +695,140 @@ export async function initDeptMessageNotifications(navigateToMyDepartment) {
       showDeptMessageToast(row.department_code, navigateToMyDepartment);
     })
     .subscribe();
+}
+
+// ---------- "Start Here" card editor (95_onboarding_and_share_with_us.sql) ----------
+// Communication's own tool for the onboarding_cards Users see in "Start Here" (onboarding.js,
+// read-only there). Built once real content needed to exist and writing rows by hand in Supabase
+// wasn't a realistic ask for a non-technical content team - same bootstrapping gap help_pages had
+// before the rest of Help existed, closed here the same way boards/formation editors already are:
+// a plain popup form, not a generic admin grid.
+const ONBOARDING_SECTIONS = [
+  ['about', 'What is this?'],
+  ['how_to_use', 'How to use it'],
+  ['how_to_collaborate', 'How to collaborate'],
+];
+function onboardingSectionLabel(code) { const hit = ONBOARDING_SECTIONS.find(([c]) => c === code); return hit ? hit[1] : code; }
+const onboardingThumbnailUrl = path => path ? sb.storage.from(ONBOARDING_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl : null;
+
+async function renderOnboardingCardsManager(box) {
+  if (!box) return;
+  const cards = await withStatus(sb.from('onboarding_cards').select('*').order('section').order('sort_order').order('created_at'));
+
+  const row = c => `
+    <tr class="${c.published ? '' : 'dismissed-row'}">
+      <td>${esc(onboardingSectionLabel(c.section))}</td>
+      <td>
+        <div dir="auto" style="font-weight:600;">${esc(c.title_ur)}</div>
+        ${c.title_en ? `<div class="hint">${esc(c.title_en)}</div>` : ''}
+      </td>
+      <td>${esc(c.media_type)}${c.media_type === 'video' && c.media_url ? ` &middot; ${esc(c.media_url)}` : ''}</td>
+      <td>${c.sort_order}</td>
+      <td>${c.published ? 'Yes' : '<span class="hint">no (draft)</span>'}</td>
+      <td>
+        <button class="btn secondary mydept-card-edit-btn" data-id="${c.id}" style="padding:4px 10px;">Edit</button>
+        <button class="btn danger mydept-card-delete-btn" data-id="${c.id}" style="padding:4px 10px;">Delete</button>
+      </td>
+    </tr>`;
+
+  box.innerHTML = `
+    <div class="panel">
+      <div class="btn-row" style="justify-content:space-between;align-items:center;">
+        <h2>Start Here cards <span class="hint">&mdash; what Users see instead of Help</span></h2>
+        <button class="btn" id="mydept-card-new">+ New card</button>
+      </div>
+      <div class="grid-wrap"><table class="grid">
+        <thead><tr><th>Section</th><th>Title</th><th>Media</th><th>Order</th><th>Published</th><th></th></tr></thead>
+        <tbody>${cards.length ? cards.map(row).join('') : '<tr><td colspan="6" class="hint">No cards yet - click "+ New card" to write the first one.</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+
+  document.getElementById('mydept-card-new').addEventListener('click', () => openOnboardingCardPopup({ onSaved: () => renderOnboardingCardsManager(box) }));
+  box.querySelectorAll('.mydept-card-edit-btn').forEach(btn => btn.addEventListener('click', () => {
+    const card = cards.find(c => String(c.id) === btn.dataset.id);
+    openOnboardingCardPopup({ card, onSaved: () => renderOnboardingCardsManager(box) });
+  }));
+  box.querySelectorAll('.mydept-card-delete-btn').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Delete this card? This cannot be undone.')) return;
+    await withStatus(sb.from('onboarding_cards').delete().eq('id', btn.dataset.id), 'Deleting...');
+    renderOnboardingCardsManager(box);
+  }));
+}
+
+function openOnboardingCardPopup({ card = null, onSaved } = {}) {
+  document.getElementById('oc-card-popup')?.remove();
+  const backdrop = document.createElement('div');
+  backdrop.id = 'oc-card-popup';
+  backdrop.className = 'overlay-backdrop';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel">
+      <h2 style="margin-top:0;">${card ? 'Edit card' : 'New card'}</h2>
+      <div class="field"><label>Section</label><select id="oc-section">${ONBOARDING_SECTIONS.map(([c, l]) => `<option value="${c}" ${card && card.section === c ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="field"><label>Title (Urdu)</label><input id="oc-title-ur" dir="auto" value="${esc(card ? card.title_ur : '')}"></div>
+      <div class="field"><label>Title (English) <span class="hint">(optional)</span></label><input id="oc-title-en" value="${esc(card ? card.title_en : '')}"></div>
+      <div class="field"><label>Text (Urdu) <span class="hint">(optional)</span></label><textarea id="oc-body-ur" dir="auto" rows="3">${esc(card ? card.body_ur : '')}</textarea></div>
+      <div class="field"><label>Text (English) <span class="hint">(optional)</span></label><textarea id="oc-body-en" rows="3">${esc(card ? card.body_en : '')}</textarea></div>
+      <div class="field"><label>Media type</label><select id="oc-media-type">
+        <option value="text" ${!card || card.media_type === 'text' ? 'selected' : ''}>Text only</option>
+        <option value="image" ${card && card.media_type === 'image' ? 'selected' : ''}>Image (upload below)</option>
+        <option value="video" ${card && card.media_type === 'video' ? 'selected' : ''}>Video (link)</option>
+      </select></div>
+      <div class="field"><label>Link <span class="hint">(for "Video": a YouTube/Facebook/Instagram URL you already published. Leave empty otherwise - unless you were told to enter a special "tab:..." reference, e.g. for the Share with us tutorial card)</span></label><input id="oc-media-url" value="${esc(card ? card.media_url : '')}"></div>
+      <div class="field">
+        <label>Thumbnail <span class="hint">(optional cover image, shown on the card)</span></label>
+        ${card && card.thumbnail_path ? `<div style="margin-bottom:6px;"><img src="${esc(onboardingThumbnailUrl(card.thumbnail_path))}" alt="" style="max-width:220px;border-radius:6px;display:block;"></div>` : ''}
+        <input id="oc-thumbnail" type="file" accept="image/*">
+      </div>
+      <div class="field-grid">
+        <div class="field"><label>Order <span class="hint">(lower shows first)</span></label><input id="oc-sort" type="number" value="${card ? card.sort_order : 0}"></div>
+        <div class="field"><label style="text-transform:none;font-size:13px;"><input id="oc-published" type="checkbox" style="width:auto;" ${!card || card.published ? 'checked' : ''}> Published (visible to Users)</label></div>
+      </div>
+      <div class="hint" id="oc-error"></div>
+      <div class="btn-row" style="justify-content:flex-end;">
+        <button class="btn secondary" id="oc-cancel">Cancel</button>
+        <button class="btn" id="oc-save">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+  document.getElementById('oc-cancel').addEventListener('click', () => backdrop.remove());
+
+  document.getElementById('oc-save').addEventListener('click', async () => {
+    const errBox = document.getElementById('oc-error');
+    errBox.textContent = '';
+    const title_ur = document.getElementById('oc-title-ur').value.trim();
+    if (!title_ur) { errBox.textContent = 'Title (Urdu) is required.'; return; }
+    const media_type = document.getElementById('oc-media-type').value;
+    const media_url = document.getElementById('oc-media-url').value.trim();
+    if (media_type === 'video' && !media_url) { errBox.textContent = 'A video card needs a link.'; return; }
+
+    let thumbnail_path = card ? card.thumbnail_path : null;
+    const file = document.getElementById('oc-thumbnail').files[0];
+    if (file) {
+      const objectPath = `${Date.now()}-${file.name}`.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const { error } = await sb.storage.from(ONBOARDING_MEDIA_BUCKET).upload(objectPath, file, { upsert: true });
+      if (error) { errBox.textContent = 'Could not upload the thumbnail: ' + error.message; return; }
+      thumbnail_path = objectPath;
+    }
+
+    const { data: { user } } = await sb.auth.getUser();
+    const row = {
+      section: document.getElementById('oc-section').value,
+      title_ur,
+      title_en: document.getElementById('oc-title-en').value.trim() || null,
+      body_ur: document.getElementById('oc-body-ur').value.trim() || null,
+      body_en: document.getElementById('oc-body-en').value.trim() || null,
+      media_type,
+      media_url: media_url || null,
+      thumbnail_path,
+      sort_order: parseInt(document.getElementById('oc-sort').value, 10) || 0,
+      published: document.getElementById('oc-published').checked,
+      created_by_email: user.email,
+      updated_at: new Date().toISOString(),
+    };
+    if (card) await withStatus(sb.from('onboarding_cards').update(row).eq('id', card.id), 'Saving...');
+    else await withStatus(sb.from('onboarding_cards').insert(row), 'Saving...');
+    backdrop.remove();
+    if (onSaved) onSaved();
+  });
 }

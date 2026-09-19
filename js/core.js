@@ -306,6 +306,12 @@ export const BOARD_MEDIA_BUCKET = 'board-media';
 // is_dept_member()/is_dept_lead(), so reading one back needs a signed URL, not a public URL.
 export const DEPARTMENT_MEDIA_BUCKET = 'department-media';
 
+// Storage bucket for "Start Here" onboarding card thumbnails (95_onboarding_and_share_with_us.sql)
+// - public-read like BOARD_MEDIA_BUCKET (outreach content, nothing sensitive), write-gated to
+// Communication/Admin. Exported (not module-local like FORMATION_MEDIA_BUCKET) because both
+// onboarding.js (reads cards) and mydepartment.js (Communication's card editor) need it.
+export const ONBOARDING_MEDIA_BUCKET = 'onboarding-media';
+
 // Records that the signed-in user has seen and accepted the board usage policy (js/boards.js
 // shows it once before their first post). Never re-shown once set.
 export async function ackBoardPolicy() {
