@@ -6,10 +6,10 @@
 import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe,
   nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET,
-} from './core.js?v=20260919165023';
-import { renderPolicySection } from './policy.js?v=20260919165023';
-import { renderPeopleSection } from './people.js?v=20260919165023';
-import { renderApplicationsView } from './collaboration.js?v=20260919165023';
+} from './core.js?v=20260919171502';
+import { renderPolicySection } from './policy.js?v=20260919171502';
+import { renderPeopleSection } from './people.js?v=20260919171502';
+import { renderApplicationsView } from './collaboration.js?v=20260919171502';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);

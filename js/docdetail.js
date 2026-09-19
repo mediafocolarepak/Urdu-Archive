@@ -8,7 +8,7 @@ import {
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications,
-} from './core.js?v=20260919165023';
+} from './core.js?v=20260919171502';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -114,12 +114,12 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
         <button class="btn secondary" id="doc-fav">${favLabel(doc.document_id)}</button>
         ${State.myBoards.size > 0 && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-board">+ Board</button>' : ''}
         ${(State.isFormatore || canReviewApplications()) && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-path">+ Path</button>' : ''}
-        <button class="btn" id="doc-download-gdrive">Open PDF</button>
+        <button class="btn" id="doc-download-gdrive" style="white-space:nowrap;">Open PDF</button>
       </div>
     </div>
-    <div class="btn-row" style="justify-content:flex-end;margin:0 0 8px;">
-      ${text ? '<button class="btn secondary" id="doc-text-open">Open editable text</button>' : ''}
-      <button class="btn secondary" id="doc-report-problem">Report a problem</button>
+    <div class="btn-row" style="flex-direction:column;align-items:stretch;margin:0 0 8px;">
+      ${text ? '<button class="btn secondary" id="doc-text-open" style="white-space:nowrap;font-size:12.5px;padding:5px 10px;">Open editable text</button>' : ''}
+      <button class="btn secondary" id="doc-report-problem" style="white-space:nowrap;font-size:12.5px;padding:5px 10px;">Report a problem</button>
     </div>
     <div class="field" style="font-size:13px;line-height:1.7;">
       <div style="font-weight:600;font-size:14px;margin-bottom:2px;">${esc(doc.en_title) || '<span class="hint">(no title)</span>'}</div>
