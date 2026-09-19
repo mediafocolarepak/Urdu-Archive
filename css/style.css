@@ -188,6 +188,13 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
 
 .split { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; align-items: start; }
 .split.split-wide-left { grid-template-columns: 1.8fr 1fr; }
+/* Without this, a grid item's automatic minimum width is based on its content's min-content size -
+   here that's the document list's wide, many-column table (dashboard.js/matchreview.js), which
+   forced the left column wider than its fr share and squeezed the doc-detail column (right) down
+   to a sliver, regardless of the 1.1fr/1.8fr ratio above. min-width: 0 removes that content-driven
+   floor so the fr ratio actually governs both columns' width, and .grid-wrap's own overflow:auto
+   (style.css) takes over showing a horizontal scrollbar on the table if it's still too wide. */
+.split > * { min-width: 0; }
 @media (max-width: 900px) { .split, .split.split-wide-left { grid-template-columns: 1fr; } }
 
 /* Dashboard card list: the mobile-friendly alternative to the wide, horizontally-scrolling
