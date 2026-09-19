@@ -8,7 +8,7 @@ import {
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications,
-} from './core.js?v=20260919163625';
+} from './core.js?v=20260919165023';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -45,10 +45,7 @@ function renderDocTextBox(text) {
     <div class="field">
       <div class="btn-row" style="justify-content:space-between;align-items:center;">
         <label style="margin:0;">Text <span class="hint">(${chars.toLocaleString()} characters)</span></label>
-        <div class="btn-row" style="margin:0;">
-          <span style="cursor:pointer;text-decoration:underline;font-size:12.5px;" id="doc-text-open">Open editable text</span>
-          <span style="cursor:pointer;text-decoration:underline;font-size:12.5px;" id="doc-text-toggle">Show</span>
-        </div>
+        <span style="cursor:pointer;text-decoration:underline;font-size:12.5px;" id="doc-text-toggle">Show</span>
       </div>
       ${!text.reviewed ? '<div class="hint" style="color:var(--danger, #b3261e);">Unverified automatic transcription - not yet reviewed by a human.</div>' : ''}
       <div id="doc-text-body" dir="auto" style="display:none;white-space:pre-wrap;font-size:14px;line-height:1.8;margin-top:6px;max-height:60vh;overflow-y:auto;">${esc(text.body)}</div>
@@ -58,10 +55,23 @@ function renderDocTextBox(text) {
 // "Open editable text" (PROJECT_HANDOFF_v31.md §2 point 1) - a plain, selectable/copyable form of
 // the same document_texts row the box above shows styled. Needed because the styled preview above
 // is a plain <div>, not an <input>/<textarea>, so mobile browsers and some desktop ones don't offer
-// a normal copy affordance on it. Read-only textarea + explicit Copy/Close, same popup shell as
-// confirmPopup/openBoardPostPopup in core.js (overlay-backdrop + panel overlay-panel), but kept
-// here rather than core.js since only this module needs it.
-function openDocTextPopup(text) {
+// a normal copy affordance on it. Read-only textarea + Copy/Report a problem/Close, same popup
+// shell as confirmPopup/openBoardPostPopup in core.js (overlay-backdrop + panel overlay-panel),
+// but kept here rather than core.js since only this module needs it.
+//
+// "Report a problem" hands off to chat.js prefilled with whatever passage the reader was just
+// looking at: the textarea's current selection if one is still live, or (a mobile reader may have
+// used the OS's own copy gesture, which can clear the JS-visible selection) whatever is on the
+// clipboard as a fallback - best-effort, silently empty if neither is available or the browser
+// denies clipboard reads. Copy respects a live selection the same way, so "select a paragraph,
+// copy it, report it" is one continuous motion rather than three unrelated actions.
+async function selectedOrClipboardText(textarea) {
+  const selected = textarea.value.slice(textarea.selectionStart, textarea.selectionEnd).trim();
+  if (selected) return selected;
+  try { return (await navigator.clipboard.readText()).trim(); } catch { return ''; }
+}
+
+function openDocTextPopup(doc, text) {
   document.getElementById('doc-text-popup')?.remove();
   const backdrop = document.createElement('div');
   backdrop.id = 'doc-text-popup';
@@ -70,18 +80,28 @@ function openDocTextPopup(text) {
     <div class="panel overlay-panel">
       <h2 style="margin-top:0;">Text</h2>
       ${!text.reviewed ? '<div class="hint" style="color:var(--danger, #b3261e);">Unverified automatic transcription - not yet reviewed by a human.</div>' : ''}
-      <textarea readonly dir="auto" style="width:100%;min-height:50vh;font-size:14px;line-height:1.8;">${esc(text.body)}</textarea>
+      <textarea id="doc-text-popup-body" readonly dir="auto" style="width:100%;min-height:50vh;font-size:14px;line-height:1.8;">${esc(text.body)}</textarea>
       <div class="btn-row" style="justify-content:flex-end;margin-top:8px;">
-        <button class="btn secondary" id="doc-text-popup-close">Close</button>
-        <button class="btn" id="doc-text-popup-copy">Copy</button>
+        <button class="btn secondary" id="doc-text-popup-copy">Copy</button>
+        <button class="btn secondary" id="doc-text-popup-report">Report a problem</button>
+        <button class="btn" id="doc-text-popup-close">Close</button>
       </div>
+      <p class="hint" style="margin-top:8px;">If you find a mistake in a paragraph of the text, please select and copy the paragraph and paste it in the message of your report.</p>
     </div>`;
   document.body.appendChild(backdrop);
+  const textarea = document.getElementById('doc-text-popup-body');
   backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
   document.getElementById('doc-text-popup-close').addEventListener('click', () => backdrop.remove());
   document.getElementById('doc-text-popup-copy').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(text.body); alert('Text copied.'); }
+    const selected = textarea.value.slice(textarea.selectionStart, textarea.selectionEnd);
+    try { await navigator.clipboard.writeText(selected || text.body); alert(selected ? 'Selected text copied.' : 'Text copied.'); }
     catch { alert('Could not copy - select the text and copy manually.'); }
+  });
+  document.getElementById('doc-text-popup-report').addEventListener('click', async () => {
+    State.selectedDocId = doc.document_id;
+    State.chatMessagePrefill = await selectedOrClipboardText(textarea);
+    backdrop.remove();
+    window.__renderTab('chat');
   });
 }
 
@@ -94,8 +114,12 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
         <button class="btn secondary" id="doc-fav">${favLabel(doc.document_id)}</button>
         ${State.myBoards.size > 0 && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-board">+ Board</button>' : ''}
         ${(State.isFormatore || canReviewApplications()) && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-path">+ Path</button>' : ''}
-        <button class="btn" id="doc-download-gdrive">Open</button>
+        <button class="btn" id="doc-download-gdrive">Open PDF</button>
       </div>
+    </div>
+    <div class="btn-row" style="justify-content:flex-end;margin:0 0 8px;">
+      ${text ? '<button class="btn secondary" id="doc-text-open">Open editable text</button>' : ''}
+      <button class="btn secondary" id="doc-report-problem">Report a problem</button>
     </div>
     <div class="field" style="font-size:13px;line-height:1.7;">
       <div style="font-weight:600;font-size:14px;margin-bottom:2px;">${esc(doc.en_title) || '<span class="hint">(no title)</span>'}</div>
@@ -124,7 +148,12 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     textToggle.textContent = isOpen ? 'Show' : 'Hide';
   });
   const textOpen = document.getElementById('doc-text-open');
-  if (textOpen) textOpen.addEventListener('click', () => openDocTextPopup(text));
+  if (textOpen) textOpen.addEventListener('click', () => openDocTextPopup(doc, text));
+  document.getElementById('doc-report-problem').addEventListener('click', () => {
+    State.selectedDocId = doc.document_id;
+    State.chatMessagePrefill = null;
+    window.__renderTab('chat');
+  });
   document.getElementById('doc-fav').addEventListener('click', async () => {
     const btn = document.getElementById('doc-fav');
     const { data: { user } } = await sb.auth.getUser();
