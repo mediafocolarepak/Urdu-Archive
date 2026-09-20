@@ -82,28 +82,6 @@ function getTabs() {
   // replaced, the bulk unreviewed-transcription queue (reread.js, removed) no longer has a
   // backlog to work through - an error found in a text is reported and fixed through the
   // ordinary "Report a Problem or Suggestion" -> task flow instead.
-  if (isAdmin()) {
-    return [
-      { id: 'dashboard', label: 'Dashboard' },
-      { id: 'myspace', label: 'My Space' },
-      { id: 'boards', label: 'Boards' },
-      { id: 'formation', label: 'Formation Paths' },
-      { id: 'tasks', label: 'Tasks' },
-      { id: 'mydepartment', label: 'My Department' },
-      { id: 'announcements', label: 'Announcements' },
-      { id: 'chat', label: 'Messages' },
-      { id: 'sharewithus', label: 'Share with us' },
-      { id: 'reports', label: 'Print Reports' },
-      { id: 'users', label: 'Users' },
-      { id: 'options', label: 'Options' },
-      { id: 'profile', label: 'My Profile' },
-      { id: 'help', label: 'Help' },
-    ];
-  }
-
-  // Coordinator: unchanged general-purpose layout - full cataloguing toolset, Tasks, and My
-  // Department for whichever departments they belong to (People, if they're HR lead, is reached
-  // from there now). Proofreading is gone (owner's request 2026-09-20, see above).
   const tabs = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'myspace', label: 'My Space' },
