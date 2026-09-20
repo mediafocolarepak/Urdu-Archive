@@ -1,25 +1,25 @@
-import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20260920111144';
-import { renderDashboardView } from './dashboard.js?v=20260920111144';
-import { renderReportsView } from './reports.js?v=20260920111144';
-import { renderHayatView } from './hayatindex.js?v=20260920111144';
-import { renderMatchReviewView } from './matchreview.js?v=20260920111144';
-import { renderBulkImportView } from './bulkimport.js?v=20260920111144';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260920111144';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260920111144';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260920111144';
-import { renderHayatEditorView } from './hayateditor.js?v=20260920111144';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260920111144';
-import { renderUserGuideView } from './userguide.js?v=20260920111144';
-import { renderJoinTeamView } from './collaboration.js?v=20260920111144';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260920111144';
-import { renderMyProfileView } from './profile.js?v=20260920111144';
-import { renderMySpaceView } from './myspace.js?v=20260920111144';
-import { renderBoardsView } from './boards.js?v=20260920111144';
-import { renderFormationView } from './formation.js?v=20260920111144';
-import { renderMyDepartmentView, initDeptMessageNotifications } from './mydepartment.js?v=20260920111144';
-import { renderOnboardingView } from './onboarding.js?v=20260920111144';
-import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20260920111144';
-import { registerServiceWorker } from './pwa-register.js?v=20260920111144';
+import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20260920112017';
+import { renderDashboardView } from './dashboard.js?v=20260920112017';
+import { renderReportsView } from './reports.js?v=20260920112017';
+import { renderHayatView } from './hayatindex.js?v=20260920112017';
+import { renderMatchReviewView } from './matchreview.js?v=20260920112017';
+import { renderBulkImportView } from './bulkimport.js?v=20260920112017';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260920112017';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260920112017';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260920112017';
+import { renderHayatEditorView } from './hayateditor.js?v=20260920112017';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260920112017';
+import { renderUserGuideView } from './userguide.js?v=20260920112017';
+import { renderJoinTeamView } from './collaboration.js?v=20260920112017';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260920112017';
+import { renderMyProfileView } from './profile.js?v=20260920112017';
+import { renderMySpaceView } from './myspace.js?v=20260920112017';
+import { renderBoardsView } from './boards.js?v=20260920112017';
+import { renderFormationView } from './formation.js?v=20260920112017';
+import { renderMyDepartmentView, initDeptMessageNotifications } from './mydepartment.js?v=20260920112017';
+import { renderOnboardingView } from './onboarding.js?v=20260920112017';
+import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20260920112017';
+import { registerServiceWorker } from './pwa-register.js?v=20260920112017';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -82,6 +82,28 @@ function getTabs() {
   // replaced, the bulk unreviewed-transcription queue (reread.js, removed) no longer has a
   // backlog to work through - an error found in a text is reported and fixed through the
   // ordinary "Report a Problem or Suggestion" -> task flow instead.
+  if (isAdmin()) {
+    return [
+      { id: 'dashboard', label: 'Dashboard' },
+      { id: 'myspace', label: 'My Space' },
+      { id: 'boards', label: 'Boards' },
+      { id: 'formation', label: 'Formation Paths' },
+      { id: 'tasks', label: 'Tasks' },
+      { id: 'mydepartment', label: 'My Department' },
+      { id: 'announcements', label: 'Announcements' },
+      { id: 'chat', label: 'Messages' },
+      { id: 'sharewithus', label: 'Share with us' },
+      { id: 'reports', label: 'Print Reports' },
+      { id: 'users', label: 'Users' },
+      { id: 'options', label: 'Options' },
+      { id: 'profile', label: 'My Profile' },
+      { id: 'help', label: 'Help' },
+    ];
+  }
+
+  // Coordinator: unchanged general-purpose layout - full cataloguing toolset, Tasks, and My
+  // Department for whichever departments they belong to (People, if they're HR lead, is reached
+  // from there now). Proofreading is gone (owner's request 2026-09-20, see above).
   const tabs = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'myspace', label: 'My Space' },
