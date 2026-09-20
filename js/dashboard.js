@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260919172343';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260919172343';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260920090150';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260920090150';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
@@ -64,7 +64,7 @@ export async function renderDashboardView(main) {
         </label>
       </div>`}
       ${isAdmin() ? '<div class="btn-row"><button class="btn secondary" id="dash-export-csv">Export CSV</button></div>' : ''}
-      <div class="split${isUser ? ' split-wide-left' : ''}">
+      <div class="split split-wide-left">
         <div>
           <div class="grid-wrap dash-grid-wrap" style="max-height:70vh;"><table class="grid" id="dash-grid"></table></div>
           <div class="dash-cards" id="dash-cards"></div>
@@ -152,8 +152,9 @@ async function filterByCollection(rows) {
 
 // Plain Users see the dedicated English-translated title (en_title) as a single "Title"
 // column instead of Title(EN)/Original title, plus Recipients/Ref. date in the widened
-// left-hand grid; Operators/Admins keep the original compact set (see split-wide-left in
-// the CSS) since they need to see both title fields as entered/edited.
+// left-hand grid; Operators/Admins keep the original compact set since they need to see both
+// title fields as entered/edited. Both roles now use split-wide-left (CSS) for the left/right
+// ratio - the doc-detail panel doesn't need as much width as the document grid for either role.
 const DASH_SORTABLE_USER = { document_id: 'ID', en_title: 'Title', author: 'Author', place: 'Place', category: 'Category', recipient: 'Recipient(s)', ref_date: 'Ref. date' };
 
 // Column widths (% of table width, each set sums to 100) - #dash-grid uses table-layout:fixed
@@ -162,7 +163,7 @@ const DASH_SORTABLE_USER = { document_id: 'ID', en_title: 'Title', author: 'Auth
 // field someone is scanning for - freeing width for Category/Recipient(s)/Ref. date to actually be
 // visible without horizontal scrolling (owner's request).
 const DASH_COL_WIDTHS_USER = { document_id: 6, en_title: 26, author: 10, place: 8, category: 16, recipient: 24, ref_date: 10 };
-const DASH_COL_WIDTHS_ADMIN = { document_id: 6, title: 24, original_title: 22, author: 16, place: 12, category: 20 };
+const DASH_COL_WIDTHS_ADMIN = { document_id: 6, title: 24, original_title: 22, author: 8, place: 16, category: 24 };
 
 export async function refreshDashGrid() {
   const grid = document.getElementById('dash-grid');
