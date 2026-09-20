@@ -1,7 +1,18 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.7 (2026-09-19) — decisions taken by the Owner; all of phases 1 through 3 are built and
-merged (migrations 80–96). Team comments welcome, changes go through a new version.**
+**Status: v1.8 (2026-09-20) — decisions taken by the Owner; all of phases 1 through 3 are built and
+merged (migrations 80–98). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.8:** same phase, next session, one new migration, no new principle - this is
+a mechanism, not a policy shift. **Department Pulse** (§5.9, migration 98): each department's lead
+sets a simple status (on track / slowing down / stalled) and a short list of current priorities,
+visible to every member of that department; Admin gets a one-screen roll-up across every
+department ("Project overview", a new tab). Deliberately manual, not computed from task data - the
+Owner's own reasoning (§8 item 11): a wrong automatic signal is worse than an honestly subjective
+one, and the human note is the actual point, not the color. Also this session: the standalone
+People tab and Proofreading queue were retired (folded into My Department -> HR, and no longer
+needed now that every PDF has been replaced) - UI cleanup, not a governance change, not detailed
+further here.
 
 **What changed in v1.7:** same day as v1.6, later pass, no new migration. §1 gains a sixth
 principle — the reasoning behind "Start Here"/"Share with us" (v1.6) had only been written down as
@@ -376,7 +387,7 @@ Rules that apply to the whole table:
 
 ---
 
-## 5. What the software already does (as of 2026-09-19, migrations 1–96)
+## 5. What the software already does (as of 2026-09-20, migrations 1–98)
 
 This section is here so the team designs on the real system, not an imagined one. Everything in
 §6.1, 6.1b, 6.1c, 6.2, 6.3, 6.4 and 6.6 of v1.0 is now folded in here as shipped, and as of v1.6
@@ -551,10 +562,11 @@ open — two low-priority known gaps.
 - **Policy** (current values + propose/approve): read by everyone; propose by department leads;
   decide by Admin (not the proposer).
 - Team Applications: HR members + Admin (My Department → HR), no longer a separate tab.
-- Proofreading queue, everyone's outcome history: Coordinator+.
 - Budget (top-up), Options (option lists, departments): Admin only. Reward members get a
   read-only view of credit circulation, the outcome ledger, compensation runs and the anomaly
   report (§5.5) without Admin access.
+- Department status and priorities (§5.9): read by that department's members + Admin; set only by
+  that department's lead + Admin. Admin's "Project overview" roll-up: Admin only.
 
 The gap v1.0 flagged here — "an HR person who is not Admin cannot see the list of people they are
 supposed to follow, and a Reward person cannot see the ledgers" — is now closed for both HR (§5.3)
@@ -591,6 +603,34 @@ bucket `share-with-us-audio` keyed `<user_id>/<filename>` (only the author uploa
 folder; the author or any lead/Admin can read it back via a signed URL) — recorded client-side
 with plain `MediaRecorder`/`getUserMedia`, no library, and simply not offered on a browser that
 doesn't support it.
+
+### 5.9 Department Pulse (migration 98)
+
+A lead-managed status and a short priorities list per department, so members stay aligned and
+motivated without a meeting - the Owner's framing: a human touch on online work, not a metric
+(§8 item 11 has the full reasoning).
+
+- `department_status`: one row per department (`department_code` primary key) - `status`
+  (`on_track` / `slowing` / `stalled`), a free-text `note`, `updated_by_email`/`updated_at`.
+  Read by department members and Admin; written only by that department's lead or Admin (`for
+  all`, same RLS shape as `task_reputation_tiers`' owner check, not the propose/decide framework
+  of §5.6 - this is an operational status, not a policy value, so there is no separate approval
+  step).
+- `department_priorities`: an ordered, short list of what the department is focused on right now -
+  `title`, an optional `due_date`, `done`/`done_at`, `sort_order`. Same read/write split as above.
+  Deliberately not a second task system: no assignee, no credits, no category - just what the lead
+  wants the team looking at.
+- **UI**: a colored banner (green/amber/red) at the top of each department's My Department page,
+  with the lead's note and an "Update status" action for the lead/Admin; the priorities list
+  underneath, checkable off by the lead/Admin. A new tab, **"Project overview"**, Admin only,
+  right after My Department: one card per department showing its current status/note/open-
+  priority count, reading the same two tables with no per-department filter (Admin already sees
+  every row via the RLS above) - clicking a card opens that department's My Department page.
+- Explicitly **not** built in this phase: any computed suggestion for the status color. The Owner
+  and Claude agreed a wrong automatic signal (a stale "green" from an idle status, or a "red" from
+  a metric that doesn't fit a given department) would do more harm than an honestly subjective
+  human note - see §8 item 11. A computed hint, and possibly surfacing it to Coordinator too, may
+  follow once this phase shows real use.
 
 ---
 
@@ -631,7 +671,7 @@ Low priority: formation paths go through the same document revision/approval wor
 their content reaches the archive (row 18), so this doesn't bypass the archive's own review.
 
 ### 6.8 Known gap: department-lead appointment isn't RLS-enforced
-Carried over, not touched by migrations 80–96:
+Carried over, not touched by migrations 80–98:
 - "Only the Owner appoints department leads" (row 8) is a written rule, not an RLS-enforced one —
   any Admin can currently write `department_members`. Harmless today (Owner is the sole Admin);
   revisit if/when a second Admin is added.
@@ -721,3 +761,10 @@ it was answered 2026-09-17 (see its own entry below) and nothing here remains op
     department, unlike the Team channel) — the Owner's framing: reciprocal, not a ticket queue.
     Voice messages (phase 1b) were deliberately sequenced after the text-only launch, to keep the
     newest technical territory (browser audio recording) from blocking the rest.
+11. **Department Pulse (§5.9, migration 98), scoped 2026-09-20:** a department's status indicator
+    is set by hand by its lead, not computed from task/credit data. Raised and settled in the same
+    conversation - a wrong automatic signal (a stale green, or a metric that fits one department's
+    work but not another's) would undermine trust in the indicator faster than a manual one that's
+    honestly subjective. The human note next to the color is the actual point: motivation and
+    alignment, not a KPI. Admin's "Project overview" roll-up needed no separate decision - it
+    follows directly from Admin already reading every department's row (§2, throughout).
