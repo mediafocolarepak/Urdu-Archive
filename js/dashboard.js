@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260920100443';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260920100443';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260920102321';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260920102321';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
@@ -150,28 +150,20 @@ async function filterByCollection(rows) {
   return rows.filter(r => idSet.has(r.document_id));
 }
 
-// Plain Users see the dedicated English-translated title (en_title) as a single "Title"
-// column instead of Title(EN)/Original title, plus Recipients/Ref. date in the widened
-// left-hand grid; Operators/Admins keep the original compact set since they need to see both
-// title fields as entered/edited. Both roles now use split-wide-left (CSS) for the left/right
-// ratio - the doc-detail panel doesn't need as much width as the document grid for either role.
-const DASH_SORTABLE_USER = { document_id: 'ID', en_title: 'Title', author: 'Author', place: 'Place', category: 'Category', recipient: 'Recipient(s)', ref_date: 'Ref. date' };
+// The document grid (left window) is now the same for every role (owner's request 2026-09-20) -
+// Title(EN)/Original title as two columns (DASH_SORTABLE, core.js), no Recipient(s)/Ref. date.
 
-// Column widths (% of table width, each set sums to 100) - #dash-grid uses table-layout:fixed
-// (style.css) so these are enforced, not just hints; overflow/ellipsis (also style.css) truncates
-// whatever doesn't fit. Author/Place/Recipient(s) are deliberately narrow in the User set - they're
-// rarely the field someone is scanning for - freeing width for Title/Category to actually be
-// visible without horizontal scrolling (owner's request; Author/Recipient(s) halved again
-// 2026-09-20, freed width given to Title/Category).
-const DASH_COL_WIDTHS_USER = { document_id: 6, en_title: 35, author: 5, place: 8, category: 24, recipient: 12, ref_date: 10 };
-const DASH_COL_WIDTHS_ADMIN = { document_id: 6, title: 24, original_title: 22, author: 8, place: 16, category: 24 };
+// Column widths (% of table width, sums to 100) - #dash-grid uses table-layout:fixed (style.css)
+// so these are enforced, not just hints; overflow/ellipsis (also style.css) truncates whatever
+// doesn't fit, and the horizontal scrollbar on .grid-wrap (style.css) takes over once Title/
+// Original title's 300px minimum (also style.css) no longer fits.
+const DASH_COL_WIDTHS = { document_id: 6, title: 24, original_title: 22, author: 8, place: 16, category: 24 };
 
 export async function refreshDashGrid() {
   const grid = document.getElementById('dash-grid');
   if (!grid) return;
-  const isUser = State.currentRole === 'user' || State.currentRole === 'operator';
-  const cols = isUser ? DASH_SORTABLE_USER : DASH_SORTABLE;
-  const colWidths = isUser ? DASH_COL_WIDTHS_USER : DASH_COL_WIDTHS_ADMIN;
+  const cols = DASH_SORTABLE;
+  const colWidths = DASH_COL_WIDTHS;
   let rows = await withStatus((await buildDashQuery(false)).q.order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Searching...');
   rows = await filterByCollection(rows);
   document.getElementById('dash-count').textContent = rows.length;
@@ -181,19 +173,13 @@ export async function refreshDashGrid() {
       `<th data-sort="${col}">${label}${arrow(col)}</th>`).join('')}</tr></thead>
     <tbody>${rows.map(r => {
       const star = r.is_preferred ? '&#9733; ' : '';
-      const titleCells = isUser
-        ? `<td>${star}${esc(r.en_title) || '<span class="hint">(no title)</span>'}</td>`
-        : `<td>${star}${esc(r.title)}</td><td>${esc(r.original_title)}</td>`;
-      const extraCells = isUser
-        ? `<td>${(r.recipient || []).map(c => esc(labelOf(State.recipients, c))).join(', ')}</td><td>${esc(r.ref_date)}</td>`
-        : '';
       return `<tr data-id="${esc(r.document_id)}" class="${String(r.document_id) === String(State.selectedDocId) ? 'selected' : ''}">
       <td>${esc(r.document_id)}${r.pending_deletion ? ' <span class="count-badge" style="padding:1px 6px;background:var(--danger);color:#fff;">pending deletion</span>' : ''}</td>
-      ${titleCells}
+      <td>${star}${esc(r.title)}</td><td>${esc(r.original_title)}</td>
       <td>${esc(labelOf(State.authors, r.author))}</td>
       <td>${esc(r.place)}</td>
       <td>${esc(labelOf(State.categories, r.category))}</td>
-      ${extraCells}</tr>`;
+      </tr>`;
     }).join('')}</tbody>`;
   grid.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', () => {
     const col = th.dataset.sort;
@@ -211,7 +197,7 @@ export async function refreshDashGrid() {
   if (cardsBox) {
     cardsBox.innerHTML = rows.map(r => {
       const star = r.is_preferred ? '&#9733; ' : '';
-      const title = isUser ? (esc(r.en_title) || '(no title)') : esc(r.title);
+      const title = esc(r.title);
       return `<div class="dash-card" data-id="${esc(r.document_id)}">
         <div class="dash-card-title">${star}${title}</div>
         <div class="dash-card-meta">#${esc(r.document_id)} &middot; ${esc(labelOf(State.authors, r.author))} &middot; ${esc(r.place)} &middot; ${esc(labelOf(State.categories, r.category))}</div>
