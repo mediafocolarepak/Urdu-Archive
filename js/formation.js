@@ -10,7 +10,7 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, confirmPopup } from './core.js?v=20260920102321';
+import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, confirmPopup } from './core.js?v=20260920111144';
 
 // Thumbnails (migration 93, owner's request to make the catalog "look like Coursera") - a public
 // bucket, same shape as board post images (BOARD_MEDIA_BUCKET in core.js), but not shared outside
@@ -969,7 +969,7 @@ function renderPostRow(p, canEdit, doc, text) {
     ${doc ? `<div class="field" style="margin-top:6px;">
       <label>Document</label>
       <div style="font-size:13px;">#${esc(doc.document_id)} &middot; ${esc(doc.en_title) || '<span class="hint">(no title)</span>'}${doc.ur_title ? ` / <span dir="auto">${esc(doc.ur_title)}</span>` : ''}</div>
-      ${text ? `<div class="board-doc-preview" dir="auto">${esc(textPreview(text.body))}</div>${!text.reviewed ? '<div class="hint">Unverified automatic transcription</div>' : ''}` : ''}
+      ${text ? `<div class="board-doc-preview" dir="auto">${esc(textPreview(text.body))}</div>` : ''}
       <button class="btn secondary" data-open-doc="${esc(doc.document_id)}" style="margin-top:4px;">Open</button>
     </div>` : ''}
   </div>`;

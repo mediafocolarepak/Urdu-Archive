@@ -8,7 +8,7 @@ import {
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications,
-} from './core.js?v=20260920102321';
+} from './core.js?v=20260920111144';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -47,7 +47,6 @@ function renderDocTextBox(text) {
         <label style="margin:0;">Text <span class="hint">(${chars.toLocaleString()} characters)</span></label>
         <span style="cursor:pointer;text-decoration:underline;font-size:12.5px;" id="doc-text-toggle">Show</span>
       </div>
-      ${!text.reviewed ? '<div class="hint" style="color:var(--danger, #b3261e);">Unverified automatic transcription - not yet reviewed by a human.</div>' : ''}
       <div id="doc-text-body" dir="auto" style="display:none;white-space:pre-wrap;font-size:14px;line-height:1.8;margin-top:6px;max-height:60vh;overflow-y:auto;">${esc(text.body)}</div>
     </div>`;
 }
@@ -79,7 +78,6 @@ function openDocTextPopup(doc, text) {
   backdrop.innerHTML = `
     <div class="panel overlay-panel">
       <h2 style="margin-top:0;">Text</h2>
-      ${!text.reviewed ? '<div class="hint" style="color:var(--danger, #b3261e);">Unverified automatic transcription - not yet reviewed by a human.</div>' : ''}
       <textarea id="doc-text-popup-body" readonly dir="auto" style="width:100%;min-height:50vh;font-size:14px;line-height:1.8;">${esc(text.body)}</textarea>
       <div class="btn-row" style="justify-content:flex-end;margin-top:8px;">
         <button class="btn secondary" id="doc-text-popup-copy">Copy</button>

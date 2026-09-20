@@ -1,27 +1,25 @@
-import { State, isAdmin, canReviewApplications, isDeptLead, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20260920102321';
-import { renderDashboardView } from './dashboard.js?v=20260920102321';
-import { renderReportsView } from './reports.js?v=20260920102321';
-import { renderHayatView } from './hayatindex.js?v=20260920102321';
-import { renderMatchReviewView } from './matchreview.js?v=20260920102321';
-import { renderBulkImportView } from './bulkimport.js?v=20260920102321';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260920102321';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260920102321';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260920102321';
-import { renderHayatEditorView } from './hayateditor.js?v=20260920102321';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260920102321';
-import { renderUserGuideView } from './userguide.js?v=20260920102321';
-import { renderJoinTeamView } from './collaboration.js?v=20260920102321';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260920102321';
-import { renderMyProfileView } from './profile.js?v=20260920102321';
-import { renderMySpaceView } from './myspace.js?v=20260920102321';
-import { renderBoardsView } from './boards.js?v=20260920102321';
-import { renderFormationView } from './formation.js?v=20260920102321';
-import { renderPeopleView } from './people.js?v=20260920102321';
-import { renderMyDepartmentView, initDeptMessageNotifications } from './mydepartment.js?v=20260920102321';
-import { renderRereadView } from './reread.js?v=20260920102321';
-import { renderOnboardingView } from './onboarding.js?v=20260920102321';
-import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20260920102321';
-import { registerServiceWorker } from './pwa-register.js?v=20260920102321';
+import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20260920111144';
+import { renderDashboardView } from './dashboard.js?v=20260920111144';
+import { renderReportsView } from './reports.js?v=20260920111144';
+import { renderHayatView } from './hayatindex.js?v=20260920111144';
+import { renderMatchReviewView } from './matchreview.js?v=20260920111144';
+import { renderBulkImportView } from './bulkimport.js?v=20260920111144';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260920111144';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260920111144';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260920111144';
+import { renderHayatEditorView } from './hayateditor.js?v=20260920111144';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260920111144';
+import { renderUserGuideView } from './userguide.js?v=20260920111144';
+import { renderJoinTeamView } from './collaboration.js?v=20260920111144';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260920111144';
+import { renderMyProfileView } from './profile.js?v=20260920111144';
+import { renderMySpaceView } from './myspace.js?v=20260920111144';
+import { renderBoardsView } from './boards.js?v=20260920111144';
+import { renderFormationView } from './formation.js?v=20260920111144';
+import { renderMyDepartmentView, initDeptMessageNotifications } from './mydepartment.js?v=20260920111144';
+import { renderOnboardingView } from './onboarding.js?v=20260920111144';
+import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20260920111144';
+import { registerServiceWorker } from './pwa-register.js?v=20260920111144';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -47,8 +45,8 @@ function getTabs() {
   }
 
   // Plain Operators: a fixed, explicit order (owner's request 2026-09-20) - Tasks leads since
-  // that's their main queue; People and Proofreading are never shown to them regardless of any
-  // department they hold (those stay HR-lead/Coordinator/Admin tools). The cataloguing tools
+  // that's their main queue; People was never shown to them (an HR-lead/Coordinator/Admin tool).
+  // Proofreading is gone entirely (owner's request 2026-09-20, see below). The cataloguing tools
   // (Hayat Index/Match Review/Work Consolidation/Hayat Editor/Bulk Import) are no longer flat
   // tabs gated by the "Data Assistant" qualification - they're grouped under My Department ->
   // "Archive & Data" department instead (owner's request 2026-09-20, see renderArchiveTools in
@@ -76,7 +74,14 @@ function getTabs() {
   // Index/Match Review/Work Consolidation/Hayat Editor/Bulk Import) are no longer flat tabs here
   // either, same reasoning as Operators: reachable via My Department -> Archive & Data instead
   // (myDepartmentCodes() already lists every department for Admin, so that department is always
-  // there to select - see mydepartment.js's renderArchiveTools).
+  // there to select - see mydepartment.js's renderArchiveTools). The standalone People tab is
+  // gone too (owner's request 2026-09-20, redundant with My Department): the roster and pending
+  // decisions live under My Department -> HR, and Task reputation tiers/Policy under HR and
+  // Reward - Admin reaches all of it the same way, via My Department (every department listed).
+  // Proofreading is gone as well (owner's request 2026-09-20): now that every PDF has been
+  // replaced, the bulk unreviewed-transcription queue (reread.js, removed) no longer has a
+  // backlog to work through - an error found in a text is reported and fixed through the
+  // ordinary "Report a Problem or Suggestion" -> task flow instead.
   if (isAdmin()) {
     return [
       { id: 'dashboard', label: 'Dashboard' },
@@ -89,18 +94,16 @@ function getTabs() {
       { id: 'chat', label: 'Messages' },
       { id: 'sharewithus', label: 'Share with us' },
       { id: 'reports', label: 'Print Reports' },
-      { id: 'people', label: 'People' },
       { id: 'users', label: 'Users' },
-      { id: 'reread', label: 'Proofreading' },
       { id: 'options', label: 'Options' },
       { id: 'profile', label: 'My Profile' },
       { id: 'help', label: 'Help' },
     ];
   }
 
-  // Coordinator: unchanged general-purpose layout - full cataloguing toolset, Tasks,
-  // Proofreading, and (if HR lead) People, plus My Department for whichever departments they
-  // belong to.
+  // Coordinator: unchanged general-purpose layout - full cataloguing toolset, Tasks, and My
+  // Department for whichever departments they belong to (People, if they're HR lead, is reached
+  // from there now). Proofreading is gone (owner's request 2026-09-20, see above).
   const tabs = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'myspace', label: 'My Space' },
@@ -114,10 +117,8 @@ function getTabs() {
     { id: 'bulkimport', label: 'Bulk Import' },
     { id: 'inpageconverter', label: 'InPage Converter' },
   ];
-  if (isDeptLead('HR')) { tabs.push({ id: 'people', label: 'People' }); }
   if (State.myDepartments.length > 0) { tabs.push({ id: 'mydepartment', label: 'My Department' }); }
   tabs.push({ id: 'tasks', label: 'Tasks' });
-  tabs.push({ id: 'reread', label: 'Proofreading' });
   tabs.push({ id: 'profile', label: 'My Profile' });
   tabs.push({ id: 'chat', label: 'Messages' });
   tabs.push({ id: 'help', label: 'Help' });
@@ -151,10 +152,8 @@ function renderTab(id) {
   else if (id === 'inpageconverter') renderInPageConverterView(main);
   else if (id === 'announcements') renderAnnouncementsView(main);
   else if (id === 'chat') { canReviewApplications() ? renderAdminMessagesView(main) : renderChatView(main); }
-  else if (id === 'people') renderPeopleView(main);
   else if (id === 'mydepartment') renderMyDepartmentView(main);
   else if (id === 'tasks') renderTasksView(main);
-  else if (id === 'reread') renderRereadView(main);
   else if (id === 'jointeam') renderJoinTeamView(main);
   else if (id === 'profile') renderMyProfileView(main);
   else if (id === 'help') renderUserGuideView(main);

@@ -11,7 +11,7 @@ import {
   sb, State, esc, withStatus, canReviewApplications, getDisplayNameByEmail,
   openBoardPostPopup, likeSafe, DEFAULT_BOARD_FOR_MEMBERSHIP, BOARD_MEDIA_BUCKET, ackBoardPolicy,
   createWorkFor, uniqueFileName, computeFileName,
-} from './core.js?v=20260920102321';
+} from './core.js?v=20260920111144';
 
 // Shown once, before a person's first post (84_boards_moderation.sql) - keep this in sync with
 // the Help entries board_usage_policy_en/it, which say the same thing at more length.
@@ -245,7 +245,7 @@ function renderPostCard(p, doc, text, myEmail, iRead, readCount, alreadyPromoted
       ${doc ? `<div class="field" style="margin-top:8px;">
         <label>Document</label>
         <div style="font-size:13px;">#${esc(doc.document_id)} &middot; ${esc(doc.en_title) || '<span class="hint">(no title)</span>'}${doc.ur_title ? ` / <span dir="auto">${esc(doc.ur_title)}</span>` : ''}</div>
-        ${text ? `<div class="board-doc-preview" dir="auto">${esc(textPreview(text.body))}</div>${!text.reviewed ? '<div class="hint">Unverified automatic transcription</div>' : ''}` : ''}
+        ${text ? `<div class="board-doc-preview" dir="auto">${esc(textPreview(text.body))}</div>` : ''}
         <button class="btn secondary" data-open-doc="${esc(doc.document_id)}" style="margin-top:4px;">Open</button>
       </div>` : ''}
       <div class="hint" style="margin-top:6px;">

@@ -6,10 +6,10 @@
 import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe,
   nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET,
-} from './core.js?v=20260920102321';
-import { renderPolicySection } from './policy.js?v=20260920102321';
-import { renderPeopleSection } from './people.js?v=20260920102321';
-import { renderApplicationsView } from './collaboration.js?v=20260920102321';
+} from './core.js?v=20260920111144';
+import { renderPolicySection } from './policy.js?v=20260920111144';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20260920111144';
+import { renderApplicationsView } from './collaboration.js?v=20260920111144';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -42,6 +42,7 @@ export async function renderMyDepartmentView(main) {
     <div id="mydept-channel-box"></div>
     ${selected === 'HR' ? '<div id="mydept-applications-box"></div>' : ''}
     ${selected === 'HR' ? '<div id="mydept-people-box"></div>' : ''}
+    ${selected === 'HR' ? '<div class="panel"><h2>Pending decisions</h2><div id="people-pending-box"><div class="hint">Loading...</div></div></div>' : ''}
     ${selected === 'RF' ? '<div id="mydept-credits-box"></div>' : ''}
     ${selected === 'RF' ? '<div id="mydept-compensation-box"></div>' : ''}
     ${selected === 'RF' ? '<div id="mydept-anomalies-box"></div>' : ''}
@@ -67,6 +68,10 @@ export async function renderMyDepartmentView(main) {
   // standalone Team Applications tab uses), not duplicated.
   if (selected === 'HR') await renderApplicationsView(document.getElementById('mydept-applications-box'));
   if (selected === 'HR') await renderPeopleSection(document.getElementById('mydept-people-box'));
+  // Pending decisions (people_decisions - suspend/reinstate/qualification/role-change proposals)
+  // used to live only in the standalone People tab; that tab is gone now (owner's request
+  // 2026-09-20, redundant with this page), so it's embedded here instead.
+  if (selected === 'HR') await renderPendingDecisions();
   // Reward needs to see credits in circulation to tune rates/tiers and, later, plan compensation
   // runs (GOVERNANCE.md §6.4, migration 88) - same numbers Admin already sees in Tasks -> Budget,
   // read-only here (topping up the budget stays an Owner/Admin action, decision matrix row 16).
