@@ -6,10 +6,10 @@
 import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe,
   nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET,
-} from './core.js?v=20260920112357';
-import { renderPolicySection } from './policy.js?v=20260920112357';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20260920112357';
-import { renderApplicationsView } from './collaboration.js?v=20260920112357';
+} from './core.js?v=20260920114618';
+import { renderPolicySection } from './policy.js?v=20260920114618';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20260920114618';
+import { renderApplicationsView } from './collaboration.js?v=20260920114618';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -38,6 +38,7 @@ export async function renderMyDepartmentView(main) {
         ? `<div class="field" style="max-width:280px;"><label>Department</label><select id="mydept-select">${codes.map(c => `<option value="${esc(c)}" ${c === selected ? 'selected' : ''}>${esc(deptLabel(c))}</option>`).join('')}</select></div>`
         : `<p class="hint">${esc(deptLabel(selected))}</p>`}
     </div>
+    <div id="mydept-status-box"></div>
     <div id="mydept-roster-box"></div>
     <div id="mydept-channel-box"></div>
     ${selected === 'HR' ? '<div id="mydept-applications-box"></div>' : ''}
@@ -59,6 +60,7 @@ export async function renderMyDepartmentView(main) {
     });
   }
 
+  await renderDepartmentStatus(document.getElementById('mydept-status-box'), selected);
   await renderRoster(selected);
   await renderDeptChannel(document.getElementById('mydept-channel-box'), selected);
   // HR's work starts with Team Applications (screening candidates before they're even Operators)
@@ -100,6 +102,157 @@ export async function renderMyDepartmentView(main) {
   // escape hatch docdetail.js/onboarding.js already use to jump tabs without a circular import).
   if (selected === 'ARCHIVE') renderArchiveTools(document.getElementById('mydept-archive-box'));
   await renderPolicySection(document.getElementById('mydept-policy-box'), { departmentFilter: selected });
+}
+
+// ---------- "Department Pulse" (migration 98, owner's request 2026-09-20) ----------
+// A lead-managed status (on_track/slowing/stalled) + a short priorities/deadlines list, so every
+// member sees at a glance how their department is doing and what matters right now - deliberately
+// manual, not computed: a wrong automatic signal is worse than an honestly subjective one. The
+// lead (or Admin) sets it; members read it. See also renderDepartmentsOverviewView below, the
+// Admin-only roll-up across every department - a separate tab, not part of this page.
+
+const STATUS_META = {
+  on_track: { label: 'On track', color: '#4a8f4a' },
+  slowing:  { label: 'Slowing down', color: '#d19a2e' },
+  stalled:  { label: 'Stalled', color: 'var(--danger)' },
+};
+
+async function renderDepartmentStatus(box, code) {
+  if (!box) return;
+  const canManage = isAdmin() || isDeptLead(code);
+  const [statusRows, priorities] = await Promise.all([
+    withStatus(sb.from('department_status').select('*').eq('department_code', code)),
+    withStatus(sb.from('department_priorities').select('*').eq('department_code', code).order('done').order('sort_order').order('created_at')),
+  ]);
+  const status = statusRows[0] || { status: 'on_track', note: null, updated_by_email: null, updated_at: null };
+  const meta = STATUS_META[status.status] || STATUS_META.on_track;
+
+  const priorityRow = p => `
+    <div class="btn-row" style="align-items:center;justify-content:space-between;padding:4px 0;${p.done ? 'opacity:.6;' : ''}">
+      <label style="display:flex;align-items:center;gap:8px;font-weight:normal;text-transform:none;margin:0;flex:1;">
+        <input type="checkbox" class="dept-priority-done" data-id="${p.id}" ${p.done ? 'checked' : ''} ${canManage ? '' : 'disabled'}>
+        <span style="${p.done ? 'text-decoration:line-through;' : ''}">${esc(p.title)}</span>
+        ${p.due_date ? `<span class="hint">— due ${esc(p.due_date)}</span>` : ''}
+      </label>
+      ${canManage ? `<button class="btn danger dept-priority-delete" data-id="${p.id}" style="padding:2px 8px;">Remove</button>` : ''}
+    </div>`;
+
+  box.innerHTML = `
+    <div class="panel" style="border-left:4px solid ${meta.color};">
+      <div class="btn-row" style="justify-content:space-between;align-items:center;">
+        <h2 style="margin:0;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${meta.color};margin-right:6px;"></span>${esc(meta.label)}</h2>
+        ${canManage ? '<button class="btn secondary" id="dept-status-edit">Update status</button>' : ''}
+      </div>
+      ${status.note ? `<p style="margin:6px 0 0;">${esc(status.note)}</p>` : (canManage ? '<p class="hint" style="margin:6px 0 0;">No note yet - click "Update status" to add one.</p>' : '')}
+      ${status.updated_at ? `<p class="hint" style="margin:4px 0 0;">Updated by ${esc(status.updated_by_email) || '—'} on ${esc((status.updated_at || '').slice(0, 10))}</p>` : ''}
+      <h3 style="margin:14px 0 4px;">Priorities</h3>
+      <div id="dept-priorities-list">${priorities.length ? priorities.map(priorityRow).join('') : '<p class="hint">Nothing pinned right now.</p>'}</div>
+      ${canManage ? `
+        <div class="btn-row" style="margin-top:8px;">
+          <input id="dept-priority-title" placeholder="New priority..." style="flex:1;">
+          <input id="dept-priority-due" type="date" style="max-width:160px;">
+          <button class="btn secondary" id="dept-priority-add">Add</button>
+        </div>` : ''}
+    </div>`;
+
+  if (canManage) {
+    document.getElementById('dept-status-edit').addEventListener('click', () => openDepartmentStatusPopup(code, status, () => renderDepartmentStatus(box, code)));
+    document.getElementById('dept-priority-add').addEventListener('click', async () => {
+      const title = document.getElementById('dept-priority-title').value.trim();
+      if (!title) return;
+      const due_date = document.getElementById('dept-priority-due').value || null;
+      await withStatus(sb.from('department_priorities').insert({
+        department_code: code, title, due_date, sort_order: priorities.length,
+      }), 'Saving...');
+      renderDepartmentStatus(box, code);
+    });
+    box.querySelectorAll('.dept-priority-done').forEach(cb => cb.addEventListener('change', async () => {
+      await withStatus(sb.from('department_priorities').update({
+        done: cb.checked, done_at: cb.checked ? new Date().toISOString() : null,
+      }).eq('id', cb.dataset.id), 'Saving...');
+      renderDepartmentStatus(box, code);
+    }));
+    box.querySelectorAll('.dept-priority-delete').forEach(btn => btn.addEventListener('click', async () => {
+      if (!confirm('Remove this priority?')) return;
+      await withStatus(sb.from('department_priorities').delete().eq('id', btn.dataset.id), 'Removing...');
+      renderDepartmentStatus(box, code);
+    }));
+  }
+}
+
+function openDepartmentStatusPopup(code, current, onSaved) {
+  document.getElementById('dept-status-popup')?.remove();
+  const backdrop = document.createElement('div');
+  backdrop.id = 'dept-status-popup';
+  backdrop.className = 'overlay-backdrop';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel">
+      <h2 style="margin-top:0;">Update status</h2>
+      <div class="field"><label>Status</label>
+        <select id="dsp-status">${Object.entries(STATUS_META).map(([code2, m]) => `<option value="${code2}" ${code2 === current.status ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Note <span class="hint">(what the team should know)</span></label>
+        <textarea id="dsp-note" rows="3">${esc(current.note) || ''}</textarea></div>
+      <div class="btn-row" style="justify-content:flex-end;">
+        <button class="btn secondary" id="dsp-cancel">Cancel</button>
+        <button class="btn" id="dsp-save">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+  document.getElementById('dsp-cancel').addEventListener('click', () => backdrop.remove());
+  document.getElementById('dsp-save').addEventListener('click', async () => {
+    const { data: { user } } = await sb.auth.getUser();
+    await withStatus(sb.from('department_status').upsert({
+      department_code: code,
+      status: document.getElementById('dsp-status').value,
+      note: document.getElementById('dsp-note').value.trim() || null,
+      updated_by_email: user.email,
+      updated_at: new Date().toISOString(),
+    }), 'Saving...');
+    backdrop.remove();
+    onSaved();
+  });
+}
+
+// ---------- Admin-only roll-up across every department (its own tab, see app.js) ----------
+
+export async function renderDepartmentsOverviewView(main) {
+  main.innerHTML = '<div class="panel"><h2>Project overview</h2><div class="empty-msg">Loading...</div></div>';
+  const depts = State.optionListsByName.department || [];
+  const [statusRows, priorityRows] = await Promise.all([
+    withStatus(sb.from('department_status').select('*')),
+    withStatus(sb.from('department_priorities').select('department_code,title,due_date,done').eq('done', false).order('sort_order')),
+  ]);
+  const statusByCode = {};
+  for (const s of statusRows) statusByCode[s.department_code] = s;
+  const openPriorityCount = {};
+  for (const p of priorityRows) openPriorityCount[p.department_code] = (openPriorityCount[p.department_code] || 0) + 1;
+
+  const card = ([code, label]) => {
+    const status = statusByCode[code] || { status: 'on_track', note: null, updated_at: null };
+    const meta = STATUS_META[status.status] || STATUS_META.on_track;
+    return `
+      <div class="panel" style="border-left:4px solid ${meta.color};cursor:pointer;" data-open-dept="${esc(code)}">
+        <div class="btn-row" style="justify-content:space-between;align-items:center;">
+          <h3 style="margin:0;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${meta.color};margin-right:6px;"></span>${esc(label)}</h3>
+          <span class="hint">${esc(meta.label)}</span>
+        </div>
+        ${status.note ? `<p style="margin:6px 0 0;font-size:13px;">${esc(status.note)}</p>` : '<p class="hint" style="margin:6px 0 0;">No status set yet.</p>'}
+        <p class="hint" style="margin:6px 0 0;">${openPriorityCount[code] || 0} open ${openPriorityCount[code] === 1 ? 'priority' : 'priorities'}${status.updated_at ? ` &middot; updated ${esc((status.updated_at || '').slice(0, 10))}` : ''}</p>
+      </div>`;
+  };
+
+  main.innerHTML = `
+    <div class="panel">
+      <h2>Project overview <span class="hint">— every department at a glance, click one to open it</span></h2>
+    </div>
+    <div class="field-grid wide">${depts.map(card).join('') || '<p class="hint">No departments configured yet.</p>'}</div>`;
+
+  main.querySelectorAll('[data-open-dept]').forEach(el => el.addEventListener('click', () => {
+    State.myDeptSelected = el.dataset.openDept;
+    window.__renderTab('mydepartment');
+  }));
 }
 
 const ARCHIVE_TOOLS = [
