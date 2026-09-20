@@ -1,14 +1,14 @@
 // People (Phase 2a, PROJECT_HANDOFF_v23.md §3.2): HR's consolidated view of every team member
 // (GOVERNANCE.md §6.2), backed by the single hr_people_overview() RPC (80_departments_and_
 // people_decisions.sql), plus the propose/decide workflow for the decisions in that migration's
-// people_decisions table. Visible to HR members, any department lead, or Admin - see app.js's
-// tab gate; hr_people_overview() itself returns no rows to anyone else, so this is belt and
-// braces, not the real gate.
+// people_decisions table. No longer a standalone tab (owner's request 2026-09-20, was redundant
+// with My Department) - renderPeopleSection/renderPendingDecisions are embedded in HR's My
+// Department page instead (mydepartment.js); hr_people_overview() itself returns no rows to
+// anyone outside HR/a department lead/Admin, so that's still the real gate either way.
 
 import {
   sb, State, esc, withStatus, isAdmin, isDeptMember, isDeptLead, labelOf, optionsHtml,
-} from './core.js?v=20260920102321';
-import { renderPolicySection } from './policy.js?v=20260920102321';
+} from './core.js?v=20260920110832';
 
 const STANDING_BADGE = {
   active: '',
@@ -48,23 +48,6 @@ async function loadDecisionTypes() {
   const rows = await withStatus(sb.from('option_lists').select('code,label').eq('list_name', 'people_decision_type').order('sort_order'));
   decisionTypes = rows.map(r => [r.code, r.label]);
   return decisionTypes;
-}
-
-export async function renderPeopleView(main) {
-  main.innerHTML = '<div class="panel"><h2>People</h2><div class="empty-msg">Loading...</div></div>';
-  await loadDecisionTypes();
-
-  main.innerHTML = `
-    <div id="people-section-box"></div>
-    <div class="panel">
-      <h2>Pending decisions</h2>
-      <div id="people-pending-box"><div class="hint">Loading...</div></div>
-    </div>
-    <div id="policy-section-box"></div>`;
-
-  await renderPeopleSection(document.getElementById('people-section-box'));
-  renderPendingDecisions(main);
-  renderPolicySection(document.getElementById('policy-section-box'));
 }
 
 // The roster grid (search/standing/at-risk/department/role/qualification filters, sortable
@@ -293,7 +276,7 @@ function openProposePopup(row, allRows) {
 
 // ---------- Pending decisions ----------
 
-async function renderPendingDecisions(main) {
+export async function renderPendingDecisions(main) {
   const box = document.getElementById('people-pending-box');
   if (!box) return;
   const rows = await withStatus(sb.from('people_decisions').select('*').eq('status', 'pending').order('proposed_at', { ascending: true }));
