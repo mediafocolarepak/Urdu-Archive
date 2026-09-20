@@ -6,10 +6,10 @@
 import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe,
   nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET,
-} from './core.js?v=20260920091032';
-import { renderPolicySection } from './policy.js?v=20260920091032';
-import { renderPeopleSection } from './people.js?v=20260920091032';
-import { renderApplicationsView } from './collaboration.js?v=20260920091032';
+} from './core.js?v=20260920100443';
+import { renderPolicySection } from './policy.js?v=20260920100443';
+import { renderPeopleSection } from './people.js?v=20260920100443';
+import { renderApplicationsView } from './collaboration.js?v=20260920100443';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -48,6 +48,7 @@ export async function renderMyDepartmentView(main) {
     ${selected === 'COORD' ? '<div id="mydept-tasks-box"></div>' : ''}
     ${selected === 'FORM' ? '<div id="mydept-formation-box"></div>' : ''}
     ${selected === 'COMM' ? '<div id="mydept-onboarding-box"></div>' : ''}
+    ${selected === 'ARCHIVE' ? '<div id="mydept-archive-box"></div>' : ''}
     <div id="mydept-policy-box"></div>`;
 
   if (codes.length > 1) {
@@ -87,7 +88,36 @@ export async function renderMyDepartmentView(main) {
   // Communication authors the "Start Here" cards (95_onboarding_and_share_with_us.sql) from here -
   // onboarding.js only ever reads onboarding_cards, this is the one place that writes it.
   if (selected === 'COMM') await renderOnboardingCardsManager(document.getElementById('mydept-onboarding-box'));
+  // "Archive & Data" department (owner's request 2026-09-20): the cataloguing tools that used to be a flat,
+  // qualification-gated set of Operator tabs (Hayat Index/Match Review/Work Consolidation/Hayat
+  // Editor/Bulk Import) are now grouped here for whoever is a member of this department - launch
+  // buttons only, the tools themselves stay their own tabs/modules (window.__renderTab, same
+  // escape hatch docdetail.js/onboarding.js already use to jump tabs without a circular import).
+  if (selected === 'ARCHIVE') renderArchiveTools(document.getElementById('mydept-archive-box'));
   await renderPolicySection(document.getElementById('mydept-policy-box'), { departmentFilter: selected });
+}
+
+const ARCHIVE_TOOLS = [
+  ['hayat', 'Hayat Index', 'Browse and extract from the original Hayat register.'],
+  ['matchreview', 'Match Review', 'Review and confirm automatic matches against existing documents.'],
+  ['workconsolidation', 'Work Consolidation', 'Merge duplicate/split entries into a single document.'],
+  ['hayateditor', 'Hayat Editor', 'Correct a Hayat register entry directly.'],
+  ['bulkimport', 'Bulk Import', 'Import a batch of new documents from a spreadsheet.'],
+];
+
+function renderArchiveTools(box) {
+  if (!box) return;
+  box.innerHTML = `
+    <div class="panel">
+      <h2>Archive tools</h2>
+      <p class="hint">Data cataloguing tools for this department - open one to work on it.</p>
+      <div class="field-grid wide">${ARCHIVE_TOOLS.map(([id, label, desc]) => `
+        <div class="panel" style="cursor:pointer;" data-open-tab="${id}">
+          <div style="font-weight:600;">${esc(label)}</div>
+          <div class="hint">${esc(desc)}</div>
+        </div>`).join('')}</div>
+    </div>`;
+  box.querySelectorAll('[data-open-tab]').forEach(el => el.addEventListener('click', () => window.__renderTab(el.dataset.openTab)));
 }
 
 async function renderFormationPipeline(box) {
