@@ -6,10 +6,10 @@
 import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
   nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET,
-} from './core.js?v=20260920120552';
-import { renderPolicySection } from './policy.js?v=20260920120552';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20260920120552';
-import { renderApplicationsView } from './collaboration.js?v=20260920120552';
+} from './core.js?v=20260920121259';
+import { renderPolicySection } from './policy.js?v=20260920121259';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20260920121259';
+import { renderApplicationsView } from './collaboration.js?v=20260920121259';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -322,8 +322,11 @@ async function renderUsersStatsPanel(box) {
   const GENDER_LABELS = { M: 'Male', F: 'Female', not_set: 'Not set' };
   const ageBracketOptions = State.optionListsByName.age_bracket || [];
   const ageBracketLabel = code => code === 'not_set' ? 'Not set' : (labelOf(ageBracketOptions, code) || code);
+  // Fixed-width count column (not justify-content:space-between, which stretched the number
+  // to the far edge of the whole .field-grid cell instead of sitting next to its own label -
+  // found from the owner's screenshot 2026-09-20).
   const breakdownList = (m, labelFn) => Object.entries(m).sort((a, b) => b[1] - a[1])
-    .map(([k, v]) => `<div class="btn-row" style="justify-content:space-between;padding:2px 0;"><span>${esc(labelFn(k))}</span><span class="hint">${esc(v)}</span></div>`).join('');
+    .map(([k, v]) => `<div style="display:flex;gap:8px;padding:2px 0;"><span class="hint" style="min-width:24px;text-align:right;">${esc(v)}</span><span>${esc(labelFn(k))}</span></div>`).join('');
 
   box.innerHTML = `
     <div class="panel">
