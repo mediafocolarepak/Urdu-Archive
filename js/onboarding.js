@@ -5,7 +5,7 @@
 // its own editor in My Department -> Communication (see renderOnboardingCardsManager in
 // mydepartment.js) - this module only ever reads onboarding_cards, never writes it.
 
-import { sb, esc, withStatus, ONBOARDING_MEDIA_BUCKET } from './core.js?v=20260920125410';
+import { sb, esc, withStatus, ONBOARDING_MEDIA_BUCKET } from './core.js?v=20260920184437';
 
 const thumbnailUrl = path => path ? sb.storage.from(ONBOARDING_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl : null;
 
@@ -32,8 +32,8 @@ function renderCard(c) {
       ${cardCoverHtml(c)}
       <div style="padding:12px;flex:1;display:flex;flex-direction:column;gap:2px;">
         <div style="font-weight:600;" dir="auto">${esc(c.title_ur)}</div>
-        ${c.title_en ? `<div class="hint">${esc(c.title_en)}</div>` : ''}
         ${c.body_ur ? `<div style="margin-top:6px;" dir="auto">${esc(c.body_ur)}</div>` : ''}
+        ${c.title_en ? `<div class="hint" style="font-weight:600;margin-top:10px;">${esc(c.title_en)}</div>` : ''}
         ${c.body_en ? `<div class="hint" style="margin-top:2px;">${esc(c.body_en)}</div>` : ''}
         ${c.media_type === 'video' && c.media_url && !internalTab ? `<div style="margin-top:8px;"><a href="${esc(c.media_url)}" target="_blank" rel="noopener">&#9654; Watch video</a></div>` : ''}
       </div>
