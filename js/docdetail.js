@@ -8,7 +8,7 @@ import {
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications,
-} from './core.js?v=20260920192713';
+} from './core.js?v=20260920220218';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -70,6 +70,37 @@ async function selectedOrClipboardText(textarea) {
   try { return (await navigator.clipboard.readText()).trim(); } catch { return ''; }
 }
 
+// "Original text" (migration 101, owner's request 2026-09-20): the Italian source text a
+// Collegamento was translated from, matched to this archive by the same 5-digit document_id used
+// in the Google Drive export it came from. Same read-only popup shell as openDocTextPopup above,
+// kept separate (not folded into that function) since the two texts have independent existence -
+// a document can have one, both, or neither, and mixing the two popups' state would be fragile.
+function openOriginalTextPopup(doc, originalText) {
+  document.getElementById('doc-original-text-popup')?.remove();
+  const backdrop = document.createElement('div');
+  backdrop.id = 'doc-original-text-popup';
+  backdrop.className = 'overlay-backdrop';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel">
+      <h2 style="margin-top:0;">Original text (Italian)</h2>
+      ${!originalText.reviewed ? '<div class="hint" style="color:var(--danger, #b3261e);">Imported text, not yet checked against the source.</div>' : ''}
+      <textarea id="doc-original-text-popup-body" readonly style="width:100%;min-height:50vh;font-size:14px;line-height:1.8;">${esc(originalText.body)}</textarea>
+      <div class="btn-row" style="justify-content:flex-end;margin-top:8px;">
+        <button class="btn secondary" id="doc-original-text-popup-copy">Copy</button>
+        <button class="btn" id="doc-original-text-popup-close">Close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  const textarea = document.getElementById('doc-original-text-popup-body');
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+  document.getElementById('doc-original-text-popup-close').addEventListener('click', () => backdrop.remove());
+  document.getElementById('doc-original-text-popup-copy').addEventListener('click', async () => {
+    const selected = textarea.value.slice(textarea.selectionStart, textarea.selectionEnd);
+    try { await navigator.clipboard.writeText(selected || originalText.body); alert(selected ? 'Selected text copied.' : 'Text copied.'); }
+    catch { alert('Could not copy - select the text and copy manually.'); }
+  });
+}
+
 function openDocTextPopup(doc, text) {
   document.getElementById('doc-text-popup')?.remove();
   const backdrop = document.createElement('div');
@@ -103,7 +134,7 @@ function openDocTextPopup(doc, text) {
   });
 }
 
-export function renderDocDetailConsultation(box, doc, workSiblings, docCollections, canEdit, text) {
+export function renderDocDetailConsultation(box, doc, workSiblings, docCollections, canEdit, text, originalText) {
   box.innerHTML = `
     <div class="btn-row" style="justify-content:space-between;align-items:center;margin:0 0 8px;">
       <h3 style="margin:0;">Document #${esc(doc.document_id)}</h3>
@@ -117,6 +148,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     </div>
     <div class="btn-row" style="margin:0 0 8px;">
       ${text ? '<button class="btn secondary" id="doc-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Open editable text</button>' : ''}
+      ${originalText ? '<button class="btn secondary" id="doc-original-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Original text (Italian)</button>' : ''}
       <button class="btn secondary" id="doc-report-problem" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Report a problem</button>
     </div>
     <div class="field" style="font-size:13px;line-height:1.7;">
@@ -147,6 +179,8 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
   });
   const textOpen = document.getElementById('doc-text-open');
   if (textOpen) textOpen.addEventListener('click', () => openDocTextPopup(doc, text));
+  const originalTextOpen = document.getElementById('doc-original-text-open');
+  if (originalTextOpen) originalTextOpen.addEventListener('click', () => openOriginalTextPopup(doc, originalText));
   document.getElementById('doc-report-problem').addEventListener('click', () => {
     State.selectedDocId = doc.document_id;
     State.chatMessagePrefill = null;
@@ -462,6 +496,11 @@ export async function renderDocDetail(id, opts = {}) {
   const docCollections = await getCollectionsForDocument(doc.document_id);
   const textRows = await withStatus(sb.from('document_texts').select('body,char_count,reviewed').eq('document_id', doc.document_id));
   const text = textRows[0] || null;
+  // Original-language text (migration 101) - Italian for now, see docdetail.js's
+  // openOriginalTextPopup. Absent for the vast majority of documents until the owner's Google
+  // Drive import runs; the button in renderDocDetailConsultation only appears when present.
+  const originalTextRows = await withStatus(sb.from('document_original_texts').select('language,body,reviewed').eq('document_id', doc.document_id));
+  const originalText = originalTextRows[0] || null;
 
   if (opts.legacyFullEdit && canWrite()) {
     renderFullEditForm(box, id, doc, siblings, docCollections, {
@@ -475,7 +514,7 @@ export async function renderDocDetail(id, opts = {}) {
   }
 
   const canEdit = isCoordinator() || isAdmin();
-  renderDocDetailConsultation(box, doc, siblings, docCollections, canEdit, text);
+  renderDocDetailConsultation(box, doc, siblings, docCollections, canEdit, text, originalText);
 }
 
 // Opens the full field editor for a document in a full-screen overlay (Coordinator/Admin only,
