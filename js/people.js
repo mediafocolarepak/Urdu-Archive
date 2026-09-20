@@ -7,8 +7,8 @@
 
 import {
   sb, State, esc, withStatus, isAdmin, isDeptMember, isDeptLead, labelOf, optionsHtml,
-} from './core.js?v=20260920095115';
-import { renderPolicySection } from './policy.js?v=20260920095115';
+} from './core.js?v=20260920100150';
+import { renderPolicySection } from './policy.js?v=20260920100150';
 
 const STANDING_BADGE = {
   active: '',
