@@ -1,89 +1,112 @@
-import { State, canWrite, isAdmin, canReviewApplications, isDeptMember, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20260920091032';
-import { renderDashboardView } from './dashboard.js?v=20260920091032';
-import { renderReportsView } from './reports.js?v=20260920091032';
-import { renderHayatView } from './hayatindex.js?v=20260920091032';
-import { renderMatchReviewView } from './matchreview.js?v=20260920091032';
-import { renderBulkImportView } from './bulkimport.js?v=20260920091032';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260920091032';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260920091032';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260920091032';
-import { renderHayatEditorView } from './hayateditor.js?v=20260920091032';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260920091032';
-import { renderUserGuideView } from './userguide.js?v=20260920091032';
-import { renderJoinTeamView } from './collaboration.js?v=20260920091032';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260920091032';
-import { renderMyProfileView } from './profile.js?v=20260920091032';
-import { renderMySpaceView } from './myspace.js?v=20260920091032';
-import { renderBoardsView } from './boards.js?v=20260920091032';
-import { renderFormationView } from './formation.js?v=20260920091032';
-import { renderPeopleView } from './people.js?v=20260920091032';
-import { renderMyDepartmentView, initDeptMessageNotifications } from './mydepartment.js?v=20260920091032';
-import { renderRereadView } from './reread.js?v=20260920091032';
-import { renderOnboardingView } from './onboarding.js?v=20260920091032';
-import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20260920091032';
-import { registerServiceWorker } from './pwa-register.js?v=20260920091032';
+import { State, canWrite, isAdmin, canReviewApplications, isDeptLead, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20260920095115';
+import { renderDashboardView } from './dashboard.js?v=20260920095115';
+import { renderReportsView } from './reports.js?v=20260920095115';
+import { renderHayatView } from './hayatindex.js?v=20260920095115';
+import { renderMatchReviewView } from './matchreview.js?v=20260920095115';
+import { renderBulkImportView } from './bulkimport.js?v=20260920095115';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260920095115';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260920095115';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260920095115';
+import { renderHayatEditorView } from './hayateditor.js?v=20260920095115';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260920095115';
+import { renderUserGuideView } from './userguide.js?v=20260920095115';
+import { renderJoinTeamView } from './collaboration.js?v=20260920095115';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260920095115';
+import { renderMyProfileView } from './profile.js?v=20260920095115';
+import { renderMySpaceView } from './myspace.js?v=20260920095115';
+import { renderBoardsView } from './boards.js?v=20260920095115';
+import { renderFormationView } from './formation.js?v=20260920095115';
+import { renderPeopleView } from './people.js?v=20260920095115';
+import { renderMyDepartmentView, initDeptMessageNotifications } from './mydepartment.js?v=20260920095115';
+import { renderRereadView } from './reread.js?v=20260920095115';
+import { renderOnboardingView } from './onboarding.js?v=20260920095115';
+import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20260920095115';
+import { registerServiceWorker } from './pwa-register.js?v=20260920095115';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
 function getTabs() {
-  // Plain Operators are meant to work the Tasks queue, not the cataloguing tools - so Hayat
-  // Index/Match Review/Work Consolidation/Hayat Editor/Bulk Import stay hidden for them unless
-  // they hold the "Data Assistant" qualification (Options -> Operator qualifications).
-  // Coordinator/Admin always see them; InPage Converter is unaffected (not part of this list).
   const isOperator = State.currentRole === 'operator';
-  const dataToolsHidden = isOperator && !State.myQualifications.has('DATA_ASSISTANT');
   const isUser = State.currentRole === 'user';
-  const tabs = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'myspace', label: 'My Space' },
-    { id: 'boards', label: 'Boards' },
-    { id: 'formation', label: 'Formation Paths' },
-  ];
-  // Plain Users get a minimal read-only set: browse (Dashboard) and a quick way to flag a
-  // problem, right up front as the second tab - Print Reports/Hayat Index are cataloguing
-  // tools they have no use for. Operators don't need Print Reports either (see below, they
-  // work the Tasks queue instead - reordered to the front further down).
-  if (isUser) { tabs.push({ id: 'chat', label: 'Report a Problem or Suggestion' }); }
-  else if (!isOperator) { tabs.push({ id: 'reports', label: 'Print Reports' }); }
-  if (!isUser && !dataToolsHidden) tabs.push({ id: 'hayat', label: 'Hayat Index' });
-  if (canWrite()) {
+
+  // Plain Users: a fixed, explicit order (owner's request 2026-09-20) - a minimal read-only
+  // set plus the outreach/collaboration tabs, no cataloguing tools, no Help (Start Here
+  // replaces it, see onboarding.js).
+  if (isUser) {
+    return [
+      { id: 'onboarding', label: 'Start Here' },
+      { id: 'dashboard', label: 'Dashboard' },
+      { id: 'myspace', label: 'My Space' },
+      { id: 'boards', label: 'Boards' },
+      { id: 'formation', label: 'Formation Paths' },
+      { id: 'sharewithus', label: 'Share with us' },
+      { id: 'chat', label: 'Report a Problem or Suggestion' },
+      { id: 'jointeam', label: 'Join the Team' },
+      { id: 'profile', label: 'My Profile' },
+    ];
+  }
+
+  // Plain Operators: a fixed, explicit order (owner's request 2026-09-20) - Tasks leads since
+  // that's their main queue; People and Proofreading are never shown to them regardless of any
+  // department/qualification they hold (those stay HR-lead/Coordinator/Admin tools).
+  if (isOperator) {
+    const dataToolsHidden = !State.myQualifications.has('DATA_ASSISTANT');
+    const tabs = [
+      { id: 'dashboard', label: 'Dashboard' },
+      { id: 'myspace', label: 'My Space' },
+      { id: 'boards', label: 'Boards' },
+      { id: 'formation', label: 'Formation Paths' },
+      { id: 'tasks', label: 'Tasks' },
+    ];
+    // "Data Assistant" qualification (Options -> Operator qualifications) unlocks the same
+    // cataloguing tools Coordinator/Admin always have - kept right after Tasks, same relative
+    // position as before this reorder, for the operators who hold it.
     if (!dataToolsHidden) {
+      tabs.push({ id: 'hayat', label: 'Hayat Index' });
       tabs.push({ id: 'matchreview', label: 'Match Review' });
       tabs.push({ id: 'workconsolidation', label: 'Work Consolidation' });
       tabs.push({ id: 'hayateditor', label: 'Hayat Editor' });
       tabs.push({ id: 'bulkimport', label: 'Bulk Import' });
     }
+    if (State.myDepartments.length > 0) { tabs.push({ id: 'mydepartment', label: 'My Department' }); }
+    tabs.push({ id: 'inpageconverter', label: 'InPage Converter' });
+    tabs.push({ id: 'chat', label: 'Report a Problem or Suggestion' });
+    // Share with us: Operators can now give their own feedback to the team leads/Admin the same
+    // way Users do, from the compose view (owner's request 2026-09-20) - see sharewithus.js.
+    tabs.push({ id: 'sharewithus', label: 'Share with us' });
+    tabs.push({ id: 'profile', label: 'My Profile' });
+    tabs.push({ id: 'help', label: 'Help' });
+    return tabs;
+  }
+
+  // Coordinator/Admin: unchanged general-purpose layout - full cataloguing toolset, People,
+  // Proofreading, Tasks, and (Admin only) the Users/Options/Announcements admin tools.
+  const tabs = [
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'myspace', label: 'My Space' },
+    { id: 'boards', label: 'Boards' },
+    { id: 'formation', label: 'Formation Paths' },
+    { id: 'reports', label: 'Print Reports' },
+    { id: 'hayat', label: 'Hayat Index' },
+  ];
+  if (canWrite()) {
+    tabs.push({ id: 'matchreview', label: 'Match Review' });
+    tabs.push({ id: 'workconsolidation', label: 'Work Consolidation' });
+    tabs.push({ id: 'hayateditor', label: 'Hayat Editor' });
+    tabs.push({ id: 'bulkimport', label: 'Bulk Import' });
     tabs.push({ id: 'inpageconverter', label: 'InPage Converter' });
   }
-  if (isDeptMember('HR') || isAnyDeptLead() || isAdmin()) { tabs.push({ id: 'people', label: 'People' }); }
+  // People: HR lead or Admin only (owner's request 2026-09-20) - no longer any HR member or
+  // any department lead.
+  if (isDeptLead('HR') || isAdmin()) { tabs.push({ id: 'people', label: 'People' }); }
   if (State.myDepartments.length > 0 || isAdmin()) { tabs.push({ id: 'mydepartment', label: 'My Department' }); }
   if (canWrite()) { tabs.push({ id: 'tasks', label: 'Tasks' }); }
-  // Proof Reader qualification (Options -> Operator qualifications), or Coordinator/Admin.
-  if (canReviewApplications() || State.myQualifications.has('PROOF_READER')) { tabs.push({ id: 'reread', label: 'Proofreading' }); }
+  if (canReviewApplications()) { tabs.push({ id: 'reread', label: 'Proofreading' }); }
   if (isAdmin()) { tabs.push({ id: 'users', label: 'Users' }); tabs.push({ id: 'options', label: 'Options' }); tabs.push({ id: 'announcements', label: 'Announcements' }); }
   tabs.push({ id: 'profile', label: 'My Profile' });
-  // Users already got their Chat tab up front as "Report a Problem or Suggestion" (see above);
-  // Operators get the same rename, just not moved to the front until the reorder below.
-  if (!isUser) { tabs.push({ id: 'chat', label: canReviewApplications() ? 'Messages' : (isOperator ? 'Report a Problem or Suggestion' : 'Chat') }); }
-  // Persistently visible invitation for read-only accounts - collaborators (Operator+)
-  // already have other ways to reach out, see the "Join the Team" module for why.
-  if (isUser) { tabs.push({ id: 'jointeam', label: 'Join the Team' }); }
-  // Users get a first-run orientation hub instead of the technical Help tab (95_onboarding_and_
-  // share_with_us.sql, PROJECT_HANDOFF for this session) - everyone else keeps Help unchanged.
-  if (isUser) { tabs.push({ id: 'onboarding', label: 'Start Here' }); } else { tabs.push({ id: 'help', label: 'Help' }); }
-  // "Share with us": Users can write (from the compose view); every department lead and Admin
-  // can read every share (from the inbox view) - see sharewithus.js for why this isn't the same
-  // channel as "Report a Problem or Suggestion" above. Operators/Coordinators without a lead role
-  // don't get the tab for now (RLS already lets them post regardless, if that changes later).
-  if (isUser || isAnyDeptLead() || isAdmin()) { tabs.push({ id: 'sharewithus', label: 'Share with us' }); }
-
-  // Operators work the Tasks queue first and foremost - reorder so Dashboard, Tasks, then
-  // the renamed Chat lead the tab bar, with everything else following in its usual order.
-  if (isOperator) {
-    const front = ['dashboard', 'myspace', 'boards', 'tasks', 'chat'].map(id => tabs.find(t => t.id === id)).filter(Boolean);
-    const rest = tabs.filter(t => !['dashboard', 'myspace', 'boards', 'tasks', 'chat'].includes(t.id));
-    return [...front, ...rest];
-  }
+  tabs.push({ id: 'chat', label: canReviewApplications() ? 'Messages' : 'Chat' });
+  tabs.push({ id: 'help', label: 'Help' });
+  if (isAnyDeptLead() || isAdmin()) { tabs.push({ id: 'sharewithus', label: 'Share with us' }); }
   return tabs;
 }
 
