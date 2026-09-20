@@ -6,10 +6,10 @@
 import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe,
   nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET,
-} from './core.js?v=20260920114618';
-import { renderPolicySection } from './policy.js?v=20260920114618';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20260920114618';
-import { renderApplicationsView } from './collaboration.js?v=20260920114618';
+} from './core.js?v=20260920115729';
+import { renderPolicySection } from './policy.js?v=20260920115729';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20260920115729';
+import { renderApplicationsView } from './collaboration.js?v=20260920115729';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -120,12 +120,17 @@ const STATUS_META = {
 async function renderDepartmentStatus(box, code) {
   if (!box) return;
   const canManage = isAdmin() || isDeptLead(code);
-  const [statusRows, priorities] = await Promise.all([
+  const [statusRows, priorities, suggestionRows] = await Promise.all([
     withStatus(sb.from('department_status').select('*').eq('department_code', code)),
     withStatus(sb.from('department_priorities').select('*').eq('department_code', code).order('done').order('sort_order').order('created_at')),
+    // Phase 2 (migration 99): a computed hint alongside the lead's own manual pick - never
+    // applied automatically, see GOVERNANCE.md §5.9/§8 item 11. Only Coordination/Reward/HR/
+    // Formation/Communication have a signal defined; other departments get no rows back.
+    withStatus(sb.rpc('department_pulse_suggested_status', { p_code: code })),
   ]);
   const status = statusRows[0] || { status: 'on_track', note: null, updated_by_email: null, updated_at: null };
   const meta = STATUS_META[status.status] || STATUS_META.on_track;
+  const suggestion = suggestionRows[0] || null;
 
   const priorityRow = p => `
     <div class="btn-row" style="align-items:center;justify-content:space-between;padding:4px 0;${p.done ? 'opacity:.6;' : ''}">
@@ -145,6 +150,7 @@ async function renderDepartmentStatus(box, code) {
       </div>
       ${status.note ? `<p style="margin:6px 0 0;">${esc(status.note)}</p>` : (canManage ? '<p class="hint" style="margin:6px 0 0;">No note yet - click "Update status" to add one.</p>' : '')}
       ${status.updated_at ? `<p class="hint" style="margin:4px 0 0;">Updated by ${esc(status.updated_by_email) || '—'} on ${esc((status.updated_at || '').slice(0, 10))}</p>` : ''}
+      ${suggestion ? `<p class="hint" style="margin:4px 0 0;">Data suggests: <strong>${esc(STATUS_META[suggestion.suggested]?.label || suggestion.suggested)}</strong> — ${esc(suggestion.reason)}</p>` : ''}
       <h3 style="margin:14px 0 4px;">Priorities</h3>
       <div id="dept-priorities-list">${priorities.length ? priorities.map(priorityRow).join('') : '<p class="hint">Nothing pinned right now.</p>'}</div>
       ${canManage ? `
@@ -156,7 +162,7 @@ async function renderDepartmentStatus(box, code) {
     </div>`;
 
   if (canManage) {
-    document.getElementById('dept-status-edit').addEventListener('click', () => openDepartmentStatusPopup(code, status, () => renderDepartmentStatus(box, code)));
+    document.getElementById('dept-status-edit').addEventListener('click', () => openDepartmentStatusPopup(code, status, suggestion, () => renderDepartmentStatus(box, code)));
     document.getElementById('dept-priority-add').addEventListener('click', async () => {
       const title = document.getElementById('dept-priority-title').value.trim();
       if (!title) return;
@@ -180,7 +186,7 @@ async function renderDepartmentStatus(box, code) {
   }
 }
 
-function openDepartmentStatusPopup(code, current, onSaved) {
+function openDepartmentStatusPopup(code, current, suggestion, onSaved) {
   document.getElementById('dept-status-popup')?.remove();
   const backdrop = document.createElement('div');
   backdrop.id = 'dept-status-popup';
@@ -188,6 +194,7 @@ function openDepartmentStatusPopup(code, current, onSaved) {
   backdrop.innerHTML = `
     <div class="panel overlay-panel">
       <h2 style="margin-top:0;">Update status</h2>
+      ${suggestion ? `<p class="hint">Data suggests <strong>${esc(STATUS_META[suggestion.suggested]?.label || suggestion.suggested)}</strong> — ${esc(suggestion.reason)}. You decide - this is only a hint.</p>` : ''}
       <div class="field"><label>Status</label>
         <select id="dsp-status">${Object.entries(STATUS_META).map(([code2, m]) => `<option value="${code2}" ${code2 === current.status ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select>
       </div>
@@ -220,18 +227,23 @@ function openDepartmentStatusPopup(code, current, onSaved) {
 export async function renderDepartmentsOverviewView(main) {
   main.innerHTML = '<div class="panel"><h2>Project overview</h2><div class="empty-msg">Loading...</div></div>';
   const depts = State.optionListsByName.department || [];
-  const [statusRows, priorityRows] = await Promise.all([
+  const [statusRows, priorityRows, suggestionResults] = await Promise.all([
     withStatus(sb.from('department_status').select('*')),
     withStatus(sb.from('department_priorities').select('department_code,title,due_date,done').eq('done', false).order('sort_order')),
+    // Phase 2 (migration 99): one RPC call per department, in parallel - no set-returning
+    // "every department at once" function exists, and this list is short (a handful of rows).
+    Promise.all(depts.map(([code]) => withStatus(sb.rpc('department_pulse_suggested_status', { p_code: code })).then(rows => [code, rows[0] || null]))),
   ]);
   const statusByCode = {};
   for (const s of statusRows) statusByCode[s.department_code] = s;
   const openPriorityCount = {};
   for (const p of priorityRows) openPriorityCount[p.department_code] = (openPriorityCount[p.department_code] || 0) + 1;
+  const suggestionByCode = Object.fromEntries(suggestionResults);
 
   const card = ([code, label]) => {
     const status = statusByCode[code] || { status: 'on_track', note: null, updated_at: null };
     const meta = STATUS_META[status.status] || STATUS_META.on_track;
+    const suggestion = suggestionByCode[code];
     return `
       <div class="panel" style="border-left:4px solid ${meta.color};cursor:pointer;" data-open-dept="${esc(code)}">
         <div class="btn-row" style="justify-content:space-between;align-items:center;">
@@ -240,12 +252,16 @@ export async function renderDepartmentsOverviewView(main) {
         </div>
         ${status.note ? `<p style="margin:6px 0 0;font-size:13px;">${esc(status.note)}</p>` : '<p class="hint" style="margin:6px 0 0;">No status set yet.</p>'}
         <p class="hint" style="margin:6px 0 0;">${openPriorityCount[code] || 0} open ${openPriorityCount[code] === 1 ? 'priority' : 'priorities'}${status.updated_at ? ` &middot; updated ${esc((status.updated_at || '').slice(0, 10))}` : ''}</p>
+        ${suggestion ? `<p class="hint" style="margin:4px 0 0;">Data suggests: ${esc(STATUS_META[suggestion.suggested]?.label || suggestion.suggested)}</p>` : ''}
       </div>`;
   };
 
   main.innerHTML = `
     <div class="panel">
-      <h2>Project overview <span class="hint">— every department at a glance, click one to open it</span></h2>
+      <div class="btn-row" style="justify-content:space-between;align-items:center;">
+        <h2 style="margin:0;">Project overview <span class="hint">— every department at a glance, click one to open it</span></h2>
+        <button class="btn danger" id="dept-overview-reset">Reset all statuses</button>
+      </div>
     </div>
     <div class="field-grid wide">${depts.map(card).join('') || '<p class="hint">No departments configured yet.</p>'}</div>`;
 
@@ -253,6 +269,19 @@ export async function renderDepartmentsOverviewView(main) {
     State.myDeptSelected = el.dataset.openDept;
     window.__renderTab('mydepartment');
   }));
+
+  // Admin-only escape hatch (owner's request 2026-09-20): bulk-clear every department's manual
+  // status/note back to the table default (on_track, no note) - e.g. after a trial run of Phase
+  // 2, or to stop a stale color misleading members. Does not touch priorities, only status.
+  document.getElementById('dept-overview-reset').addEventListener('click', async () => {
+    if (!confirm('Reset every department\'s status to "On track" with no note? This cannot be undone.')) return;
+    const { data: { user } } = await sb.auth.getUser();
+    const rows = depts.map(([code]) => ({
+      department_code: code, status: 'on_track', note: null, updated_by_email: user.email, updated_at: new Date().toISOString(),
+    }));
+    await withStatus(sb.from('department_status').upsert(rows), 'Resetting...');
+    renderDepartmentsOverviewView(main);
+  });
 }
 
 const ARCHIVE_TOOLS = [
