@@ -5,14 +5,14 @@
 // its own editor in My Department -> Communication (see renderOnboardingCardsManager in
 // mydepartment.js) - this module only ever reads onboarding_cards, never writes it.
 
-import { sb, esc, withStatus, ONBOARDING_MEDIA_BUCKET } from './core.js?v=20260920184437';
+import { sb, esc, withStatus, ONBOARDING_MEDIA_BUCKET } from './core.js?v=20260920190306';
 
 const thumbnailUrl = path => path ? sb.storage.from(ONBOARDING_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl : null;
 
 const SECTIONS = [
-  ['about', 'What is this?'],
-  ['how_to_use', 'How to use it'],
-  ['how_to_collaborate', 'How to collaborate'],
+  ['about', 'یہ کیا ہے؟', 'What is this?'],
+  ['how_to_use', 'اسے کیسے استعمال کریں؟', 'How to use it'],
+  ['how_to_collaborate', 'تعاون کیسے کریں؟', 'How to collaborate'],
 ];
 
 function cardCoverHtml(c) {
@@ -44,12 +44,13 @@ export async function renderOnboardingView(main) {
   main.innerHTML = '<div class="empty-msg">Loading...</div>';
   const cards = await withStatus(sb.from('onboarding_cards').select('*').eq('published', true).order('sort_order').order('created_at'));
 
-  main.innerHTML = SECTIONS.map(([code, heading]) => {
+  main.innerHTML = SECTIONS.map(([code, headingUr, headingEn]) => {
     const inSection = cards.filter(c => c.section === code);
     if (!inSection.length) return '';
     return `
       <div class="panel">
-        <h2>${esc(heading)}</h2>
+        <h2 style="margin:0 0 4px;font-size:24px;line-height:1.3;" dir="auto">${esc(headingUr)}</h2>
+        <h2 style="margin:0 0 12px;font-size:24px;line-height:1.3;">${esc(headingEn)}</h2>
         <div class="field-grid wide">${inSection.map(renderCard).join('')}</div>
       </div>`;
   }).join('') || '<div class="empty-msg">Nothing here yet - check back soon.</div>';
