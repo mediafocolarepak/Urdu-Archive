@@ -5,7 +5,7 @@
 // reviewed. Deliberately does not import from collaboration.js (project convention: modules
 // only import from core.js), so the skill-chip rendering is duplicated here in small form.
 
-import { sb, State, esc, withStatus, labelOf, optionsHtml } from './core.js?v=20260920125208';
+import { sb, State, esc, withStatus, labelOf, optionsHtml } from './core.js?v=20260920125410';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
