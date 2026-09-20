@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260920090150';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260920090150';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260920091032';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260920091032';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
@@ -159,10 +159,11 @@ const DASH_SORTABLE_USER = { document_id: 'ID', en_title: 'Title', author: 'Auth
 
 // Column widths (% of table width, each set sums to 100) - #dash-grid uses table-layout:fixed
 // (style.css) so these are enforced, not just hints; overflow/ellipsis (also style.css) truncates
-// whatever doesn't fit. Author/Place are deliberately narrow in the User set - they're rarely the
-// field someone is scanning for - freeing width for Category/Recipient(s)/Ref. date to actually be
-// visible without horizontal scrolling (owner's request).
-const DASH_COL_WIDTHS_USER = { document_id: 6, en_title: 26, author: 10, place: 8, category: 16, recipient: 24, ref_date: 10 };
+// whatever doesn't fit. Author/Place/Recipient(s) are deliberately narrow in the User set - they're
+// rarely the field someone is scanning for - freeing width for Title/Category to actually be
+// visible without horizontal scrolling (owner's request; Author/Recipient(s) halved again
+// 2026-09-20, freed width given to Title/Category).
+const DASH_COL_WIDTHS_USER = { document_id: 6, en_title: 35, author: 5, place: 8, category: 24, recipient: 12, ref_date: 10 };
 const DASH_COL_WIDTHS_ADMIN = { document_id: 6, title: 24, original_title: 22, author: 8, place: 16, category: 24 };
 
 export async function refreshDashGrid() {
