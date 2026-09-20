@@ -1,25 +1,25 @@
-import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20260920112017';
-import { renderDashboardView } from './dashboard.js?v=20260920112017';
-import { renderReportsView } from './reports.js?v=20260920112017';
-import { renderHayatView } from './hayatindex.js?v=20260920112017';
-import { renderMatchReviewView } from './matchreview.js?v=20260920112017';
-import { renderBulkImportView } from './bulkimport.js?v=20260920112017';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260920112017';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260920112017';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260920112017';
-import { renderHayatEditorView } from './hayateditor.js?v=20260920112017';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260920112017';
-import { renderUserGuideView } from './userguide.js?v=20260920112017';
-import { renderJoinTeamView } from './collaboration.js?v=20260920112017';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260920112017';
-import { renderMyProfileView } from './profile.js?v=20260920112017';
-import { renderMySpaceView } from './myspace.js?v=20260920112017';
-import { renderBoardsView } from './boards.js?v=20260920112017';
-import { renderFormationView } from './formation.js?v=20260920112017';
-import { renderMyDepartmentView, initDeptMessageNotifications } from './mydepartment.js?v=20260920112017';
-import { renderOnboardingView } from './onboarding.js?v=20260920112017';
-import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20260920112017';
-import { registerServiceWorker } from './pwa-register.js?v=20260920112017';
+import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20260920112357';
+import { renderDashboardView } from './dashboard.js?v=20260920112357';
+import { renderReportsView } from './reports.js?v=20260920112357';
+import { renderHayatView } from './hayatindex.js?v=20260920112357';
+import { renderMatchReviewView } from './matchreview.js?v=20260920112357';
+import { renderBulkImportView } from './bulkimport.js?v=20260920112357';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260920112357';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260920112357';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260920112357';
+import { renderHayatEditorView } from './hayateditor.js?v=20260920112357';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260920112357';
+import { renderUserGuideView } from './userguide.js?v=20260920112357';
+import { renderJoinTeamView } from './collaboration.js?v=20260920112357';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260920112357';
+import { renderMyProfileView } from './profile.js?v=20260920112357';
+import { renderMySpaceView } from './myspace.js?v=20260920112357';
+import { renderBoardsView } from './boards.js?v=20260920112357';
+import { renderFormationView } from './formation.js?v=20260920112357';
+import { renderMyDepartmentView, initDeptMessageNotifications } from './mydepartment.js?v=20260920112357';
+import { renderOnboardingView } from './onboarding.js?v=20260920112357';
+import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20260920112357';
+import { registerServiceWorker } from './pwa-register.js?v=20260920112357';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -52,14 +52,13 @@ function getTabs() {
   // "Archive & Data" department instead (owner's request 2026-09-20, see renderArchiveTools in
   // mydepartment.js), reachable by whoever is a member of that department.
   if (isOperator) {
-    const tabs = [
-      { id: 'dashboard', label: 'Dashboard' },
-      { id: 'myspace', label: 'My Space' },
-      { id: 'boards', label: 'Boards' },
-      { id: 'formation', label: 'Formation Paths' },
-      { id: 'tasks', label: 'Tasks' },
-    ];
+    const tabs = [{ id: 'dashboard', label: 'Dashboard' }];
+    // My Department in second position, right after Dashboard (owner's request 2026-09-20).
     if (State.myDepartments.length > 0) { tabs.push({ id: 'mydepartment', label: 'My Department' }); }
+    tabs.push({ id: 'myspace', label: 'My Space' });
+    tabs.push({ id: 'boards', label: 'Boards' });
+    tabs.push({ id: 'formation', label: 'Formation Paths' });
+    tabs.push({ id: 'tasks', label: 'Tasks' });
     tabs.push({ id: 'inpageconverter', label: 'InPage Converter' });
     tabs.push({ id: 'chat', label: 'Report a Problem or Suggestion' });
     // Share with us: Operators can now give their own feedback to the team leads/Admin the same
@@ -85,11 +84,11 @@ function getTabs() {
   if (isAdmin()) {
     return [
       { id: 'dashboard', label: 'Dashboard' },
+      { id: 'mydepartment', label: 'My Department' },
       { id: 'myspace', label: 'My Space' },
       { id: 'boards', label: 'Boards' },
       { id: 'formation', label: 'Formation Paths' },
       { id: 'tasks', label: 'Tasks' },
-      { id: 'mydepartment', label: 'My Department' },
       { id: 'announcements', label: 'Announcements' },
       { id: 'chat', label: 'Messages' },
       { id: 'sharewithus', label: 'Share with us' },
