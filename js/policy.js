@@ -6,7 +6,7 @@
 // People: any department lead or Admin) and from admin.js (per-row "Propose..." buttons that
 // replace the old direct-edit inputs on the reputation-tiers/policy-values/task-category panels).
 
-import { sb, State, esc, withStatus, canProposePolicyChange, canApprovePolicyChange } from './core.js?v=20260920102321';
+import { sb, State, esc, withStatus, canProposePolicyChange, canApprovePolicyChange } from './core.js?v=20260920110832';
 
 // Who may propose a change to each policy_values key (GOVERNANCE.md §2.8 "who owns which
 // policy table"). task_category_rates and task_reputation_tiers are Reward's alone.
@@ -23,6 +23,18 @@ const POLICY_VALUE_OWNERS = {
 export function ownersFor(targetTable, targetKey) {
   if (targetTable === 'policy_values') return POLICY_VALUE_OWNERS[targetKey] || ['RF'];
   return ['RF'];
+}
+
+// A department can see a policy table it doesn't own, without being able to propose changes to
+// it - HR needs Reward's reputation tiers as context for judging who's "at risk" (owner's request
+// 2026-09-20), but the tiers stay Reward's alone to propose (GOVERNANCE.md). visibleFor() governs
+// whether the panel is shown at all in a department-scoped My Department page; ownersFor() alone
+// still governs the "Propose change" button (see tiersPanel below).
+const POLICY_VISIBLE_EXTRA = {
+  task_reputation_tiers: ['HR'],
+};
+function visibleFor(targetTable, targetKey) {
+  return [...new Set([...ownersFor(targetTable, targetKey), ...(POLICY_VISIBLE_EXTRA[targetTable] || [])])];
 }
 
 function deptLabel(code) {
@@ -124,7 +136,7 @@ export async function renderPolicySection(container, { departmentFilter } = {}) 
         </tr>`).join('')}</tbody>
       </table></div>
     </div>` : '';
-  const tiersPanel = owns(ownersFor('task_reputation_tiers')) ? `
+  const tiersPanel = owns(visibleFor('task_reputation_tiers')) ? `
     <div class="panel">
       <h2>Task reputation tiers <span class="hint">— owned by Reward</span></h2>
       <div class="grid-wrap"><table class="grid">
