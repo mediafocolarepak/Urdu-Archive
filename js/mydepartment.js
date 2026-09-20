@@ -4,12 +4,12 @@
 // - departments can be added, renamed or retired from Options without touching this file.
 
 import {
-  sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe,
+  sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
   nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET,
-} from './core.js?v=20260920115729';
-import { renderPolicySection } from './policy.js?v=20260920115729';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20260920115729';
-import { renderApplicationsView } from './collaboration.js?v=20260920115729';
+} from './core.js?v=20260920120552';
+import { renderPolicySection } from './policy.js?v=20260920120552';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20260920120552';
+import { renderApplicationsView } from './collaboration.js?v=20260920120552';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -263,7 +263,8 @@ export async function renderDepartmentsOverviewView(main) {
         <button class="btn danger" id="dept-overview-reset">Reset all statuses</button>
       </div>
     </div>
-    <div class="field-grid wide">${depts.map(card).join('') || '<p class="hint">No departments configured yet.</p>'}</div>`;
+    <div class="field-grid wide">${depts.map(card).join('') || '<p class="hint">No departments configured yet.</p>'}</div>
+    <div id="dept-overview-users-box"></div>`;
 
   main.querySelectorAll('[data-open-dept]').forEach(el => el.addEventListener('click', () => {
     State.myDeptSelected = el.dataset.openDept;
@@ -282,6 +283,73 @@ export async function renderDepartmentsOverviewView(main) {
     await withStatus(sb.from('department_status').upsert(rows), 'Resetting...');
     renderDepartmentsOverviewView(main);
   });
+
+  await renderUsersStatsPanel(document.getElementById('dept-overview-users-box'));
+}
+
+// ---------- Users & activity panel (migration 100, owner's request 2026-09-20) ----------
+// Headcount/demographics come straight from user_roles/user_profiles - Admin already reads both
+// tables directly client-side (same access admin.js's Users view relies on), no RPC needed.
+// Formation Paths enrollment counts are the one gap: formation_enrollments' only select policy is
+// "your own row" (74_formation_enrollments.sql), so those come from admin_project_stats().
+// Login/access tracking was asked about but isn't included - Supabase's own sign-in timestamps
+// aren't exposed anywhere in this app today, and whether/how to surface them is a separate,
+// privacy-sensitive decision, not folded silently into this panel.
+async function renderUsersStatsPanel(box) {
+  if (!box) return;
+  box.innerHTML = '<div class="panel"><h2>Users</h2><div class="empty-msg">Loading...</div></div>';
+  const [roleRows, profileRows, statsRows] = await Promise.all([
+    withStatus(sb.from('user_roles').select('role,standing,created_at')),
+    withStatus(sb.from('user_profiles').select('age_bracket,gender')),
+    withStatus(sb.rpc('admin_project_stats')),
+  ]);
+  const stats = statsRows[0] || { total_active_enrollments: 0, distinct_enrolled_users: 0, enrollments_by_path: [] };
+
+  const countBy = (rows, key) => {
+    const m = {};
+    for (const r of rows) { const v = r[key] || 'not_set'; m[v] = (m[v] || 0) + 1; }
+    return m;
+  };
+  const byRole = countBy(roleRows, 'role');
+  const byStanding = countBy(roleRows, 'standing');
+  const byGender = countBy(profileRows, 'gender');
+  const byAgeBracket = countBy(profileRows, 'age_bracket');
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+  const newLast30 = roleRows.filter(r => (r.created_at || '') >= thirtyDaysAgo).length;
+
+  const tile = (label, value) => `<div class="field"><label>${esc(label)}</label><div style="font-size:20px;font-weight:600;">${esc(value)}</div></div>`;
+  const ROLE_LABELS = { user: 'Users', operator: 'Operators', coordinator: 'Coordinators', admin: 'Admins' };
+  const GENDER_LABELS = { M: 'Male', F: 'Female', not_set: 'Not set' };
+  const ageBracketOptions = State.optionListsByName.age_bracket || [];
+  const ageBracketLabel = code => code === 'not_set' ? 'Not set' : (labelOf(ageBracketOptions, code) || code);
+  const breakdownList = (m, labelFn) => Object.entries(m).sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `<div class="btn-row" style="justify-content:space-between;padding:2px 0;"><span>${esc(labelFn(k))}</span><span class="hint">${esc(v)}</span></div>`).join('');
+
+  box.innerHTML = `
+    <div class="panel">
+      <h2>Users <span class="hint">— headcount, demographics, Formation Paths enrollment</span></h2>
+      <div class="field-grid">
+        ${tile('Total accounts', roleRows.length)}
+        ${Object.entries(ROLE_LABELS).map(([code, label]) => tile(label, byRole[code] || 0)).join('')}
+        ${tile('New in last 30 days', newLast30)}
+      </div>
+      <div class="field-grid" style="margin-top:10px;">
+        <div class="field"><label>Standing</label>${breakdownList(byStanding, k => k === 'not_set' ? 'Not set' : k)}</div>
+        <div class="field"><label>Gender</label>${breakdownList(byGender, k => GENDER_LABELS[k] || k)}</div>
+        <div class="field" style="grid-column:span 2;"><label>Age bracket</label>${breakdownList(byAgeBracket, ageBracketLabel)}</div>
+      </div>
+      <h3 style="margin:16px 0 4px;">Formation Paths enrollment</h3>
+      <div class="field-grid">
+        ${tile('Active enrollments', stats.total_active_enrollments)}
+        ${tile('Distinct enrolled users', stats.distinct_enrolled_users)}
+      </div>
+      ${(stats.enrollments_by_path || []).length ? `
+        <div class="grid-wrap" style="margin-top:8px;"><table class="grid">
+          <thead><tr><th>Path</th><th>Enrolled</th></tr></thead>
+          <tbody>${stats.enrollments_by_path.map(p => `<tr><td>${esc(p.title)}</td><td>${esc(p.enrolled)}</td></tr>`).join('')}</tbody>
+        </table></div>` : '<p class="hint" style="margin-top:8px;">No active enrollments yet.</p>'}
+      <p class="hint" style="margin-top:10px;">Login/access history isn't tracked yet - ask if this would be useful and it can be added as its own piece (it touches privacy considerations worth a separate decision).</p>
+    </div>`;
 }
 
 const ARCHIVE_TOOLS = [
