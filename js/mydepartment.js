@@ -6,10 +6,10 @@
 import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe,
   nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET,
-} from './core.js?v=20260920100150';
-import { renderPolicySection } from './policy.js?v=20260920100150';
-import { renderPeopleSection } from './people.js?v=20260920100150';
-import { renderApplicationsView } from './collaboration.js?v=20260920100150';
+} from './core.js?v=20260920100443';
+import { renderPolicySection } from './policy.js?v=20260920100443';
+import { renderPeopleSection } from './people.js?v=20260920100443';
+import { renderApplicationsView } from './collaboration.js?v=20260920100443';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -88,7 +88,7 @@ export async function renderMyDepartmentView(main) {
   // Communication authors the "Start Here" cards (95_onboarding_and_share_with_us.sql) from here -
   // onboarding.js only ever reads onboarding_cards, this is the one place that writes it.
   if (selected === 'COMM') await renderOnboardingCardsManager(document.getElementById('mydept-onboarding-box'));
-  // Archive Manager (owner's request 2026-09-20): the cataloguing tools that used to be a flat,
+  // "Archive & Data" department (owner's request 2026-09-20): the cataloguing tools that used to be a flat,
   // qualification-gated set of Operator tabs (Hayat Index/Match Review/Work Consolidation/Hayat
   // Editor/Bulk Import) are now grouped here for whoever is a member of this department - launch
   // buttons only, the tools themselves stay their own tabs/modules (window.__renderTab, same
