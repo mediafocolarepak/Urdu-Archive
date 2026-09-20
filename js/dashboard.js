@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260920121259';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260920121259';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260920125410';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260920125410';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
@@ -67,6 +67,7 @@ export async function renderDashboardView(main) {
       <div class="split split-wide-left">
         <div>
           <div class="grid-wrap dash-grid-wrap" style="max-height:70vh;"><table class="grid" id="dash-grid"></table></div>
+          <p class="hint dash-scroll-hint" style="margin:4px 0 0;">&larr; Scroll sideways to see more columns &rarr;</p>
           <div class="dash-cards" id="dash-cards"></div>
         </div>
         <div class="panel" id="doc-detail" style="margin:0;"></div>

@@ -53,14 +53,23 @@ self.addEventListener('fetch', event => {
     // whole point of network-first (this was the actual cause of "changes don't show up").
     event.respondWith(
       fetch(event.request, { cache: 'no-store' })
-        .then(res => { caches.open(CACHE_NAME).then(cache => cache.put(event.request, res.clone())); return res; })
+        .then(res => {
+          // Clone synchronously, right here - not inside the caches.open().then() below. Once
+          // this handler returns `res`, the browser starts reading its body to deliver the page
+          // its resource, which locks the stream; a clone() attempted after that (found via the
+          // console error this produced, 2026-09-20) throws "Response body is already used".
+          const resClone = res.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, resClone));
+          return res;
+        })
         .catch(() => caches.match(event.request))
     );
   } else {
     // cache-first for css/icons - rarely change, and are still version-busted when they do
     event.respondWith(
       caches.match(event.request).then(cached => cached || fetch(event.request).then(res => {
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, res.clone()));
+        const resClone = res.clone(); // see the network-first branch above for why this must be synchronous
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, resClone));
         return res;
       }))
     );

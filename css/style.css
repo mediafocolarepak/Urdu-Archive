@@ -193,6 +193,15 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
    hinted - otherwise auto layout keeps giving Author/Place more room than their content needs. */
 #dash-grid { table-layout: fixed; }
 .grid-wrap { max-height: 46vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+/* A horizontally-scrollable table (the Dashboard grid, mainly) is easy to miss if the scrollbar
+   is a thin, near-invisible OS overlay - confirmed 2026-09-20 with the owner: the data was always
+   there (scrollWidth > clientWidth), people just never noticed there was more to scroll to. Make
+   it thick and colored so it reads as "there's more here", not just a hairline. Firefox gets the
+   same idea via scrollbar-width/-color; older browsers with neither just keep the OS default. */
+.grid-wrap { scrollbar-width: auto; scrollbar-color: var(--accent) var(--bg); }
+.grid-wrap::-webkit-scrollbar { height: 14px; width: 14px; }
+.grid-wrap::-webkit-scrollbar-track { background: var(--bg); }
+.grid-wrap::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 7px; border: 3px solid var(--bg); }
 
 /* Dashboard grid: columns are wider than the panel can fit, so the wrapper above scrolls
    horizontally (overflow: auto already does that) - here the table just needs to be free to
@@ -225,6 +234,7 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
 #myspace-cards { display: block; }
 @media (max-width: 700px) {
   .dash-grid-wrap { display: none; }
+  .dash-scroll-hint { display: none; }
   .dash-cards { display: block; max-height: 70vh; overflow: auto; }
 }
 .dash-card { padding: 10px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
