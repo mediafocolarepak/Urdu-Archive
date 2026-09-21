@@ -1,25 +1,25 @@
-import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20260920220218';
-import { renderDashboardView } from './dashboard.js?v=20260920220218';
-import { renderReportsView } from './reports.js?v=20260920220218';
-import { renderHayatView } from './hayatindex.js?v=20260920220218';
-import { renderMatchReviewView } from './matchreview.js?v=20260920220218';
-import { renderBulkImportView } from './bulkimport.js?v=20260920220218';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260920220218';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260920220218';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20260920220218';
-import { renderHayatEditorView } from './hayateditor.js?v=20260920220218';
-import { renderInPageConverterView } from './inpageconverter.js?v=20260920220218';
-import { renderUserGuideView } from './userguide.js?v=20260920220218';
-import { renderJoinTeamView } from './collaboration.js?v=20260920220218';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260920220218';
-import { renderMyProfileView } from './profile.js?v=20260920220218';
-import { renderMySpaceView } from './myspace.js?v=20260920220218';
-import { renderBoardsView } from './boards.js?v=20260920220218';
-import { renderFormationView } from './formation.js?v=20260920220218';
-import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20260920220218';
-import { renderOnboardingView } from './onboarding.js?v=20260920220218';
-import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20260920220218';
-import { registerServiceWorker } from './pwa-register.js?v=20260920220218';
+import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20260921183128';
+import { renderDashboardView } from './dashboard.js?v=20260921183128';
+import { renderReportsView } from './reports.js?v=20260921183128';
+import { renderHayatView } from './hayatindex.js?v=20260921183128';
+import { renderMatchReviewView } from './matchreview.js?v=20260921183128';
+import { renderBulkImportView } from './bulkimport.js?v=20260921183128';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20260921183128';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20260921183128';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20260921183128';
+import { renderHayatEditorView } from './hayateditor.js?v=20260921183128';
+import { renderInPageConverterView } from './inpageconverter.js?v=20260921183128';
+import { renderUserGuideView } from './userguide.js?v=20260921183128';
+import { renderJoinTeamView } from './collaboration.js?v=20260921183128';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20260921183128';
+import { renderMyProfileView } from './profile.js?v=20260921183128';
+import { renderMySpaceView } from './myspace.js?v=20260921183128';
+import { renderBoardsView } from './boards.js?v=20260921183128';
+import { renderFormationView } from './formation.js?v=20260921183128';
+import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20260921183128';
+import { renderOnboardingView } from './onboarding.js?v=20260921183128';
+import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20260921183128';
+import { registerServiceWorker } from './pwa-register.js?v=20260921183128';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -170,7 +170,9 @@ window.__renderTab = renderTab;
 
 wireAuthButtons();
 boot(() => {
-  initTopbar(); renderTab('dashboard');
+  // Plain Users land on "Start Here" instead of Dashboard (owner's request 2026-09-21): it's
+  // their landing page now, not just a tab they can find - everyone else still opens Dashboard.
+  initTopbar(); renderTab(State.currentRole === 'user' ? 'onboarding' : 'dashboard');
   initChatNotifications(() => renderTab('chat'));
   initTaskNotifications(() => renderTab('tasks'));
   initDeptMessageNotifications(code => { State.myDeptSelected = code; renderTab('mydepartment'); });
