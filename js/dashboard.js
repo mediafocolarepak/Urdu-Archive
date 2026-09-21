@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260921183128';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260921183128';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20260921183958';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20260921183958';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
@@ -28,6 +28,9 @@ export async function renderDashboardView(main) {
   // access still works everywhere else (Tasks, and the doc-detail panel for their own claimed
   // work), just not via this quick "+ New document" shortcut or the full editor here.
   const isUser = State.currentRole === 'user' || State.currentRole === 'operator';
+  // Plain Users see this tab as "Library" (owner's request 2026-09-21) - Operator and everyone
+  // else keeps "Dashboard", same layout either way (see isUser above).
+  const heading = State.currentRole === 'user' ? 'Library' : 'Dashboard';
 
   // Plain Users (and Operators, see above) land on the archive filtered to Urdu by default
   // (the vast majority of what they consult); applied once per session so a manual change to
@@ -39,7 +42,7 @@ export async function renderDashboardView(main) {
 
   main.innerHTML = `
     <div class="panel">
-      <h2>Dashboard <span class="count-badge" id="dash-count"></span></h2>
+      <h2>${heading} <span class="count-badge" id="dash-count"></span></h2>
       <div class="searchbar">
         <input id="dash-search" placeholder="Search by title, tags, or Urdu text..." value="${esc(State.dashFilters.search)}">
         ${canWrite() && !isUser ? '<button class="btn" id="dash-new">+ New document</button>' : ''}

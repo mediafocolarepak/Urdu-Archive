@@ -2,7 +2,7 @@
 // PROJECT_HANDOFF_v15.md). Personal and private: each user only ever sees their own favorites,
 // enforced by RLS on user_favorites, not by anything in this module.
 
-import { sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup, openFormationPostPopup, canReviewApplications } from './core.js?v=20260921183128';
+import { sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup, openFormationPostPopup, canReviewApplications } from './core.js?v=20260921183958';
 
 export async function renderMySpaceView(main) {
   const rows = await withStatus(sb.from('user_favorites')
@@ -34,7 +34,7 @@ export async function renderMySpaceView(main) {
         ${canAddToPath ? `<button class="btn secondary" data-addpath="${esc(doc.document_id)}">+ Path</button>` : ''}
       </div>
     </div>`;
-  }).join('') || '<div class="empty-msg">Nothing saved yet — use ☆ Save on any document in the Dashboard.</div>';
+  }).join('') || `<div class="empty-msg">Nothing saved yet — use ☆ Save on any document in the ${State.currentRole === 'user' ? 'Library' : 'Dashboard'}.</div>`;
 
   cardsBox.querySelectorAll('.dash-card').forEach(card => {
     card.addEventListener('click', e => {

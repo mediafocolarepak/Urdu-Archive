@@ -7,7 +7,7 @@
 // dispatched in app.js exactly like chat.js already splits admin/user - see renderTab('chat')
 // there for the precedent this follows.
 
-import { sb, esc, withStatus, nameMapForEmails, isAdmin, isAnyDeptLead } from './core.js?v=20260921183128';
+import { sb, esc, withStatus, nameMapForEmails, isAdmin, isAnyDeptLead } from './core.js?v=20260921183958';
 
 function formatDateTime(iso) { return esc((iso || '').slice(0, 16).replace('T', ' ')); }
 
