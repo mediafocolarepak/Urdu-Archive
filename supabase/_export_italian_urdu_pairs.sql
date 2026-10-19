@@ -1,18 +1,27 @@
 -- _export_italian_urdu_pairs.sql
--- Esportazione delle coppie italiano/urdu per il mining della skill di traduzione
--- (HANDOFF_Skill_Autoapprendimento_2026-09-20.md SS4). Solo lettura, nessuna modifica.
+-- RETIRED 2026-10-19 - do not run. Use _export_work_pairs.sql instead.
 --
--- Eseguire nell'SQL editor di Supabase, poi usare "Download as CSV" (o copiare i risultati
--- come JSON se l'editor lo offre) e caricare il file qui in chat.
-
-select
-  dot.document_id,
-  d.title,
-  d.ref_date,
-  dot.body as testo_ita,
-  dt.body  as testo_urdu
-from public.document_original_texts dot
-join public.document_texts dt using (document_id)
-join public.documents d using (document_id)
-where dot.language = 'ITA'
-order by dot.document_id;
+-- This file held the first version of the parallel-corpus export for the translation-skill
+-- mining (HANDOFF_Skill_Autoapprendimento_2026-09-20.md SS4). It was written against the data
+-- model of migrations 101/102, where the Italian text was expected to live in
+-- document_original_texts as a sidecar of the Urdu document - i.e. both texts on the SAME
+-- document_id:
+--
+--   from document_original_texts dot join document_texts dt using (document_id)
+--
+-- Migration 103 established the real model the day after (owner, 2026-09-21): every language
+-- version is its own record in documents, grouped by work_id, so the Italian text lives in
+-- document_texts of the Italian record and the Urdu text in document_texts of its sibling.
+-- Run as written above, this query now returns ZERO rows - document_original_texts is empty
+-- (it is reserved for a true sidecar: an original text with no catalogued record of its own).
+--
+-- The corrected query - the one actually used for the v3.0 -> v3.1 mining run of 2026-09-21,
+-- 286 pairs over 118 work_id - joins through work_id and is kept in:
+--
+--   _export_work_pairs.sql
+--
+-- One note for whoever extends it: it pairs an Italian record with every sibling that has a
+-- text, whatever that sibling's language. Today every sibling with a text is Urdu, so the
+-- result is the same; add "and urd.language = 'URD'" if English or other versions ever get
+-- their own text rows, otherwise a future mining run would silently treat an English sibling
+-- as an Urdu translation.
