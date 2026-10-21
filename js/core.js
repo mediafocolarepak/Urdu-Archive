@@ -2,6 +2,8 @@
 // Every other module imports from this one only (never from each other) to keep the
 // import graph a simple star and avoid circular-import bugs.
 
+import { TRANSLATION_PROMPT_CORE, TRANSLATION_PROMPT_VERSION } from './translateprompt.js?v=20261021070142';
+
 export const SUPABASE_URL = 'https://tvabpsxfwofiqriwbolz.supabase.co';
 export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2YWJwc3hmd29maXFyaXdib2x6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NTQ2OTksImV4cCI6MjEwMjAzMDY5OX0.ltxl-K6lHKp1NC3-t9xzMOML9JVyqrpcQjkHkauiGBY';
 export const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -932,6 +934,66 @@ export function openBoardPostPopup({ doc = null, boardCode = null, post = null, 
     else await withStatus(sb.from('board_posts').insert(row), 'Saving...');
     backdrop.remove();
     if (onSaved) onSaved();
+  });
+}
+
+// Phase 0 of the in-app translation helper: assembles the style-guide prompt + the source text
+// for the user to paste into Claude. Deliberately makes no network call - the Anthropic key can't
+// live in the browser (phase 1 puts the call behind an Edge Function). Lives here, not in
+// docdetail.js, so a standalone entry point (My Space, Dashboard) can open it without importing
+// a sibling module.
+export function openTranslatePopup({ text = '', title = '' } = {}) {
+  document.getElementById('translate-popup')?.remove();
+  const backdrop = document.createElement('div');
+  backdrop.id = 'translate-popup';
+  backdrop.className = 'overlay-backdrop';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel">
+      <h2 style="margin-top:0;">Translate</h2>
+      <p class="hint">This prepares a prompt to paste into Claude. The translation you get back is a draft: it must be reviewed before it is used anywhere.</p>
+      ${title ? `<div style="font-size:13px;margin-bottom:6px;"><b>Title:</b> ${esc(title)}</div>` : ''}
+      <textarea id="tr-text" dir="auto" placeholder="Paste the Italian or English text here" style="width:100%;min-height:40vh;font-size:14px;line-height:1.7;">${esc(text)}</textarea>
+      <div class="hint" id="tr-msg" style="margin-top:6px;"></div>
+      <textarea id="tr-fallback" readonly dir="auto" style="display:none;width:100%;min-height:25vh;font-size:12.5px;margin-top:6px;"></textarea>
+      <div class="btn-row" style="justify-content:flex-end;margin-top:8px;">
+        <button class="btn" id="tr-copy-all">Copy prompt + text</button>
+        <button class="btn secondary" id="tr-copy-prompt">Copy prompt only</button>
+        <button class="btn secondary" id="tr-close">Close</button>
+      </div>
+      <p class="hint" style="margin-top:8px;">${esc(TRANSLATION_PROMPT_VERSION)}</p>
+    </div>`;
+  document.body.appendChild(backdrop);
+  const msg = document.getElementById('tr-msg');
+  const fallback = document.getElementById('tr-fallback');
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+  document.getElementById('tr-close').addEventListener('click', () => backdrop.remove());
+  // On a clipboard refusal the assembled prompt is shown in a selectable textarea instead of
+  // dead-ending - several operators work on phones, where a denied clipboard is common.
+  // navigator.clipboard needs a secure context and can be refused by the browser; the older
+  // execCommand('copy') on a selected textarea still works there (plain-http hosts, some mobile
+  // and embedded browsers). Only if both fail is the user asked to copy by hand - and then the
+  // message is made loud, because a silent failure leaves the *previous* clipboard content in
+  // place and the user pastes the wrong thing without noticing.
+  const copy = async (payload, doneMsg) => {
+    let ok = false;
+    try { await navigator.clipboard.writeText(payload); ok = true; } catch { /* try the fallback */ }
+    if (ok) { fallback.style.display = 'none'; msg.textContent = doneMsg; msg.style.color = ''; return; }
+    fallback.value = payload;
+    fallback.style.display = 'block';
+    fallback.focus();
+    fallback.select();
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    if (ok) { msg.textContent = doneMsg; msg.style.color = ''; return; }
+    msg.textContent = 'NOT COPIED - your clipboard still holds the old content. Select all the text in the box below and copy it manually.';
+    msg.style.color = 'var(--danger, #b3261e)';
+    fallback.scrollIntoView({ block: 'nearest' });
+  };
+  document.getElementById('tr-copy-prompt').addEventListener('click', () => copy(TRANSLATION_PROMPT_CORE, 'Prompt copied.'));
+  document.getElementById('tr-copy-all').addEventListener('click', () => {
+    const src = document.getElementById('tr-text').value.trim();
+    if (!src) { fallback.style.display = 'none'; msg.textContent = 'The text field is empty - nothing copied.'; return; }
+    const parts = [TRANSLATION_PROMPT_CORE, '---', title ? `Title: ${title}` : null, src].filter(p => p !== null);
+    copy(parts.join('\n\n'), 'Prompt and text copied - paste them into Claude.');
   });
 }
 
