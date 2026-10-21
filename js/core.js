@@ -2,8 +2,6 @@
 // Every other module imports from this one only (never from each other) to keep the
 // import graph a simple star and avoid circular-import bugs.
 
-import { TRANSLATION_PROMPT_CORE, TRANSLATION_PROMPT_VERSION } from './translateprompt.js?v=20261021070142';
-
 export const SUPABASE_URL = 'https://tvabpsxfwofiqriwbolz.supabase.co';
 export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2YWJwc3hmd29maXFyaXdib2x6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NTQ2OTksImV4cCI6MjEwMjAzMDY5OX0.ltxl-K6lHKp1NC3-t9xzMOML9JVyqrpcQjkHkauiGBY';
 export const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -937,9 +935,19 @@ export function openBoardPostPopup({ doc = null, boardCode = null, post = null, 
   });
 }
 
+// The translation prompt lives in translation_prompts (106_translation_prompts.sql), append-only:
+// the newest row is the one in force. Exported because both the Translate popup below and the Admin
+// editor in mydepartment.js read it, and modules only import from core.js. Resolves to null if the
+// table is unreadable or empty (migration not run yet, no connection) - callers say so, no fallback
+// copy of the prompt is kept in the code, so there is exactly one source.
+export async function fetchActiveTranslationPrompt() {
+  const { data, error } = await sb.from('translation_prompts').select('id,version,body,created_at').order('id', { ascending: false }).limit(1);
+  return error || !data || !data.length ? null : data[0];
+}
+
 // Phase 0 of the in-app translation helper: assembles the style-guide prompt + the source text
-// for the user to paste into Claude. Deliberately makes no network call - the Anthropic key can't
-// live in the browser (phase 1 puts the call behind an Edge Function). Lives here, not in
+// for the user to paste into Claude. Deliberately makes no network call to Claude - the Anthropic
+// key can't live in the browser (a real call would sit behind an Edge Function). Lives here, not in
 // docdetail.js, so a standalone entry point (My Space, Dashboard) can open it without importing
 // a sibling module.
 export function openTranslatePopup({ text = '', title = '' } = {}) {
@@ -960,11 +968,28 @@ export function openTranslatePopup({ text = '', title = '' } = {}) {
         <button class="btn secondary" id="tr-copy-prompt">Copy prompt only</button>
         <button class="btn secondary" id="tr-close">Close</button>
       </div>
-      <p class="hint" style="margin-top:8px;">${esc(TRANSLATION_PROMPT_VERSION)}</p>
+      <p class="hint" id="tr-version" style="margin-top:8px;">Loading the prompt...</p>
     </div>`;
   document.body.appendChild(backdrop);
   const msg = document.getElementById('tr-msg');
   const fallback = document.getElementById('tr-fallback');
+  let prompt = null;
+  fetchActiveTranslationPrompt().then(p => {
+    prompt = p;
+    const label = document.getElementById('tr-version');
+    if (!label) return; // popup closed meanwhile
+    if (p) label.textContent = p.version;
+    else {
+      label.textContent = 'No prompt found.';
+      msg.textContent = 'The translation prompt could not be loaded - check your connection, or ask an Admin whether it has been set up (migration 106).';
+      msg.style.color = 'var(--danger, #b3261e)';
+    }
+  });
+  const noPrompt = () => {
+    fallback.style.display = 'none';
+    msg.textContent = 'The prompt is not loaded (yet) - wait a moment and try again.';
+    msg.style.color = 'var(--danger, #b3261e)';
+  };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
   document.getElementById('tr-close').addEventListener('click', () => backdrop.remove());
   // On a clipboard refusal the assembled prompt is shown in a selectable textarea instead of
@@ -988,11 +1013,12 @@ export function openTranslatePopup({ text = '', title = '' } = {}) {
     msg.style.color = 'var(--danger, #b3261e)';
     fallback.scrollIntoView({ block: 'nearest' });
   };
-  document.getElementById('tr-copy-prompt').addEventListener('click', () => copy(TRANSLATION_PROMPT_CORE, 'Prompt copied.'));
+  document.getElementById('tr-copy-prompt').addEventListener('click', () => { if (!prompt) return noPrompt(); copy(prompt.body, 'Prompt copied.'); });
   document.getElementById('tr-copy-all').addEventListener('click', () => {
+    if (!prompt) return noPrompt();
     const src = document.getElementById('tr-text').value.trim();
     if (!src) { fallback.style.display = 'none'; msg.textContent = 'The text field is empty - nothing copied.'; return; }
-    const parts = [TRANSLATION_PROMPT_CORE, '---', title ? `Title: ${title}` : null, src].filter(p => p !== null);
+    const parts = [prompt.body, '---', title ? `Title: ${title}` : null, src].filter(p => p !== null);
     copy(parts.join('\n\n'), 'Prompt and text copied - paste them into Claude.');
   });
 }

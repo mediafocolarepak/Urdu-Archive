@@ -1,11 +1,49 @@
-// The translation style guide in its operational form - distilled from
-// Focolare_Urdu_Translation_Style_Guide_v3.4.md (the manual stays the source; this is its
-// working form, see TRANSLATION_PROMPT_CORE_v2.md). Kept in its own module rather than inside
-// core.js because it is a 10KB literal that changes on its own schedule, whenever the
-// terminology does - and because phase 1 will move it to the database, at which point this file
-// is deleted rather than edited.
-export const TRANSLATION_PROMPT_VERSION = 'prompt-core v2 (2026-10-19, manual v3.4)';
-export const TRANSLATION_PROMPT_CORE = `You are translating texts of the Focolare Movement into Pakistani Urdu, for the Focolare Urdu
+-- 106_translation_prompts.sql
+-- The Translate helper's prompt (the operational form of the translation style guide) moves from a
+-- JS literal (js/translateprompt.js, deleted by this change) to the database. The manual changed its
+-- canonical terms three times in two days (v3.2 -> v3.4), and every change meant editing the file
+-- and publishing the app; now an Admin saves a new version from My Department -> Archive & Data.
+--
+-- Append-only: saving never overwrites, it adds a row, and the newest row is the prompt in force.
+-- Nothing is deleted, so any past version can be read back and a bad edit is undone by saving the
+-- old text again - the same philosophy as the other logs in this project (people_decisions,
+-- skill_corpus_analysis_log).
+--
+-- Who: the Translate button is for canWrite() users (Operator and up), so that is who can read the
+-- prompt; only Admin can add a version, as for the skill-mining log (105).
+--
+-- Run after 105_skill_corpus_analysis_log.sql. Idempotent, self-test at the end.
+
+-- ============================================================================
+-- 1. The versions
+-- ============================================================================
+create table if not exists public.translation_prompts (
+  id                bigint generated always as identity primary key,
+  version           text        not null check (btrim(version) <> ''),
+  body              text        not null check (btrim(body) <> ''),
+  change_note       text,
+  created_by_email  text,
+  created_at        timestamptz not null default now()
+);
+
+alter table public.translation_prompts enable row level security;
+
+drop policy if exists "translation_prompts_select" on public.translation_prompts;
+create policy "translation_prompts_select" on public.translation_prompts
+  for select using (current_role_is('operator'));
+
+drop policy if exists "translation_prompts_insert" on public.translation_prompts;
+create policy "translation_prompts_insert" on public.translation_prompts
+  for insert with check (current_role_is('admin'));
+-- No update or delete policy: append-only.
+
+-- ============================================================================
+-- 2. The first version: prompt-core v2 (manual v3.4), generated from
+--    TRANSLATION_PROMPT_CORE_v2.md - only if there is no version yet.
+-- ============================================================================
+insert into public.translation_prompts (version, body, change_note, created_by_email)
+select 'prompt-core v2 (2026-10-19, manual v3.4)',
+$prompt$You are translating texts of the Focolare Movement into Pakistani Urdu, for the Focolare Urdu
 Archive. Most texts are Collegamenti (fortnightly talks) and meditations by Chiara Lubich,
 formation material, and community documents. Source language is Italian or English.
 
@@ -116,17 +154,31 @@ If you meet a term, a name or an expression of the Movement that is not covered 
 
 1. translate the surrounding text normally;
 2. use the form you judge best, in context;
-3. and list it at the end of your answer, under the heading \`⚠ UNCERTAIN TERMS\`, one per line,
-   as \`source term → form used — why you are unsure\`.
+3. and list it at the end of your answer, under the heading `⚠ UNCERTAIN TERMS`, one per line,
+   as `source term → form used — why you are unsure`.
 
 Also flag, in the same list, any place where the source text is ambiguous or seems corrupted
 (archive texts extracted from InPage or PDF sometimes carry stray characters, and ے can appear
 in place of ی — that is an extraction artefact, not something to translate around).
 
-An empty \`⚠ UNCERTAIN TERMS\` list is a perfectly good answer. A silently invented term is not.
+An empty `⚠ UNCERTAIN TERMS` list is a perfectly good answer. A silently invented term is not.
 
 ## 6. Output
 
 Give the Urdu translation and nothing else — no preamble, no commentary, no explanation of your
-choices — followed by the \`⚠ UNCERTAIN TERMS\` list when it has entries. Keep the paragraph
-structure of the source: one source paragraph, one translated paragraph.`;
+choices — followed by the `⚠ UNCERTAIN TERMS` list when it has entries. Keep the paragraph
+structure of the source: one source paragraph, one translated paragraph.$prompt$,
+  'First version in the database: moved from js/translateprompt.js (prompt-core v2).',
+  'migration 106'
+where not exists (select 1 from public.translation_prompts);
+
+-- ============================================================================
+-- 3. Self-test (run separately). All rows must be true.
+-- ============================================================================
+select 'table translation_prompts' as item, (to_regclass('public.translation_prompts') is not null) as ok
+union all select 'RLS enabled', (select relrowsecurity from pg_class where oid = 'public.translation_prompts'::regclass)
+union all select 'exactly 2 policies (select, insert)', (select count(*) = 2 from pg_policies where tablename = 'translation_prompts')
+union all select 'insert is admin-only', (select with_check like '%admin%' from pg_policies where tablename = 'translation_prompts' and cmd = 'INSERT')
+union all select 'select is operator and up', (select qual like '%operator%' from pg_policies where tablename = 'translation_prompts' and cmd = 'SELECT')
+union all select 'a version exists', (select count(*) >= 1 from public.translation_prompts)
+union all select 'newest version has the v3.4 forms', (select body like '%آئیڈیل%' and body like '%ڈئیراسٹ%' from public.translation_prompts order by id desc limit 1);
