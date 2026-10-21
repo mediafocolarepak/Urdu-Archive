@@ -7,8 +7,8 @@ import {
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
-  openFormationPostPopup, canReviewApplications,
-} from './core.js?v=20260921185730';
+  openFormationPostPopup, canReviewApplications, openTranslatePopup,
+} from './core.js?v=20261021070142';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -75,6 +75,16 @@ async function selectedOrClipboardText(textarea) {
 // in the Google Drive export it came from. Same read-only popup shell as openDocTextPopup above,
 // kept separate (not folded into that function) since the two texts have independent existence -
 // a document can have one, both, or neither, and mixing the two popups' state would be fragile.
+// navigator.clipboard is refused on some hosts/browsers; selecting the whole text and using the
+// legacy execCommand keeps Copy working there, and otherwise leaves the text selected for Ctrl+C.
+function copySelectionFallback(textarea) {
+  textarea.focus();
+  if (!textarea.selectionEnd || textarea.selectionStart === textarea.selectionEnd) textarea.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  alert(ok ? 'Text copied.' : 'Could not copy automatically - the text is selected, press Ctrl+C (or use the Copy option of your phone).');
+}
+
 function openOriginalTextPopup(doc, originalText) {
   document.getElementById('doc-original-text-popup')?.remove();
   const backdrop = document.createElement('div');
@@ -97,7 +107,7 @@ function openOriginalTextPopup(doc, originalText) {
   document.getElementById('doc-original-text-popup-copy').addEventListener('click', async () => {
     const selected = textarea.value.slice(textarea.selectionStart, textarea.selectionEnd);
     try { await navigator.clipboard.writeText(selected || originalText.body); alert(selected ? 'Selected text copied.' : 'Text copied.'); }
-    catch { alert('Could not copy - select the text and copy manually.'); }
+    catch { copySelectionFallback(textarea); }
   });
 }
 
@@ -124,7 +134,7 @@ function openDocTextPopup(doc, text) {
   document.getElementById('doc-text-popup-copy').addEventListener('click', async () => {
     const selected = textarea.value.slice(textarea.selectionStart, textarea.selectionEnd);
     try { await navigator.clipboard.writeText(selected || text.body); alert(selected ? 'Selected text copied.' : 'Text copied.'); }
-    catch { alert('Could not copy - select the text and copy manually.'); }
+    catch { copySelectionFallback(textarea); }
   });
   document.getElementById('doc-text-popup-report').addEventListener('click', async () => {
     State.selectedDocId = doc.document_id;
@@ -149,6 +159,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     <div class="btn-row" style="margin:0 0 8px;">
       ${text ? '<button class="btn secondary" id="doc-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Open editable text</button>' : ''}
       ${originalText ? '<button class="btn secondary" id="doc-original-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Original text (Italian)</button>' : ''}
+      ${canWrite() ? '<button class="btn secondary" id="doc-translate" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Translate</button>' : ''}
       <button class="btn secondary" id="doc-report-problem" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Report a problem</button>
     </div>
     <div class="field" style="font-size:13px;line-height:1.7;">
@@ -181,6 +192,16 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
   if (textOpen) textOpen.addEventListener('click', () => openDocTextPopup(doc, text));
   const originalTextOpen = document.getElementById('doc-original-text-open');
   if (originalTextOpen) originalTextOpen.addEventListener('click', () => openOriginalTextPopup(doc, originalText));
+  // Prefill only with Italian source text: on an Urdu record `text` is the Urdu body, and
+  // prefilling it would ask for a translation of a translation. Since migration 103 the Italian
+  // originals are records of their own (language 'ITA', body in document_texts), so on one of
+  // those `text` IS the source; the document_original_texts sidecar (migration 101) still covers a
+  // true original with no record of its own. Otherwise an empty field, the user pastes.
+  const translateBtn = document.getElementById('doc-translate');
+  if (translateBtn) {
+    const source = doc.language === 'ITA' && text ? text.body : (originalText ? originalText.body : '');
+    translateBtn.addEventListener('click', () => openTranslatePopup({ text: source, title: doc.en_title || '' }));
+  }
   document.getElementById('doc-report-problem').addEventListener('click', () => {
     State.selectedDocId = doc.document_id;
     State.chatMessagePrefill = null;

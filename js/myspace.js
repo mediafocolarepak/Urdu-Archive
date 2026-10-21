@@ -2,7 +2,7 @@
 // PROJECT_HANDOFF_v15.md). Personal and private: each user only ever sees their own favorites,
 // enforced by RLS on user_favorites, not by anything in this module.
 
-import { sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup, openFormationPostPopup, canReviewApplications } from './core.js?v=20260921185730';
+import { sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup, openFormationPostPopup, canReviewApplications, canWrite, openTranslatePopup } from './core.js?v=20261021070142';
 
 export async function renderMySpaceView(main) {
   const rows = await withStatus(sb.from('user_favorites')
@@ -12,8 +12,10 @@ export async function renderMySpaceView(main) {
   main.innerHTML = `
     <div class="panel">
       <h2>My Space <span class="hint">— documents you saved</span> <span class="count-badge">${rows.length}</span></h2>
+      ${canWrite() ? '<div class="btn-row" style="margin:0 0 8px;"><button class="btn secondary" id="myspace-translate">Translate a text</button></div>' : ''}
       <div id="myspace-cards"></div>
     </div>`;
+  document.getElementById('myspace-translate')?.addEventListener('click', () => openTranslatePopup());
 
   const cardsBox = document.getElementById('myspace-cards');
   const docsById = {};
