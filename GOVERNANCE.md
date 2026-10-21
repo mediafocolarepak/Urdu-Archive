@@ -1,7 +1,25 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.8 (2026-09-20) — decisions taken by the Owner; all of phases 1 through 3 are built and
-merged (migrations 80–98). Team comments welcome, changes go through a new version.**
+**Status: v1.9 (2026-10-21) — decisions taken by the Owner; all of phases 1 through 3 are built and
+merged (migrations 80–106). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.9:** a catch-up and one principle, no new migration. v1.8 stopped at migration
+98; the software then moved through migrations 99–106 and several user-facing changes that this
+document never recorded, so §5 no longer described the running system. Now written down:
+- **A sixth department, Archive & Data** (§2.9), created by the Owner from Options (data only). It
+  owns the cataloguing tools and, since migration 106, the Translate prompt.
+- **Department Pulse phase 2 and the Project overview Users panel** (§5.9, migrations 99–100);
+  **Operators can use Share with us** (§5.8, migration 97); Users now land on **Start Here** after
+  login and see the Dashboard as **Library** (§5.8).
+- **How the archive models languages and dates** (new §5.10, migrations 101–104): every document in
+  every language is its own record, grouped by `work_id`; the 273 Italian Collegamenti were imported
+  that way; and a one-position shift in `ref_date` across about 244 Collegamenti was found and
+  corrected.
+- **Translation tooling** (new §5.11, migrations 105–106): the Translate helper, the translation
+  prompt kept in the database as numbered versions, and the log of corpus-mining cycles.
+- **§1 principle 7**: a tool may report how the community writes a term; only the Owner decides it.
+  Three terminology decisions had already followed that rule without it being written here.
+- A new row in the decision matrix (§4 row 25) and decision-log items 12–14 (§8).
 
 **What changed in v1.8:** same phase, next session, one new migration, no new principle - this is
 a mechanism, not a policy shift. **Department Pulse** (§5.9, migration 98): each department's lead
@@ -120,12 +138,20 @@ the team, session by session).
    forgotten (§5.8). And what a User shares is heard by leadership directly, not filtered through
    a support queue: a technical report and a shared feeling are structurally different things and
    go to different places, because treating them the same would flatten both.
+7. **A tool may report how the community writes a term; only the Owner decides it.** The real
+   Italian↔Urdu document pairs are mined to see which forms the community actually uses (§5.11),
+   and the result is shown as *attested* usage, never applied. Where usage diverges from the
+   glossary the Owner decides, and only then does the style guide — and the Translate prompt that
+   distils it — change. The same rule holds inside the prompt: the model is asked to flag a term it
+   is unsure of rather than invent one, and every version of the prompt is kept, so nothing is
+   rewritten silently.
 
 ---
 
 ## 2. Departments
 
-Five departments, but two objects. Two departments own **the material** — the Urdu texts that
+Five core departments, but two objects (a sixth, Archive & Data, §2.9, looks after the archive's own
+records). Two departments own **the material** — the Urdu texts that
 enter the archive and leave it again as published documents and formation paths: **Formation**
 (§2.3, builds the paths, brings material into the pipeline) and **Coordination** (§2.2, runs the
 translation → typing → proofreading → revision → publication pipeline that the Operators execute).
@@ -325,6 +351,27 @@ substitute for this in-app workflow, not a replacement for it. Now that §5.6 is
 proposals are the record of truth; `docs/REWARD_POLICY.md` is a human-readable summary to be kept
 in sync with it, not the primary record.
 
+### 2.9 Archive & Data
+
+*Mission:* keep the archive's own records correct — the catalogue, the texts as stored, the way
+documents of different languages are linked — and own the tools that do it.
+
+Created by the Owner from Options (a department is data, no migration), with the Owner as its lead
+(§1.5) and a small group of members, so that the department's own Team channel (§5.3) gives
+cataloguing work a place to coordinate. Responsibilities:
+- Run the **cataloguing tools**: Hayat Index, Match Review, Work Consolidation, Hayat Editor and
+  Bulk Import. They used to be separate Operator tabs gated by a "Data Assistant" qualification;
+  they are now launched from My Department → Archive & Data (the tools themselves are unchanged).
+- Keep **dates, links and texts** right: a document's `ref_date` is the date of the Collegamento and
+  must equal the date in its title; every language version is its own record, linked by `work_id`
+  (§5.10).
+- Keep the **translation prompt** (§5.11): Admin saves each new version from the editor on this
+  department's page, after the Owner has decided a terminology question (§1.7).
+
+It does not decide what work gets done (Coordination), who does it (HR) or what it is worth
+(Reward): it corrects the records the others produce. Its work already shows up in Coordination's
+task data, which is why Department Pulse (§5.9) gives it no computed signal.
+
 ---
 
 ## 3. Technical roles (unchanged)
@@ -378,6 +425,7 @@ proposed.
 | 22 | Penalise board misuse (reputation penalty for an Operator, loss of posting rights for a User) | Board editor | Lead Formation or Lead HR (not the proposer) | Person, HR | people-decision log; `task_outcome_events` (`board_misuse`) |
 | 23 | Add / remove a co-author on a formation path | Path owner | — | Co-author | `formation_path_editors` |
 | 24 | Promote a board post into the archive | Board editor / Coordinator | Normal document workflow | Author | `documents` (new record in `revision`) |
+| 25 | Change a canonical translation term, or save a new version of the Translate prompt | Anyone (a translator's flagged uncertain term, or a mining cycle) | Owner (Admin saves the version) | Translators | The style guide's version, a new row in `translation_prompts`, and a row in `skill_corpus_analysis_log` when it follows a mining cycle (§5.11) |
 
 Rules that apply to the whole table:
 - Proposer and approver are never the same person.
@@ -387,7 +435,7 @@ Rules that apply to the whole table:
 
 ---
 
-## 5. What the software already does (as of 2026-09-20, migrations 1–98)
+## 5. What the software already does (as of 2026-10-21, migrations 1–106)
 
 This section is here so the team designs on the real system, not an imagined one. Everything in
 §6.1, 6.1b, 6.1c, 6.2, 6.3, 6.4 and 6.6 of v1.0 is now folded in here as shipped, and as of v1.6
@@ -567,6 +615,12 @@ open — two low-priority known gaps.
   report (§5.5) without Admin access.
 - Department status and priorities (§5.9): read by that department's members + Admin; set only by
   that department's lead + Admin. Admin's "Project overview" roll-up: Admin only.
+- **Project overview's Users panel** (§5.9): Admin only. Enrollment totals come from a
+  security-definer function, `admin_project_stats()` (migration 100), because
+  `formation_enrollments` only lets a person read their own row.
+- **Translation prompt and mining log** (§5.11): the prompt is read by Operator and up (the audience
+  of the Translate button) and changed by Admin only; `skill_corpus_analysis_log` is read and written
+  by Admin only.
 
 The gap v1.0 flagged here — "an HR person who is not Admin cannot see the list of people they are
 supposed to follow, and a Reward person cannot see the ledgers" — is now closed for both HR (§5.3)
@@ -592,8 +646,9 @@ shown alongside the (already-Urdu) title/description on the catalog card and pat
 
 **"Share with us"** is not the technical "Report a Problem or Suggestion" chat (`chat_messages`,
 unchanged) — it's for an experience, a feeling, an idea, framed by the Owner as reciprocal
-("amore che va e che torna"), not a ticket queue. `share_with_us_messages`: any signed-in team
-member may post (not narrowed to Users — an Operator or Coordinator may want to share too);
+("amore che va e che torna"), not a ticket queue. `share_with_us_messages`: Users may post and, since
+migration 97, Operators too (the original policy only ever allowed Users, despite its own comment;
+a Coordinator keeps read access through the lead/Admin path, not as a sharer);
 `share_with_us_reactions` (a "thank you", one per lead per message, toggleable) and
 `share_with_us_replies` (several leads can each reply independently, unlike `chat_messages`'
 single `reply_text` column) are both readable by the original sharer and by **every** department
@@ -603,6 +658,12 @@ bucket `share-with-us-audio` keyed `<user_id>/<filename>` (only the author uploa
 folder; the author or any lead/Admin can read it back via a signed URL) — recorded client-side
 with plain `MediaRecorder`/`getUserMedia`, no library, and simply not offered on a browser that
 doesn't support it.
+
+**What Users see first** (no migration): after login a User lands on **Start Here**, not the
+Dashboard, and for plain Users the Dashboard tab is called **Library**. The app's title is now
+"Focolare Urdu Archive" (the word "Manager" dropped from the page title, login screen, top bar and
+PWA name — shorter and warmer for a User-facing name). Start Here's section headings are bilingual
+(Urdu above English) and a card's text keeps its line breaks, so numbered steps read one per line.
 
 ### 5.9 Department Pulse (migration 98)
 
@@ -631,6 +692,63 @@ motivated without a meeting - the Owner's framing: a human touch on online work,
   a metric that doesn't fit a given department) would do more harm than an honestly subjective
   human note - see §8 item 11. A computed hint, and possibly surfacing it to Coordinator too, may
   follow once this phase shows real use.
+
+**Phase 2 (migration 99)**: a **computed hint** now appears next to the lead's own pick — never
+applied by itself, never written to `department_status`. Coordination: overdue claimed tasks;
+Reward: flagged credit anomalies (the existing anomaly report); HR: age of the oldest pending people
+decision; Formation: days since the last formatori-chat message or path update; Communication: days
+since the last Start Here card update; Archive & Data: none. The Owner chose to build these before
+phase 1 had real usage, so the thresholds are first guesses to revisit after a few weeks of real
+lead use. Admin also has a confirm-gated "Reset all statuses" on Project overview.
+
+**Users panel (migration 100)**: Project overview also shows headcount, age and gender breakdowns of
+the userbase and Formation Paths enrollment (§5.7). Login/access history is deliberately **not**
+built: it is privacy-sensitive and is its own decision, not a side effect of a statistics screen.
+
+### 5.10 Languages, dates and the archive's data model (migrations 101–104)
+
+- **Every document, in every language, has its own record** in `documents`; records of the same work
+  are grouped by `work_id`, and a document's detail panel lists its siblings (§8 item 12). The 273
+  Italian Collegamenti (document_id 1558–1830, `language = 'ITA'`) were imported on that model:
+  their text is the body of the Italian record itself, in `document_texts` with
+  `source = 'drive_import'` and `reviewed = false` (extracted automatically from PDFs, not yet read
+  against the original page).
+- `document_original_texts` (migration 101) was first built as a sidecar holding the Italian text of
+  a *different* record; migration 103 corrected the model and emptied it. It now means only "an
+  original text with no catalogued record of its own", and the "Original text (Italian)" button
+  reads it, so the button is dormant. Whether to keep it for genuine sidecars or remove it is open.
+- To pair an Italian text with its Urdu translation, **join through `work_id`**, never by
+  `document_id`.
+- **Dates (migration 104).** `ref_date` is the date of the Collegamento and must equal the date in
+  the document's own title. About 244 Collegamenti were found carrying the date of the *following*
+  one — a one-position shift along the series — and two had swapped values. The title and the Drive
+  file name, two sources that had never seen each other, agreed on 269 of 269 comparable documents,
+  which is why the title is authoritative. The correction derives the date from the title when it
+  runs, keeps a backup table (`_backup_documents_refdate_20261018`, to be dropped after a few
+  weeks), and most likely does what migration 27 was meant to do but never fully did on this
+  database. It was the second migration found to have not fully run, both by accident (the first was
+  migration 54); a systematic audit of what actually ran has still not been done.
+
+### 5.11 Translation tooling (migrations 105–106)
+
+- **Translate** — a button for anyone with write access (Operator and up), in the document panel
+  and as "Translate a text" in My Space. It assembles the translation prompt and the source text to
+  paste into Claude. **The app makes no call to Claude**: an API key cannot live in a browser, and
+  a real call would sit behind a server function. What comes back is a **draft** for a human
+  reviewer. It is prefilled only with Italian source text — on an Italian record, its own text —
+  never with the Urdu body.
+- **The prompt** (`translation_prompts`, migration 106) is the working form of the translation
+  style guide, kept as numbered, append-only versions; the newest is in force. Operator and up read
+  it; only Admin adds a version, from My Department → Archive & Data, with a one-line note of what
+  changed. Nothing is deleted, so a bad edit is undone by saving the old text again. It lives in
+  the database, not in code, because the guide changed its canonical terms three times in two days.
+- **The mining log** (`skill_corpus_analysis_log`, migration 105, Admin only) holds one row per
+  cycle. *Mining* means reading the real Italian↔Urdu pairs — 122 Italian documents over 118 works —
+  to see which Urdu form the community writes for a glossary term. Two cycles so far (2026-09-21,
+  guide 3.0 → 3.1; 2026-10-19, 3.2 → 3.4). It never promotes anything (§1.7): فوکولاری, ماریاپولس,
+  آئیڈیل and the greeting ڈئیراسٹ became canonical only by the Owner's decision (§8 item 13).
+- **Not built**: a real call to Claude from the app, and saving the "uncertain terms" list the
+  prompt asks the model to return, which would let everyday use feed the next mining cycle.
 
 ---
 
@@ -671,7 +789,7 @@ Low priority: formation paths go through the same document revision/approval wor
 their content reaches the archive (row 18), so this doesn't bypass the archive's own review.
 
 ### 6.8 Known gap: department-lead appointment isn't RLS-enforced
-Carried over, not touched by migrations 80–98:
+Carried over, not touched by migrations 80–106:
 - "Only the Owner appoints department leads" (row 8) is a written rule, not an RLS-enforced one —
   any Admin can currently write `department_members`. Harmless today (Owner is the sole Admin);
   revisit if/when a second Admin is added.
@@ -692,6 +810,7 @@ see §5.3.)
 | **2c** | Boards open to members with moderation, usage policy, promote-to-archive (§5.4) | **Sonnet** | A User submits a post, a board editor publishes it; an Operator posts directly | ✅ Done |
 | **3** | Policy revision framework (§5.6); Reward audit history, compensation runs, anomaly report (§5.5); extra-credit approval (§5.5, migration 90) | **Sonnet** | A compensation run can be recorded and reconciled | ✅ Done |
 | later | Operator training programme; "What's new" | — | — | Not started |
+| later | The app's own interface in Urdu (not just bilingual content) | — | — | Not started; waiting on the two people who write the wording |
 
 The switch from Opus to Sonnet happens **after the migration 80 schema and the decision matrix
 are frozen** — from that point the remaining work is views, forms and parsers, which Sonnet does
@@ -768,3 +887,20 @@ it was answered 2026-09-17 (see its own entry below) and nothing here remains op
     honestly subjective. The human note next to the color is the actual point: motivation and
     alignment, not a KPI. Admin's "Project overview" roll-up needed no separate decision - it
     follows directly from Admin already reading every department's row (§2, throughout).
+12. **Languages and dates in the archive (§5.10), clarified 2026-09-21 and 2026-10-18:** the Owner's
+    rule is that every document in every language has its own record, grouped by `work_id`, and its
+    text is the body of that record, not a sidecar of another; and that `ref_date` is the date of
+    the Collegamento, so it equals the date in its title, the title being authoritative because two
+    independent sources agree with it on every comparable document. Both are statements about what
+    the archive's fields *mean*, decided by the Owner, not inferred from the data.
+13. **Terminology comes from the community and is decided by the Owner (§1.7, §5.11), 2026-09-20 and
+    2026-10-19:** a mining cycle reports attested forms and where they diverge from the glossary;
+    nothing is promoted automatically. The Owner promoted فوکولاری (2026-09-20), then ماریاپولس,
+    آئیڈیل (with the hamza) and the greeting ڈئیراسٹ (written joined) on 2026-10-19 — each time the
+    form the corpus already used. The Translate prompt is kept in the database as numbered versions,
+    changed by Admin only, because the terminology moved three times in two days. Translate stays
+    copy-and-paste — no key in the browser, and a draft always meets a human reviewer.
+14. **A sixth department, Archive & Data (§2.9), created 2026-09-20:** the Owner made it himself
+    from Options, as its lead, to give the cataloguing tools a home and the people who use them a
+    Team channel of their own to coordinate in. A department is data (§1.1), so no migration was
+    needed.
