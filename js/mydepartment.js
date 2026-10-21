@@ -5,11 +5,11 @@
 
 import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
-  nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET,
-} from './core.js?v=20261021070142';
-import { renderPolicySection } from './policy.js?v=20261021070142';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261021070142';
-import { renderApplicationsView } from './collaboration.js?v=20261021070142';
+  nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt,
+} from './core.js?v=20261021071253';
+import { renderPolicySection } from './policy.js?v=20261021071253';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261021071253';
+import { renderApplicationsView } from './collaboration.js?v=20261021071253';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -51,6 +51,7 @@ export async function renderMyDepartmentView(main) {
     ${selected === 'FORM' ? '<div id="mydept-formation-box"></div>' : ''}
     ${selected === 'COMM' ? '<div id="mydept-onboarding-box"></div>' : ''}
     ${selected === 'ARCHIVE' ? '<div id="mydept-archive-box"></div>' : ''}
+    ${selected === 'ARCHIVE' && isAdmin() ? '<div id="mydept-translation-box"></div>' : ''}
     <div id="mydept-policy-box"></div>`;
 
   if (codes.length > 1) {
@@ -101,6 +102,7 @@ export async function renderMyDepartmentView(main) {
   // buttons only, the tools themselves stay their own tabs/modules (window.__renderTab, same
   // escape hatch docdetail.js/onboarding.js already use to jump tabs without a circular import).
   if (selected === 'ARCHIVE') renderArchiveTools(document.getElementById('mydept-archive-box'));
+  if (selected === 'ARCHIVE' && isAdmin()) await renderTranslationPromptEditor(document.getElementById('mydept-translation-box'));
   await renderPolicySection(document.getElementById('mydept-policy-box'), { departmentFilter: selected });
 }
 
@@ -376,6 +378,65 @@ function renderArchiveTools(box) {
         </div>`).join('')}</div>
     </div>`;
   box.querySelectorAll('[data-open-tab]').forEach(el => el.addEventListener('click', () => window.__renderTab(el.dataset.openTab)));
+}
+
+// ---------- Translation prompt editor (106_translation_prompts.sql) ----------
+// The text the Translate button copies (openTranslatePopup in core.js). Admin-only to change, as
+// the table's RLS enforces. Saving never overwrites: it adds a version and the newest is the one in
+// force, so a past version is restored by loading it and saving it again - nothing is ever lost.
+async function renderTranslationPromptEditor(box) {
+  if (!box) return;
+  const [active, versions] = await Promise.all([
+    fetchActiveTranslationPrompt(),
+    withStatus(sb.from('translation_prompts').select('id,version,change_note,created_by_email,created_at').order('id', { ascending: false }).limit(20)),
+  ]);
+
+  box.innerHTML = `
+    <div class="panel">
+      <h2>Translation prompt <span class="hint">&mdash; what the Translate button copies</span></h2>
+      <p class="hint">Saving adds a new version; older ones are kept and the newest is the one in force. Keep it in step with the style guide: when the manual changes a canonical term, change it here and say in one line what changed.</p>
+      ${active ? '' : '<p class="hint" style="color:var(--danger, #b3261e);">No prompt in the database yet - run migration 106, or paste one below and save it as the first version.</p>'}
+      <div class="field"><label>Version</label><input id="tp-version" value="${esc(active ? active.version : '')}" placeholder="e.g. prompt-core v3 (2026-11-02, manual v3.5)"></div>
+      <div class="field"><label>Prompt</label><textarea id="tp-body" rows="18" style="width:100%;font-size:12.5px;">${esc(active ? active.body : '')}</textarea></div>
+      <div class="field"><label>What changed <span class="hint">(one line)</span></label><input id="tp-note"></div>
+      <div class="hint" id="tp-error"></div>
+      <div class="btn-row"><button class="btn" id="tp-save">Save as a new version</button></div>
+      <h3 style="margin-top:16px;">Versions <span class="hint">(newest first, last 20)</span></h3>
+      <div class="grid-wrap"><table class="grid">
+        <thead><tr><th>Version</th><th>Saved</th><th>By</th><th>What changed</th><th></th></tr></thead>
+        <tbody>${versions.length ? versions.map(v => `<tr>
+          <td title="${esc(v.version)}">${esc(v.version)}</td>
+          <td>${esc(String(v.created_at).slice(0, 10))}</td>
+          <td>${esc(v.created_by_email)}</td>
+          <td title="${esc(v.change_note)}">${esc(v.change_note)}</td>
+          <td><button class="btn secondary tp-load-btn" data-id="${v.id}" style="padding:2px 8px;">Load</button></td>
+        </tr>`).join('') : '<tr><td colspan="5" class="hint">No versions yet.</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+
+  box.querySelectorAll('.tp-load-btn').forEach(btn => btn.addEventListener('click', async () => {
+    const rows = await withStatus(sb.from('translation_prompts').select('version,body').eq('id', btn.dataset.id).limit(1));
+    if (!rows.length) return;
+    document.getElementById('tp-version').value = rows[0].version;
+    document.getElementById('tp-body').value = rows[0].body;
+    document.getElementById('tp-note').value = '';
+    document.getElementById('tp-error').textContent = 'Loaded into the editor - change the version label, then save to make it the one in force.';
+  }));
+
+  document.getElementById('tp-save').addEventListener('click', async () => {
+    const errBox = document.getElementById('tp-error');
+    errBox.textContent = '';
+    const version = document.getElementById('tp-version').value.trim();
+    const body = document.getElementById('tp-body').value.trim();
+    const change_note = document.getElementById('tp-note').value.trim() || null;
+    if (!version) { errBox.textContent = 'The version label is required.'; return; }
+    if (!body) { errBox.textContent = 'The prompt cannot be empty.'; return; }
+    if (active && body === active.body.trim() && version === active.version) { errBox.textContent = 'Nothing changed.'; return; }
+    if (active && version === active.version) { errBox.textContent = 'The prompt changed but the version label did not - change the label too, so two different prompts never share one.'; return; }
+    const { data: { user } } = await sb.auth.getUser();
+    await withStatus(sb.from('translation_prompts').insert({ version, body, change_note, created_by_email: user.email }), 'Saving...');
+    renderTranslationPromptEditor(box);
+  });
 }
 
 async function renderFormationPipeline(box) {
