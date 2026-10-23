@@ -9,6 +9,7 @@
   --accent-soft: #efe3d0;
   --danger: #a13a2e;
   --shadow: 0 1px 3px rgba(43,38,32,0.12);
+  --c-start: #955600; --c-library: #3B6B38; --c-myspace: #38489A; --c-share: #7A3868; --c-formation: #1D6A70; --sec-ink: #ffffff;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -22,17 +23,20 @@
     --accent-soft: #34291a;
     --danger: #e07a68;
     --shadow: 0 1px 3px rgba(0,0,0,0.4);
+    --c-start: #E9AB3C; --c-library: #8FC487; --c-myspace: #A3B2F2; --c-share: #DA9DCB; --c-formation: #7ECBCB; --sec-ink: #1a150d;
   }
 }
 :root[data-theme="dark"] {
   --bg: #1c1a17; --panel: #262320; --ink: #eee7da; --ink-soft: #a89d8b;
   --line: #3c372f; --accent: #c99a5f; --accent-ink: #201a10; --accent-soft: #34291a;
   --danger: #e07a68; --shadow: 0 1px 3px rgba(0,0,0,0.4);
+  --c-start: #E9AB3C; --c-library: #8FC487; --c-myspace: #A3B2F2; --c-share: #DA9DCB; --c-formation: #7ECBCB; --sec-ink: #1a150d;
 }
 :root[data-theme="light"] {
   --bg: #f4f1ea; --panel: #ffffff; --ink: #2b2620; --ink-soft: #6b6255;
   --line: #d8d0c0; --accent: #7a5230; --accent-ink: #ffffff; --accent-soft: #efe3d0;
   --danger: #a13a2e; --shadow: 0 1px 3px rgba(43,38,32,0.12);
+  --c-start: #955600; --c-library: #3B6B38; --c-myspace: #38489A; --c-share: #7A3868; --c-formation: #1D6A70; --sec-ink: #ffffff;
 }
 /* Noto Nastaliq Urdu (Google Fonts, OFL) - self-hosted rather than loaded from fonts.gstatic.com
    so the service worker (sw.js) can precache it like every other same-origin asset and it still
@@ -87,7 +91,7 @@ body {
   font-size: 13.5px;
 }
 .tab-btn:hover { background: var(--accent-soft); color: var(--ink); }
-.tab-btn.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.tab-btn.active { background: var(--sec, var(--accent)); color: var(--sec-ink, var(--accent-ink)); font-weight: 600; }
 
 #status-bar {
   margin-left: auto;
@@ -337,3 +341,12 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
   .split.detail-open .dash-back { display: block; position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 8px 0; }
   .split.detail-open .dash-back .btn { padding: 10px 16px; }
 }
+
+/* One colour per main section (palette A, chosen by the owner 2026-10-23): the active tab and the
+   top edge of the section's first panel. Sections without a colour keep the brown accent. */
+.tab-btn[data-tab="onboarding"], #main[data-section="onboarding"] { --sec: var(--c-start); }
+.tab-btn[data-tab="dashboard"], #main[data-section="dashboard"] { --sec: var(--c-library); }
+.tab-btn[data-tab="myspace"], #main[data-section="myspace"] { --sec: var(--c-myspace); }
+.tab-btn[data-tab="sharewithus"], #main[data-section="sharewithus"] { --sec: var(--c-share); }
+.tab-btn[data-tab="formation"], #main[data-section="formation"] { --sec: var(--c-formation); }
+#main[data-section] > .panel:first-child { border-top: 4px solid var(--sec, var(--line)); }
