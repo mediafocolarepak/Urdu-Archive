@@ -235,8 +235,28 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
 @media (max-width: 700px) {
   .dash-grid-wrap { display: none; }
   .dash-scroll-hint { display: none; }
-  .dash-cards { display: block; max-height: 70vh; overflow: auto; }
+  /* No inner scroll area on a phone: a list that scrolls inside a page that scrolls is two
+     scrolling regions under one thumb, and touches meant to scroll one ended up selecting a text. */
+  .dash-cards { display: block; }
 }
+/* Dashboard cards: only the title and the Details button open a text - the rest of the card
+   (meta line, empty space) is just there to be scrolled past. Scoped by id: My Space reuses
+   .dash-card and still opens on a tap anywhere. */
+#dash-cards .dash-card { cursor: default; }
+#dash-cards .dash-card:hover { background: none; }
+#dash-cards .dash-card.selected { background: var(--accent-soft); }
+.dash-card-open { cursor: pointer; }
+.dash-card-actions { margin-top: 6px; }
+.dash-card-actions .btn { padding: 8px 14px; font-size: 13px; }
+/* "Install the app" invitation (pwa-register.js) - sits above everything, signed in or not. */
+.install-banner {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 14px; background: var(--accent-soft); border-bottom: 1px solid var(--line);
+  font-size: 14px; color: var(--ink);
+}
+.install-banner-text { display: flex; flex-direction: column; gap: 2px; flex: 1 1 220px; }
+.install-banner-text span { font-size: 12.5px; color: var(--ink-soft); }
+.install-banner .btn { padding: 8px 16px; font-size: 14px; }
 .dash-card { padding: 10px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
 .dash-card:hover { background: var(--accent-soft); }
 .dash-card-title { font-weight: 600; font-size: 13.5px; margin-bottom: 3px; }
