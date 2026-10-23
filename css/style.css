@@ -324,3 +324,16 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
 }
 .toast-title { font-weight: 700; color: var(--accent); font-size: 13px; margin-bottom: 4px; }
 .toast-body { font-size: 12.5px; color: var(--ink); }
+
+/* Library on a phone: filters collapsed, and the detail is its own screen with a Back bar. */
+.dash-filters > summary { display: none; }
+.dash-back { display: none; }
+@media (max-width: 900px) {
+  .dash-filters > summary { display: block; cursor: pointer; font-weight: 600; padding: 10px 0; color: var(--accent); }
+  .dash-filters[open] > summary { padding-bottom: 6px; }
+  .split.split-wide-left > .dash-detail-col { display: none; }
+  .split.split-wide-left.detail-open > div:first-child { display: none; }
+  .split.split-wide-left.detail-open > .dash-detail-col { display: block; }
+  .split.detail-open .dash-back { display: block; position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 8px 0; }
+  .split.detail-open .dash-back .btn { padding: 10px 16px; }
+}
