@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20261021071253';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261021071253';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20261023101535';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261023101535';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
@@ -191,7 +191,16 @@ export async function refreshDashGrid() {
     refreshDashGrid();
   }));
 
-  const selectDoc = async id => { State.selectedDocId = id; await refreshDashGrid(); await renderDocDetail(State.selectedDocId); };
+  // Selecting only moves the highlight and loads the detail - it no longer re-queries and
+  // re-renders the whole list, which threw the reader back to a different scroll position. On a
+  // phone the detail sits below the list, so it is scrolled into view (a proper list -> detail
+  // screen with a Back button is the next step).
+  const selectDoc = async id => {
+    State.selectedDocId = id;
+    document.querySelectorAll('#dash-grid tbody tr, #dash-cards .dash-card').forEach(el => el.classList.toggle('selected', el.dataset.id === String(id)));
+    await renderDocDetail(State.selectedDocId);
+    if (window.matchMedia('(max-width: 900px)').matches) document.getElementById('doc-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   grid.querySelectorAll('tbody tr').forEach(tr => tr.addEventListener('click', () => selectDoc(tr.dataset.id)));
 
   // Card list is the mobile-friendly alternative to the wide, horizontally-scrolling table
@@ -202,13 +211,14 @@ export async function refreshDashGrid() {
     cardsBox.innerHTML = rows.map(r => {
       const star = r.is_preferred ? '&#9733; ' : '';
       const title = esc(r.title);
-      return `<div class="dash-card" data-id="${esc(r.document_id)}">
-        <div class="dash-card-title">${star}${title}</div>
+      return `<div class="dash-card ${String(r.document_id) === String(State.selectedDocId) ? 'selected' : ''}" data-id="${esc(r.document_id)}">
+        <div class="dash-card-title dash-card-open">${star}${title}</div>
         <div class="dash-card-meta">#${esc(r.document_id)} &middot; ${esc(labelOf(State.authors, r.author))} &middot; ${esc(r.place)} &middot; ${esc(labelOf(State.categories, r.category))}</div>
         ${r.pending_deletion ? '<span class="count-badge" style="padding:1px 6px;background:var(--danger);color:#fff;">pending deletion</span>' : ''}
+        <div class="dash-card-actions"><button class="btn secondary dash-card-open">Details &rsaquo;</button></div>
       </div>`;
     }).join('') || '<div class="empty-msg">No documents match the current filters.</div>';
-    cardsBox.querySelectorAll('.dash-card').forEach(card => card.addEventListener('click', () => selectDoc(card.dataset.id)));
+    cardsBox.querySelectorAll('.dash-card-open').forEach(el => el.addEventListener('click', () => selectDoc(el.closest('.dash-card').dataset.id)));
   }
 }
 
