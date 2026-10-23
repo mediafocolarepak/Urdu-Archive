@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20261023112121';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261023112121';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20261023213945';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261023213945';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
@@ -181,19 +181,21 @@ async function filterByCollection(rows) {
 const DASH_COL_WIDTHS = { document_id: 6, title: 24, original_title: 22, author: 8, place: 16, category: 24 };
 
 let listScrollY = 0;
+// The page itself never scrolls (#app is a fixed-height column); #main is the scroller.
+const scrollMainTo = y => { const m = document.getElementById('main'); if (m) m.scrollTop = y; };
 function openDocDetailScreen() {
   const split = document.querySelector('.split.split-wide-left');
-  if (!split || split.classList.contains('detail-open')) { window.scrollTo(0, 0); return; }
-  listScrollY = window.scrollY;
+  if (!split || split.classList.contains('detail-open')) { scrollMainTo(0); return; }
+  listScrollY = document.getElementById('main').scrollTop;
   split.classList.add('detail-open');
   history.pushState({ dashDetail: true }, '');
-  window.scrollTo(0, 0);
+  scrollMainTo(0);
 }
 function closeDocDetailScreen() {
   const split = document.querySelector('.split.split-wide-left');
   if (!split || !split.classList.contains('detail-open')) return;
   split.classList.remove('detail-open');
-  window.scrollTo(0, listScrollY);
+  scrollMainTo(listScrollY);
 }
 
 export async function refreshDashGrid() {
