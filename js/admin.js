@@ -1,5 +1,5 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange } from './core.js?v=20261023101535';
-import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261023101535';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange } from './core.js?v=20261023105154';
+import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261023105154';
 
 // ---------- Users ----------
 

@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20261023101535';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261023101535';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20261023105154';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261023105154';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
@@ -47,6 +47,8 @@ export async function renderDashboardView(main) {
         <input id="dash-search" placeholder="Search by title, tags, or Urdu text..." value="${esc(State.dashFilters.search)}">
         ${canWrite() && !isUser ? '<button class="btn" id="dash-new">+ New document</button>' : ''}
       </div>
+      <details class="dash-filters" id="dash-filters">
+      <summary id="dash-filters-summary">Filters</summary>
       <div class="field-grid" style="margin-bottom:10px;">
         <div class="field"><label>ID #</label><input id="dash-search-id" placeholder="ID #" value="${esc(State.dashFilters.idSearch)}"></div>
         <div class="field"><label>Category</label><select id="f-category">${optionsHtml(State.categories, State.dashFilters.category, true)}</select></div>
@@ -66,6 +68,7 @@ export async function renderDashboardView(main) {
           <input type="checkbox" id="f-pending" ${State.dashFilters.pendingOnly ? 'checked' : ''}> Show only documents marked for deletion
         </label>
       </div>`}
+      </details>
       ${isAdmin() ? '<div class="btn-row"><button class="btn secondary" id="dash-export-csv">Export CSV</button></div>' : ''}
       <div class="split split-wide-left">
         <div>
@@ -73,7 +76,10 @@ export async function renderDashboardView(main) {
           <p class="hint dash-scroll-hint" style="margin:4px 0 0;">&larr; Scroll sideways to see more columns &rarr;</p>
           <div class="dash-cards" id="dash-cards"></div>
         </div>
-        <div class="panel" id="doc-detail" style="margin:0;"></div>
+        <div class="dash-detail-col">
+          <div class="dash-back"><button class="btn secondary" id="dash-back">&lsaquo; Back to list</button></div>
+          <div class="panel" id="doc-detail" style="margin:0;"></div>
+        </div>
       </div>
     </div>
     <div class="panel">
@@ -81,6 +87,12 @@ export async function renderDashboardView(main) {
       <div id="dash-from-boards-list"><div class="hint">Loading...</div></div>
     </div>`;
 
+  // Filters are a collapsed section on a phone (the nine dropdowns pushed the list a full screen
+  // down); on a wide screen they stay open and the toggle is hidden by CSS.
+  document.getElementById('dash-filters').open = !window.matchMedia('(max-width: 900px)').matches;
+  document.getElementById('dash-back').addEventListener('click', () => { if (history.state && history.state.dashDetail) history.back(); else closeDocDetailScreen(); });
+  window.removeEventListener('popstate', closeDocDetailScreen);
+  window.addEventListener('popstate', closeDocDetailScreen);
   document.getElementById('dash-search').addEventListener('input', e => { State.dashFilters.search = e.target.value; refreshDashGrid(); });
   document.getElementById('dash-search-id').addEventListener('input', e => { State.dashFilters.idSearch = e.target.value; refreshDashGrid(); });
   if (canWrite() && !isUser) document.getElementById('dash-new').addEventListener('click', () => createNewDocument(refreshDashGrid));
@@ -163,6 +175,22 @@ async function filterByCollection(rows) {
 // Original title's 300px minimum (also style.css) no longer fits.
 const DASH_COL_WIDTHS = { document_id: 6, title: 24, original_title: 22, author: 8, place: 16, category: 24 };
 
+let listScrollY = 0;
+function openDocDetailScreen() {
+  const split = document.querySelector('.split.split-wide-left');
+  if (!split || split.classList.contains('detail-open')) { window.scrollTo(0, 0); return; }
+  listScrollY = window.scrollY;
+  split.classList.add('detail-open');
+  history.pushState({ dashDetail: true }, '');
+  window.scrollTo(0, 0);
+}
+function closeDocDetailScreen() {
+  const split = document.querySelector('.split.split-wide-left');
+  if (!split || !split.classList.contains('detail-open')) return;
+  split.classList.remove('detail-open');
+  window.scrollTo(0, listScrollY);
+}
+
 export async function refreshDashGrid() {
   const grid = document.getElementById('dash-grid');
   if (!grid) return;
@@ -171,6 +199,10 @@ export async function refreshDashGrid() {
   let rows = await withStatus((await buildDashQuery(false)).q.order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Searching...');
   rows = await filterByCollection(rows);
   document.getElementById('dash-count').textContent = rows.length;
+  const f = State.dashFilters;
+  const activeFilters = [f.idSearch, f.category, f.author, f.main_topic, f.workflow_status, f.recipient, f.source, f.collection, f.language, f.legacyOnly, f.pendingOnly].filter(Boolean).length;
+  const sum = document.getElementById('dash-filters-summary');
+  if (sum) sum.textContent = activeFilters ? `Filters (${activeFilters} active)` : 'Filters';
   const arrow = (col) => col !== State.dashSort.col ? '' : (State.dashSort.asc ? ' &uarr;' : ' &darr;');
   grid.innerHTML = `<colgroup>${Object.keys(cols).map(col => `<col style="width:${colWidths[col]}%">`).join('')}</colgroup>
     <thead><tr>${Object.entries(cols).map(([col, label]) =>
@@ -193,13 +225,13 @@ export async function refreshDashGrid() {
 
   // Selecting only moves the highlight and loads the detail - it no longer re-queries and
   // re-renders the whole list, which threw the reader back to a different scroll position. On a
-  // phone the detail sits below the list, so it is scrolled into view (a proper list -> detail
-  // screen with a Back button is the next step).
+  // phone the detail replaces the list as its own screen (Back button, and the phone's own back
+  // gesture, return to the list at the same place).
   const selectDoc = async id => {
     State.selectedDocId = id;
     document.querySelectorAll('#dash-grid tbody tr, #dash-cards .dash-card').forEach(el => el.classList.toggle('selected', el.dataset.id === String(id)));
     await renderDocDetail(State.selectedDocId);
-    if (window.matchMedia('(max-width: 900px)').matches) document.getElementById('doc-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (window.matchMedia('(max-width: 900px)').matches) openDocDetailScreen();
   };
   grid.querySelectorAll('tbody tr').forEach(tr => tr.addEventListener('click', () => selectDoc(tr.dataset.id)));
 
