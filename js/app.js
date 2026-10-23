@@ -1,25 +1,25 @@
-import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20261023112121';
-import { renderDashboardView } from './dashboard.js?v=20261023112121';
-import { renderReportsView } from './reports.js?v=20261023112121';
-import { renderHayatView } from './hayatindex.js?v=20261023112121';
-import { renderMatchReviewView } from './matchreview.js?v=20261023112121';
-import { renderBulkImportView } from './bulkimport.js?v=20261023112121';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20261023112121';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20261023112121';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20261023112121';
-import { renderHayatEditorView } from './hayateditor.js?v=20261023112121';
-import { renderInPageConverterView } from './inpageconverter.js?v=20261023112121';
-import { renderUserGuideView } from './userguide.js?v=20261023112121';
-import { renderJoinTeamView } from './collaboration.js?v=20261023112121';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20261023112121';
-import { renderMyProfileView } from './profile.js?v=20261023112121';
-import { renderMySpaceView } from './myspace.js?v=20261023112121';
-import { renderBoardsView } from './boards.js?v=20261023112121';
-import { renderFormationView } from './formation.js?v=20261023112121';
-import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261023112121';
-import { renderOnboardingView } from './onboarding.js?v=20261023112121';
-import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20261023112121';
-import { registerServiceWorker, initInstallBanner } from './pwa-register.js?v=20261023112121';
+import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20261023213945';
+import { renderDashboardView } from './dashboard.js?v=20261023213945';
+import { renderReportsView } from './reports.js?v=20261023213945';
+import { renderHayatView } from './hayatindex.js?v=20261023213945';
+import { renderMatchReviewView } from './matchreview.js?v=20261023213945';
+import { renderBulkImportView } from './bulkimport.js?v=20261023213945';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20261023213945';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20261023213945';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20261023213945';
+import { renderHayatEditorView } from './hayateditor.js?v=20261023213945';
+import { renderInPageConverterView } from './inpageconverter.js?v=20261023213945';
+import { renderUserGuideView } from './userguide.js?v=20261023213945';
+import { renderJoinTeamView } from './collaboration.js?v=20261023213945';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20261023213945';
+import { renderMyProfileView } from './profile.js?v=20261023213945';
+import { renderMySpaceView } from './myspace.js?v=20261023213945';
+import { renderBoardsView } from './boards.js?v=20261023213945';
+import { renderFormationView } from './formation.js?v=20261023213945';
+import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261023213945';
+import { renderOnboardingView } from './onboarding.js?v=20261023213945';
+import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20261023213945';
+import { registerServiceWorker, initInstallBanner } from './pwa-register.js?v=20261023213945';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -133,10 +133,55 @@ function initTopbar() {
   const tabs = getTabs();
   bar.innerHTML = tabs.map(t => `<button class="tab-btn" data-tab="${t.id}">${t.label}</button>`).join('');
   bar.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => renderTab(b.dataset.tab)));
+  initBottomNav(tabs);
+}
+
+// Bottom navigation bar for phones (owner's request 2026-10-23): Users and Operators get their four
+// most-used sections pinned at the bottom plus "More" for the rest; Coordinators and Admins work
+// mostly from a computer and keep the top bar only. Shown by CSS under 900px; the top tab strip is
+// hidden there for these roles. The tab lists above stay the single source of what each role may open.
+const BOTTOM_NAV = {
+  user: ['onboarding', 'dashboard', 'myspace', 'sharewithus'],
+  operator: ['dashboard', 'mydepartment', 'tasks', 'myspace'],
+};
+const NAV_ICONS = {
+  onboarding: 'M3 11l9-8 9 8M5 10v10h14V10',
+  dashboard: 'M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3zM4 17a3 3 0 0 1 3-3h12',
+  myspace: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0',
+  sharewithus: 'M4 5h16v11H9l-5 4z',
+  mydepartment: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20a6 6 0 0 1 12 0M17 11a3 3 0 1 0 0-6M17 14a6 6 0 0 1 4 6',
+  tasks: 'M4 6h3M4 12h3M4 18h3M10 6h10M10 12h10M10 18h10',
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
+};
+let navMoreIds = [];
+function initBottomNav(tabs) {
+  const nav = document.getElementById('bottom-nav');
+  const wanted = BOTTOM_NAV[State.currentRole];
+  document.body.classList.toggle('has-bottom-nav', !!wanted);
+  if (!wanted) { nav.innerHTML = ''; return; }
+  const pinned = wanted.map(id => tabs.find(t => t.id === id)).filter(Boolean);
+  const more = tabs.filter(t => !pinned.some(p => p.id === t.id));
+  navMoreIds = more.map(t => t.id);
+  const icon = id => `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="${id === 'more' ? 3 : 2}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${NAV_ICONS[id] || NAV_ICONS.more}"/></svg>`;
+  nav.innerHTML = pinned.map(t => `<button class="bn-btn" data-tab="${t.id}">${icon(t.id)}<span>${t.label}</span></button>`).join('') +
+    (more.length ? `<button class="bn-btn" id="bn-more" data-tab="more">${icon('more')}<span>More</span></button>` : '');
+  nav.querySelectorAll('.bn-btn[data-tab]:not(#bn-more)').forEach(b => b.addEventListener('click', () => renderTab(b.dataset.tab)));
+  document.getElementById('bn-more')?.addEventListener('click', () => openMoreSheet(more));
+}
+function openMoreSheet(more) {
+  document.getElementById('bn-more-sheet')?.remove();
+  const backdrop = document.createElement('div');
+  backdrop.id = 'bn-more-sheet';
+  backdrop.className = 'overlay-backdrop';
+  backdrop.innerHTML = `<div class="panel overlay-panel bn-sheet"><h2 style="margin-top:0;">More</h2>${more.map(t => `<button class="btn secondary bn-sheet-item" data-tab="${t.id}">${t.label}</button>`).join('')}</div>`;
+  document.body.appendChild(backdrop);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+  backdrop.querySelectorAll('.bn-sheet-item').forEach(b => b.addEventListener('click', () => { backdrop.remove(); renderTab(b.dataset.tab); }));
 }
 
 function renderTab(id) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
+  document.querySelectorAll('.bn-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === id || (b.dataset.tab === 'more' && navMoreIds.includes(id))));
   const main = document.getElementById('main');
   main.dataset.section = id;
   main.innerHTML = '<div class="empty-msg">Loading...</div>';
