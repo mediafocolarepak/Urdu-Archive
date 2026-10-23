@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20261023105154';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261023105154';
+import { sb, State, esc, labelOf, optionsHtml, canWrite, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20261023110641';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261023110641';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
@@ -51,14 +51,14 @@ export async function renderDashboardView(main) {
       <summary id="dash-filters-summary">Filters</summary>
       <div class="field-grid" style="margin-bottom:10px;">
         <div class="field"><label>ID #</label><input id="dash-search-id" placeholder="ID #" value="${esc(State.dashFilters.idSearch)}"></div>
-        <div class="field"><label>Category</label><select id="f-category">${optionsHtml(State.categories, State.dashFilters.category, true)}</select></div>
-        <div class="field"><label>Author</label><select id="f-author">${optionsHtml(State.authors, State.dashFilters.author, true)}</select></div>
-        <div class="field"><label>Main topic</label><select id="f-main_topic">${optionsHtml(State.mainTopics, State.dashFilters.main_topic, true)}</select></div>
-        ${isUser ? '' : `<div class="field"><label>Workflow status</label><select id="f-status">${optionsHtml(State.statuses, State.dashFilters.workflow_status, true)}</select></div>`}
-        <div class="field"><label>Recipient</label><select id="f-recipient">${optionsHtml(State.recipients, State.dashFilters.recipient, true)}</select></div>
-        <div class="field"><label>Source</label><select id="f-source">${optionsHtml(State.sources, State.dashFilters.source, true)}</select></div>
-        <div class="field"><label>Collection</label><select id="f-collection">${optionsHtml(State.collections, State.dashFilters.collection, true)}</select></div>
-        <div class="field"><label>Language</label><select id="f-language">${optionsHtml(State.langs, State.dashFilters.language, true)}</select></div>
+        <div class="field"><label>Category</label><select id="f-category">${optionsHtml(State.categories, State.dashFilters.category, true, 'All')}</select></div>
+        <div class="field"><label>Author</label><select id="f-author">${optionsHtml(State.authors, State.dashFilters.author, true, 'All')}</select></div>
+        <div class="field"><label>Main topic</label><select id="f-main_topic">${optionsHtml(State.mainTopics, State.dashFilters.main_topic, true, 'All')}</select></div>
+        ${isUser ? '' : `<div class="field"><label>Workflow status</label><select id="f-status">${optionsHtml(State.statuses, State.dashFilters.workflow_status, true, 'All')}</select></div>`}
+        <div class="field"><label>Recipient</label><select id="f-recipient">${optionsHtml(State.recipients, State.dashFilters.recipient, true, 'All')}</select></div>
+        <div class="field"><label>Source</label><select id="f-source">${optionsHtml(State.sources, State.dashFilters.source, true, 'All')}</select></div>
+        <div class="field"><label>Collection</label><select id="f-collection">${optionsHtml(State.collections, State.dashFilters.collection, true, 'All')}</select></div>
+        <div class="field"><label>Language</label><select id="f-language">${optionsHtml(State.langs, State.dashFilters.language, true, 'All')}</select></div>
       </div>
       ${isUser ? '' : `<div class="field" style="display:flex;flex-wrap:wrap;gap:6px 24px;">
         <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:12.5px;">
@@ -68,6 +68,7 @@ export async function renderDashboardView(main) {
           <input type="checkbox" id="f-pending" ${State.dashFilters.pendingOnly ? 'checked' : ''}> Show only documents marked for deletion
         </label>
       </div>`}
+      <div class="btn-row"><button class="btn secondary" id="dash-clear-filters">Clear all filters and search</button></div>
       </details>
       ${isAdmin() ? '<div class="btn-row"><button class="btn secondary" id="dash-export-csv">Export CSV</button></div>' : ''}
       <div class="split split-wide-left">
@@ -90,6 +91,10 @@ export async function renderDashboardView(main) {
   // Filters are a collapsed section on a phone (the nine dropdowns pushed the list a full screen
   // down); on a wide screen they stay open and the toggle is hidden by CSS.
   document.getElementById('dash-filters').open = !window.matchMedia('(max-width: 900px)').matches;
+  document.getElementById('dash-clear-filters').addEventListener('click', () => {
+    Object.assign(State.dashFilters, { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', collection: '', recipient: '', source: '', language: '', legacyOnly: false, pendingOnly: false });
+    renderDashboardView(main);
+  });
   document.getElementById('dash-back').addEventListener('click', () => { if (history.state && history.state.dashDetail) history.back(); else closeDocDetailScreen(); });
   window.removeEventListener('popstate', closeDocDetailScreen);
   window.addEventListener('popstate', closeDocDetailScreen);

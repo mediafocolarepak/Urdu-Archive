@@ -419,8 +419,8 @@ export const SessionCache = {
 };
 
 export function labelOf(list, code) { const f = list.find(x => x[0] === code); return f ? f[1] : (code || ''); }
-export function optionsHtml(list, value, allowEmpty) {
-  return (allowEmpty ? '<option value=""></option>' : '') +
+export function optionsHtml(list, value, allowEmpty, emptyLabel = '') {
+  return (allowEmpty ? `<option value="">${emptyLabel}</option>` : '') +
     list.map(([c, l]) => `<option value="${c}" ${c === value ? 'selected' : ''}>${l}</option>`).join('');
 }
 
