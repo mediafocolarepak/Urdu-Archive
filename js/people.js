@@ -8,7 +8,7 @@
 
 import {
   sb, State, esc, withStatus, isAdmin, isDeptMember, isDeptLead, labelOf, optionsHtml,
-} from './core.js?v=20261027095959';
+} from './core.js?v=20261027102045';
 
 const STANDING_BADGE = {
   active: '',

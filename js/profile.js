@@ -5,7 +5,7 @@
 // reviewed. Deliberately does not import from collaboration.js (project convention: modules
 // only import from core.js), so the skill-chip rendering is duplicated here in small form.
 
-import { sb, State, esc, withStatus, labelOf, optionsHtml } from './core.js?v=20261027095959';
+import { sb, State, esc, withStatus, labelOf, optionsHtml } from './core.js?v=20261027102045';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -41,7 +41,10 @@ export async function renderMyProfileView(main) {
 
   main.innerHTML = `
     <div class="panel" style="max-width:780px;margin:0 auto;">
-      <h2>My Profile</h2>
+      <div class="btn-row" style="justify-content:space-between;align-items:center;margin:0 0 8px;">
+        <h2 style="margin:0;">My Profile</h2>
+        <button class="btn secondary" id="profile-signout">Sign out</button>
+      </div>
       <div class="field-grid wide" style="margin-bottom:16px;">
         <div class="field"><label>Full name</label><div style="font-size:13.5px;padding:4px 0;">${esc(profile.full_name) || '—'}</div></div>
         <div class="field"><label>Email</label><div style="font-size:13.5px;padding:4px 0;">${esc(user.email)}</div></div>
@@ -65,6 +68,9 @@ export async function renderMyProfileView(main) {
       </div>
     </div>`;
 
+  // Sign out is also in the top bar, which on a phone is easy to miss (owner's report 2026-10-27);
+  // this clicks that same button so there is one sign-out routine (core.js), not two.
+  document.getElementById('profile-signout').addEventListener('click', () => document.getElementById('logout-btn').click());
   renderDemographics(document.getElementById('profile-demographics'), profile, user.id, main);
   if (role === 'operator') {
     renderEditable(document.getElementById('profile-editable'), profile, skillList, storedSkills, otherSkills, user.id, main);
