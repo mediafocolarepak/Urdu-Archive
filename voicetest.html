@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice test</title>
+<style>
+  :root { --bg:#f4f1ea; --panel:#fff; --ink:#2b2620; --soft:#6b6255; --line:#d8d0c0; --accent:#7a5230; --accent-ink:#fff; --good:#2f6b34; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1c1a17; --panel:#262320; --ink:#eee7da; --soft:#a89d8b; --line:#3c372f; --accent:#c99a5f; --accent-ink:#201a10; --good:#8fc487; color-scheme: dark; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 "Segoe UI", Tahoma, Arial, sans-serif; padding: 16px; }
+  main { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  h1 { font-size: 22px; margin: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  label { font-weight: 600; font-size: 14px; }
+  textarea, select, input[type=range] { width: 100%; font: inherit; }
+  textarea { min-height: 140px; padding: 8px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; line-height: 1.9; }
+  select { padding: 10px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; }
+  button { font: inherit; font-weight: 600; min-height: 48px; padding: 0 18px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+  button.secondary { background: transparent; color: var(--accent); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .hint { color: var(--soft); font-size: 14px; }
+  .ok { color: var(--good); font-weight: 600; }
+  pre { margin: 0; white-space: pre-wrap; font-size: 13px; background: var(--bg); padding: 8px; border-radius: 6px; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Voice test</h1>
+  <p class="hint">A short test for the Focolare Urdu Archive: does this phone or computer have a voice that reads Urdu? Nothing is sent anywhere and nothing is saved. It takes about two minutes.</p>
+
+  <div class="panel">
+    <strong>1. What this device can do</strong>
+    <div id="status" class="hint">Checking...</div>
+  </div>
+
+  <div class="panel">
+    <strong>2. Listen</strong>
+    <label for="text">Paste a few lines of Urdu text from the Archive (open a text, press "Open editable text", select a paragraph, Copy)</label>
+    <textarea id="text" dir="auto" placeholder="Paste here"></textarea>
+    <label for="voice">Voice</label>
+    <select id="voice"></select>
+    <label for="rate">Speed: <span id="rate-val">1.0</span></label>
+    <input type="range" id="rate" min="0.5" max="1.5" step="0.1" value="0.9">
+    <div class="row">
+      <button id="speak">Listen</button>
+      <button id="stop" class="secondary">Stop</button>
+    </div>
+    <div class="hint">If you hear nothing, check that the phone is not on silent and the volume is up.</div>
+  </div>
+
+  <div class="panel">
+    <strong>3. Send the result</strong>
+    <div class="hint">After listening, answer in the message to Alessandro: could you understand the Urdu? Were words wrong or odd? Were names like Mariapoli or Chiara read correctly? Then press Copy and paste the report below into the same message.</div>
+    <pre id="report"></pre>
+    <div class="row"><button id="copy" class="secondary">Copy the report</button></div>
+    <div id="copied" class="ok" hidden>Copied.</div>
+  </div>
+</main>
+<script>
+(function () {
+  var synth = window.speechSynthesis;
+  var statusEl = document.getElementById('status');
+  var voiceSel = document.getElementById('voice');
+  var voices = [];
+
+  function isUrdu(v) { return /^ur([-_]|$)/i.test(v.lang); }
+
+  function describe(v) { return v.name + ' (' + v.lang + (v.localService ? ', on the device' : ', online') + ')'; }
+
+  function refresh() {
+    voices = synth ? synth.getVoices() : [];
+    var urdu = voices.filter(isUrdu);
+    if (!synth) {
+      statusEl.innerHTML = '<span style="color:#b3261e;font-weight:600">This browser cannot read text aloud.</span> Try another browser.';
+    } else if (!voices.length) {
+      statusEl.textContent = 'No voices found yet. Wait a few seconds, or reload the page.';
+    } else if (urdu.length) {
+      statusEl.innerHTML = '<span class="ok">An Urdu voice was found:</span> ' + urdu.map(describe).join('; ');
+    } else {
+      statusEl.innerHTML = '<strong>No Urdu voice found.</strong> ' + voices.length + ' voices exist, none for Urdu. You can still try another voice below (Hindi or Arabic voices read Urdu words badly, so judge by ear).';
+    }
+    voiceSel.innerHTML = '';
+    var ordered = urdu.concat(voices.filter(function (v) { return !isUrdu(v); }));
+    ordered.forEach(function (v) {
+      var o = document.createElement('option');
+      o.value = voices.indexOf(v);
+      o.textContent = describe(v);
+      voiceSel.appendChild(o);
+    });
+    buildReport();
+  }
+
+  function buildReport() {
+    var urdu = voices.filter(isUrdu);
+    var lines = [
+      'Voice test report',
+      'Browser: ' + navigator.userAgent,
+      'Reads aloud: ' + (synth ? 'yes' : 'no'),
+      'Voices on this device: ' + voices.length,
+      'Urdu voices: ' + (urdu.length ? urdu.map(describe).join('; ') : 'none'),
+      'Voice used for the test: ' + (voiceSel.selectedOptions[0] ? voiceSel.selectedOptions[0].textContent : 'none')
+    ];
+    document.getElementById('report').textContent = lines.join('\n');
+  }
+
+  document.getElementById('rate').addEventListener('input', function (e) { document.getElementById('rate-val').textContent = Number(e.target.value).toFixed(1); });
+  voiceSel.addEventListener('change', buildReport);
+
+  document.getElementById('speak').addEventListener('click', function () {
+    if (!synth) return;
+    var text = document.getElementById('text').value.trim();
+    if (!text) { alert('Paste some text first.'); return; }
+    synth.cancel();
+    var u = new SpeechSynthesisUtterance(text);
+    var v = voices[Number(voiceSel.value)];
+    if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = 'ur-PK'; }
+    u.rate = Number(document.getElementById('rate').value);
+    synth.speak(u);
+  });
+  document.getElementById('stop').addEventListener('click', function () { if (synth) synth.cancel(); });
+
+  document.getElementById('copy').addEventListener('click', function () {
+    var text = document.getElementById('report').textContent;
+    var done = function () { var c = document.getElementById('copied'); c.hidden = false; setTimeout(function () { c.hidden = true; }, 2500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { selectReport(); });
+    } else { selectReport(); }
+  });
+  function selectReport() {
+    var r = document.createRange(); r.selectNodeContents(document.getElementById('report'));
+    var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    alert('Press and hold the selected text, then choose Copy.');
+  }
+
+  if (synth) { synth.addEventListener ? synth.addEventListener('voiceschanged', refresh) : (synth.onvoiceschanged = refresh); }
+  refresh();
+  setTimeout(refresh, 1200);
+})();
+</script>
+</body>
+</html>

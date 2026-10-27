@@ -8,7 +8,7 @@ import {
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup,
-} from './core.js?v=20261023213945';
+} from './core.js?v=20261027095959';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -111,6 +111,60 @@ function openOriginalTextPopup(doc, originalText) {
   });
 }
 
+// "Read (large print)" (owner's request 2026-10-27: many members, especially older ones, struggle
+// to read the text at normal size). A full-screen reading view of the same document_texts body, with
+// big type, generous line spacing and a three-way contrast choice, none of which needs the user to
+// pinch-zoom. The size and contrast are remembered per device (localStorage, in try/catch: the view
+// works without it). Read-only - editing and copying stay in "Open editable text".
+const READING_SIZES = [18, 22, 26, 32, 40, 48];
+const READING_MODES = ['normal', 'dark', 'light'];
+const READING_MODE_LABELS = { normal: 'Colours: app', dark: 'Colours: white on black', light: 'Colours: black on white' };
+function loadReadingPrefs() {
+  try { const p = JSON.parse(localStorage.getItem('readingPrefs') || '{}'); return { size: READING_SIZES.includes(p.size) ? p.size : 26, mode: READING_MODES.includes(p.mode) ? p.mode : 'normal' }; }
+  catch { return { size: 26, mode: 'normal' }; }
+}
+function saveReadingPrefs(prefs) { try { localStorage.setItem('readingPrefs', JSON.stringify(prefs)); } catch { /* private mode: not remembered */ } }
+
+function openReadingView(doc, text) {
+  document.getElementById('reading-view')?.remove();
+  const prefs = loadReadingPrefs();
+  const view = document.createElement('div');
+  view.id = 'reading-view';
+  view.className = 'reading-view';
+  view.setAttribute('role', 'dialog');
+  view.setAttribute('aria-label', 'Reading view');
+  view.innerHTML = `
+    <div class="reading-toolbar">
+      <button class="btn secondary" id="rv-smaller" aria-label="Smaller text">A&minus;</button>
+      <button class="btn secondary" id="rv-bigger" aria-label="Bigger text">A+</button>
+      <button class="btn secondary" id="rv-mode"></button>
+      <button class="btn" id="rv-close">Close</button>
+    </div>
+    <div class="reading-body" id="rv-scroll">
+      <div class="reading-title">${esc(doc.en_title)}</div>
+      ${doc.ur_title ? `<div class="reading-title" dir="auto">${esc(doc.ur_title)}</div>` : ''}
+      <div id="rv-text" class="reading-text" dir="auto">${esc(text.body)}</div>
+    </div>`;
+  document.body.appendChild(view);
+  const textEl = document.getElementById('rv-text');
+  const apply = () => {
+    view.dataset.mode = prefs.mode;
+    textEl.style.fontSize = prefs.size + 'px';
+    document.getElementById('rv-mode').textContent = READING_MODE_LABELS[prefs.mode];
+    document.getElementById('rv-smaller').disabled = prefs.size === READING_SIZES[0];
+    document.getElementById('rv-bigger').disabled = prefs.size === READING_SIZES[READING_SIZES.length - 1];
+    saveReadingPrefs(prefs);
+  };
+  const close = () => { view.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  document.getElementById('rv-close').addEventListener('click', close);
+  document.getElementById('rv-smaller').addEventListener('click', () => { prefs.size = READING_SIZES[Math.max(0, READING_SIZES.indexOf(prefs.size) - 1)]; apply(); });
+  document.getElementById('rv-bigger').addEventListener('click', () => { prefs.size = READING_SIZES[Math.min(READING_SIZES.length - 1, READING_SIZES.indexOf(prefs.size) + 1)]; apply(); });
+  document.getElementById('rv-mode').addEventListener('click', () => { prefs.mode = READING_MODES[(READING_MODES.indexOf(prefs.mode) + 1) % READING_MODES.length]; apply(); });
+  apply();
+}
+
 function openDocTextPopup(doc, text) {
   document.getElementById('doc-text-popup')?.remove();
   const backdrop = document.createElement('div');
@@ -157,6 +211,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
       </div>
     </div>
     <div class="btn-row" style="margin:0 0 8px;">
+      ${text ? '<button class="btn" id="doc-text-read" style="flex:0 0 auto;white-space:nowrap;">Read (large print)</button>' : ''}
       ${text ? '<button class="btn secondary" id="doc-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Open editable text</button>' : ''}
       ${originalText ? '<button class="btn secondary" id="doc-original-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Original text (Italian)</button>' : ''}
       ${canWrite() ? '<button class="btn secondary" id="doc-translate" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Translate</button>' : ''}
@@ -188,6 +243,8 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     body.style.display = isOpen ? 'none' : 'block';
     textToggle.textContent = isOpen ? 'Show' : 'Hide';
   });
+  const textRead = document.getElementById('doc-text-read');
+  if (textRead) textRead.addEventListener('click', () => openReadingView(doc, text));
   const textOpen = document.getElementById('doc-text-open');
   if (textOpen) textOpen.addEventListener('click', () => openDocTextPopup(doc, text));
   const originalTextOpen = document.getElementById('doc-original-text-open');
