@@ -6,10 +6,10 @@
 import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
   nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt,
-} from './core.js?v=20261027102045';
-import { renderPolicySection } from './policy.js?v=20261027102045';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261027102045';
-import { renderApplicationsView } from './collaboration.js?v=20261027102045';
+} from './core.js?v=20261028182632';
+import { renderPolicySection } from './policy.js?v=20261028182632';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261028182632';
+import { renderApplicationsView } from './collaboration.js?v=20261028182632';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -813,13 +813,20 @@ async function renderRoster(code) {
   const box = document.getElementById('mydept-roster-box');
   const canManage = isAdmin() || isDeptLead(code);
   const memberRows = await withStatus(sb.from('department_members').select('user_id,is_lead').eq('department_code', code));
-  const profileRows = memberRows.length
-    ? await withStatus(sb.from('user_profiles').select('user_id,email,full_name').in('user_id', memberRows.map(r => r.user_id)))
-    : [];
+  // Names come from department_roster() (migration 107), which any member of the department can
+  // call; user_profiles itself is readable only by Coordinator+Admin, so a plain Operator used to see
+  // "(no name)" and the lead's raw id. Emails still come from user_profiles and are simply absent for
+  // people who may not read them.
+  const [rosterRows, profileRows] = memberRows.length ? await Promise.all([
+    // If migration 107 has not been run yet the call fails; the panel then just shows what it did before.
+    withStatus(sb.rpc('department_roster', { p_dept: code })).catch(() => []),
+    withStatus(sb.from('user_profiles').select('user_id,email,full_name').in('user_id', memberRows.map(r => r.user_id))),
+  ]) : [[], []];
   const profileByUid = {};
   for (const p of profileRows) profileByUid[p.user_id] = p;
+  for (const r of rosterRows) profileByUid[r.user_id] = { ...profileByUid[r.user_id], user_id: r.user_id, full_name: r.full_name || profileByUid[r.user_id]?.full_name };
   const lead = memberRows.find(r => r.is_lead);
-  const leadName = lead ? (profileByUid[lead.user_id]?.full_name || profileByUid[lead.user_id]?.email || lead.user_id) : '(none yet)';
+  const leadName = lead ? (profileByUid[lead.user_id]?.full_name || profileByUid[lead.user_id]?.email || '(name not set)') : '(none yet)';
 
   box.innerHTML = `
     <div class="panel">
