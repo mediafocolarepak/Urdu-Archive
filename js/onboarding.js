@@ -5,7 +5,7 @@
 // its own editor in My Department -> Communication (see renderOnboardingCardsManager in
 // mydepartment.js) - this module only ever reads onboarding_cards, never writes it.
 
-import { sb, State, esc, withStatus, ONBOARDING_MEDIA_BUCKET, HIDDEN_DOC_STATUSES, videoLinkHtml, mountAudioPlayer } from './core.js?v=20261105183254';
+import { sb, State, esc, withStatus, ONBOARDING_MEDIA_BUCKET, HIDDEN_DOC_STATUSES, videoLinkHtml, mountAudioPlayer } from './core.js?v=20261105214210';
 
 const thumbnailUrl = path => path ? sb.storage.from(ONBOARDING_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl : null;
 
@@ -67,7 +67,7 @@ async function findWordOfMonth() {
     .filter(d => !HIDDEN_DOC_STATUSES.includes(d.workflow_status)).sort(urduFirst);
   const video = media.find(d => d.media_type === 'VID' && d.external_url);
   const audioDoc = media.find(d => d.media_type === 'AUD');
-  const reading = audioDoc ? (await withStatus(sb.from('audio_readings').select('path,reader_name').eq('document_id', audioDoc.document_id)))[0] : null;
+  const reading = audioDoc ? (await withStatus(sb.from('audio_readings').select('document_id,path,reader_name').eq('document_id', audioDoc.document_id)))[0] : null;
   return { doc, month, isCurrent: month === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`, video, reading: reading && reading.path ? reading : null };
 }
 

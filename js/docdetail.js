@@ -8,8 +8,8 @@ import {
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
-  ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, videoLinkHtml, mountAudioPlayer,
-} from './core.js?v=20261105183254';
+  ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, videoLinkHtml, mountAudioPlayer, eraseMyAudioFiles,
+} from './core.js?v=20261105214210';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -223,10 +223,13 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
       ${text ? '<button class="btn" id="doc-text-read" style="flex:0 0 auto;white-space:nowrap;">Read (large print)</button>' : ''}
       ${text ? '<button class="btn secondary" id="doc-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Open editable text</button>' : ''}
       ${originalText ? '<button class="btn secondary" id="doc-original-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Original text (Italian)</button>' : ''}
+      <span id="doc-read-aloud" style="display:contents;"></span>
       ${canWrite() ? '<button class="btn secondary" id="doc-translate" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Translate</button>' : ''}
+      ${isAdmin() && ownReading ? '<button class="btn secondary" id="doc-reader-name" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Correct the name</button><button class="btn danger" id="doc-erase-reading" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Erase the recording</button>' : ''}
       <button class="btn secondary" id="doc-report-problem" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Report a problem</button>
     </div>
     <div id="doc-media-player"></div>
+    ${media.some(m => m.media_type === 'AUD' && String(m.source_document_id) === String(doc.document_id) && m.source_text_at && text?.updated_at > m.source_text_at) ? '<div class="hint">The text has been corrected since it was read aloud, so the two may differ.</div>' : ''}
     <div class="field" style="font-size:13px;line-height:1.7;">
       <div style="font-weight:600;font-size:14px;margin-bottom:2px;">${esc(doc.en_title) || '<span class="hint">(no title)</span>'}</div>
       ${doc.ur_title ? `<div dir="auto" style="font-size:14px;margin-bottom:6px;">${esc(doc.ur_title)}</div>` : ''}
@@ -249,6 +252,33 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
   const mediaPlayer = document.getElementById('doc-media-player');
   box.querySelectorAll('.doc-listen').forEach(btn => btn.addEventListener('click', () => mountAudioPlayer(mediaPlayer, media[parseInt(btn.dataset.i, 10)], true)));
   if (ownReading) mountAudioPlayer(mediaPlayer, ownReading, false);
+  // Offered only where it can really start: the database decides, and most texts simply don't show it.
+  if (text && (!doc.media_type || doc.media_type === 'DOC')) {
+    sb.rpc('reading_state', { p_document_id: doc.document_id }).then(({ data }) => {
+      const slot = document.getElementById('doc-read-aloud');
+      if (!slot || !data || !['available', 'mine', 'rerecord'].includes(data.state)) return;
+      slot.innerHTML = `<button class="btn secondary" id="doc-read-aloud-btn" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">&#127908; ${data.state === 'rerecord' ? 'Record again' : 'Read aloud'}</button>`;
+      document.getElementById('doc-read-aloud-btn').addEventListener('click', () => {
+        State.readingTarget = doc.document_id;
+        window.__renderTab('readings');
+      });
+    }, () => {});
+  }
+  document.getElementById('doc-reader-name')?.addEventListener('click', async () => {
+    const name = prompt('The name to show next to this recording:', ownReading.reader_name || '');
+    if (name === null) return;
+    await withStatus(sb.rpc('set_reading_reader', { p_document_id: doc.document_id, p_name: name }), 'Saving...');
+    await renderDocDetail(doc.document_id);
+  });
+  document.getElementById('doc-erase-reading')?.addEventListener('click', async () => {
+    const reason = prompt('Why is this recording being erased? It disappears at once and the file cannot be recovered.');
+    if (reason === null) return;
+    await withStatus(sb.rpc('erase_reading', { p_document_id: doc.document_id, p_reason: reason }), 'Erasing...');
+    await eraseMyAudioFiles();
+    State.selectedDocId = null;
+    await onAfterDocChange();
+    await renderDocDetail(null);
+  });
   const textToggle = document.getElementById('doc-text-toggle');
   if (textToggle) textToggle.addEventListener('click', () => {
     const body = document.getElementById('doc-text-body');
@@ -548,7 +578,7 @@ async function fetchDocMedia(doc, siblings) {
   const list = [...picked.values()];
   const audioIds = list.filter(d => d.media_type === 'AUD').map(d => d.document_id);
   if (!audioIds.length) return list;
-  const readings = await withStatus(sb.from('audio_readings').select('document_id,path,reader_name').in('document_id', audioIds));
+  const readings = await withStatus(sb.from('audio_readings').select('document_id,path,reader_name,source_document_id,source_text_at').in('document_id', audioIds));
   const byDoc = new Map(readings.map(r => [String(r.document_id), r]));
   return list
     .map(d => (d.media_type === 'AUD' ? { ...d, ...byDoc.get(String(d.document_id)) } : d))
@@ -616,7 +646,7 @@ export async function renderDocDetail(id, opts = {}) {
   const siblings = await fetchWorkSiblings(doc.work_id);
   const media = await fetchDocMedia(doc, siblings);
   const docCollections = await getCollectionsForDocument(doc.document_id);
-  const textRows = await withStatus(sb.from('document_texts').select('body,char_count,reviewed').eq('document_id', doc.document_id));
+  const textRows = await withStatus(sb.from('document_texts').select('body,char_count,reviewed,updated_at').eq('document_id', doc.document_id));
   const text = textRows[0] || null;
   // Original-language text (migration 101) - Italian for now, see docdetail.js's
   // openOriginalTextPopup. Absent for the vast majority of documents until the owner's Google
