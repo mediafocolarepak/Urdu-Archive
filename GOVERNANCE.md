@@ -1,7 +1,11 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.12 (2026-11-05) — decisions taken by the Owner; all of phases 1 through 3 are built and
-merged (migrations 80–112). Team comments welcome, changes go through a new version.**
+**Status: v1.13 (2026-11-05) — decisions taken by the Owner; all of phases 1 through 3 are built and
+merged (migrations 80–113). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.13:** video links and audio readings (§5.15, migration 113). A proposal can now
+hold a video or a recording alongside the text, a document shows Listen and Watch video buttons, and Start
+Here has a one-tap Word of Life of the month.
 
 **What changed in v1.12:** the one door for new content (§5.14, migration 112). Anyone on the team
 fills in a proposal; a Revisor or Coordinator approves, and that alone publishes it. Whoever proposed
@@ -856,7 +860,30 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
   a task (Owner's decision).
 - **Not yet part of this door:** a task correction keeps its own path, with Admin's final decision (row 12),
   since credits depend on it. Promoting a board post still creates a hidden draft outside the queue,
-  until the Boards change. The form takes text and PDF; audio and video links come next.
+  until the Boards change.
+
+### 5.15 Video and audio (migration 113)
+
+- **Video is a link, never a file:** https, YouTube or Google Drive only, enforced by the database. The
+  original stays on Drive, so the archive doesn't depend on YouTube. Like any link, it also works outside
+  the app (§5.13).
+- **A reading is a record of its own** (`media_type` `AUD`), in the same Work and language as its text, with
+  its own access level. The file is in the private bucket `reading-audio` (up to 25 MB, MP3, M4A, AAC, OGG
+  or WEBM), opened through a link valid for one hour. Whoever can't see the document can't open the file:
+  hidden, reserved and deleted documents keep it closed. The details are in `audio_readings`, which is written
+  only by the proposal functions and is in the log.
+- **The reader's name is shown** next to the player (Owner's decision), and the form requires it.
+- **Both enter through the one door** (§5.14): the form asks for the format of each version.
+- **A newer reading takes the star** for its Work and language, and the older one stays, reachable from
+  "Other versions". The star is per Work, language and format, so a reading never takes it from a text.
+- **Finding them:** Listen and Watch video buttons on every version of the Work; marks on the Library list; an
+  "Audio and video only" button; and a Word of Life of the month card in Start Here, for those who can't
+  look for it by typing. Readings stay out of the normal list and of reports, so they don't double them.
+- **Not built yet (next phase):** recording inside the app, the consent, reservations and the listening queue.
+  Readings so far are uploaded by the team as ordinary proposals. Deleting a reading closes its file at once
+  for everyone, but erasing the file itself, for a reader who withdraws consent, still needs doing by hand in
+  Supabase.
+- `recordtest.html` tests what a phone can record and play. It sends nothing and saves nothing.
 
 ---
 
@@ -1026,4 +1053,4 @@ it was answered 2026-09-17 (see its own entry below) and nothing here remains op
     alone and everything passes through a shared review, with Admin above it all during development.
     Decided in full in `Documentazione\PROTOCOLLO_Ingresso_archivio_v1.md` §3 (one door for new
     content, public / private / reserved documents, reminders, volunteer audio readings, Word of Life
-    dated by its own month). Built so far: §5.12. The rest follows in phases.
+    dated by its own month). Built so far: §5.12 to §5.15. The rest follows in phases.

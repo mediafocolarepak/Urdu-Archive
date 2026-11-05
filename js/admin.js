@@ -1,5 +1,5 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange } from './core.js?v=20261105162447';
-import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261105162447';
+import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange } from './core.js?v=20261105183254';
+import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261105183254';
 
 // ---------- Users ----------
 
@@ -211,7 +211,7 @@ async function runBackfillPageCounts() {
     log.insertAdjacentHTML('beforeend', `<div>Could not get Google Drive access: ${esc(e.message)} - documents will only be readable from Supabase Storage this run.</div>`);
   }
 
-  const rows = await withStatus(sb.from('documents').select('document_id,title,file_name,storage_path').is('pages', null).neq('media_type', 'VID').order('document_id'));
+  const rows = await withStatus(sb.from('documents').select('document_id,title,file_name,storage_path').is('pages', null).not('media_type', 'in', '(VID,AUD)').order('document_id'));
   let done = 0, ok = 0, failed = 0;
   progress.textContent = `0 / ${rows.length}`;
   for (const doc of rows) {

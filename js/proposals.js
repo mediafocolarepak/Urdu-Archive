@@ -6,10 +6,17 @@
 import {
   sb, State, esc, withStatus, optionsHtml, labelOf, isAdmin, canManageReserved, canWrite, BUCKET, likeSafe,
   titleOverlapScore, ACCESS_LEVELS, readPdfPageCountFromBlob, getDriveAccessToken, uploadPdfToGDrive,
-} from './core.js?v=20261105162447';
+  AUDIO_BUCKET, HIDDEN_DOC_STATUSES, isMediaLinkOk, videoLinkHtml, mountAudioPlayer,
+} from './core.js?v=20261105183254';
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // the Supabase Free plan's limit per file
-const HIDDEN_STATUSES = ['proposed', 'revision', 'pending_publish', 'removed'];
+const FORMATS = [['DOC', 'Text or PDF'], ['AUD', 'Audio'], ['VID', 'Video']];
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024; // the reading-audio bucket's limit (113_media.sql)
+// File name ending -> the name kept in the bucket and the type it is served as.
+const AUDIO_FORMATS = {
+  mp3: ['mp3', 'audio/mpeg'], m4a: ['m4a', 'audio/mp4'], mp4: ['m4a', 'audio/mp4'], aac: ['aac', 'audio/aac'],
+  ogg: ['ogg', 'audio/ogg'], opus: ['ogg', 'audio/ogg'], webm: ['webm', 'audio/webm'],
+};
 const STATUS_LABELS = {
   draft: 'Draft',
   submitted: 'Awaiting review',
@@ -73,6 +80,33 @@ async function textFromWord(file) {
   const text = result.value.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   if (!text) throw new Error('No text found in this file. It may contain only images: if so, paste the text by hand.');
   return text;
+}
+
+// Null when the file can be used, otherwise why not.
+function audioFileProblem(file) {
+  const ending = (file.name.split('.').pop() || '').toLowerCase();
+  if (ending === 'wav') return 'A WAV file is too large. Please convert it to MP3 or M4A first.';
+  if (!AUDIO_FORMATS[ending]) return `"${file.name}" is not a recording this app can keep: please use MP3, M4A, OGG or WEBM.`;
+  if (file.size > MAX_AUDIO_BYTES) return `"${file.name}" is larger than 25 MB. Please convert it to a smaller MP3 or M4A.`;
+  return null;
+}
+
+// How long it lasts, if the file says so. Some recordings don't, and nothing depends on it.
+function audioDurationOf(file) {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const audio = new Audio();
+    const done = value => { clearTimeout(timer); URL.revokeObjectURL(url); resolve(value); };
+    const timer = setTimeout(() => done(null), 5000);
+    audio.preload = 'metadata';
+    audio.onerror = () => done(null);
+    audio.onloadedmetadata = () => {
+      if (!Number.isFinite(audio.duration)) { done(null); return; }
+      const total = Math.round(audio.duration);
+      done(`${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`);
+    };
+    audio.src = url;
+  });
 }
 
 // ---------- The section ----------
@@ -156,7 +190,10 @@ async function renderMine(main, body) {
 let form = null;
 
 function emptyVersion(language) {
-  return { document_id: null, language: language || '', original_title: '', body: '', draft_path: null, pages: null, access_level: 'private', file: null };
+  return {
+    document_id: null, language: language || '', original_title: '', body: '', draft_path: null, pages: null, access_level: 'private', file: null,
+    media_type: 'DOC', external_url: '', duration: '', audio_path: null, audio_mime: null, audio_size: null, reader_name: '', audioFile: null,
+  };
 }
 
 async function renderForm(main, id) {
@@ -167,7 +204,7 @@ async function renderForm(main, id) {
     form.common = d.common || {};
     form.decisionNote = d.decision_note;
     form.status = d.status;
-    form.versions = d.versions.length ? d.versions.map(v => ({ ...v, body: v.body || '', file: null })) : [emptyVersion('URD')];
+    form.versions = d.versions.length ? d.versions.map(v => ({ ...v, body: v.body || '', file: null, audioFile: null })) : [emptyVersion('URD')];
     if (d.work_documents.length) form.workLabel = d.work_documents.map(w => w.title).filter(Boolean)[0] || `Work #${d.work_id}`;
   }
   scrollTop();
@@ -192,7 +229,7 @@ async function renderForm(main, id) {
       </div>
       <div class="subpanel" style="margin-top:14px;">
         <h3>3. Versions</h3>
-        <p class="hint">One for each language. Adding the text, pasted or loaded from Word, is what makes it searchable: a PDF alone can be found only by its title and tags.</p>
+        <p class="hint">One for each language and format. Adding the text, pasted or loaded from Word, is what makes it searchable: a PDF alone can be found only by its title and tags.</p>
         <div id="pf-versions"></div>
         <div class="btn-row"><button class="btn secondary" id="pf-add-version">+ Another language</button></div>
       </div>
@@ -259,10 +296,23 @@ function renderVersions() {
         <div class="field"><label>Language *</label><select class="pv-language">${optionsHtml(State.langs, v.language, true)}</select></div>
         <div class="field"><label>Title in this language *</label><input class="pv-title" dir="auto" value="${esc(v.original_title)}"></div>
         <div class="field"><label>Access level</label><select class="pv-level">${optionsHtml(levels, v.access_level, false)}</select></div>
+        <div class="field"><label>Format</label><select class="pv-format">${optionsHtml(FORMATS, v.media_type || 'DOC', false)}</select></div>
       </div>
+      <div class="pv-vid" style="display:${v.media_type === 'VID' ? 'block' : 'none'};">
+        <div class="field"><label>Video link *</label><input class="pv-link" type="url" dir="ltr" placeholder="https://youtu.be/..." value="${esc(v.external_url)}">
+          <div class="hint">YouTube or Google Drive. The video isn't stored here, so keep the original file on Drive too.</div></div>
+        <div class="field"><label>Duration <span class="hint">(optional, such as 4 min)</span></label><input class="pv-duration" value="${esc(v.duration)}"></div>
+      </div>
+      <div class="pv-aud" style="display:${v.media_type === 'AUD' ? 'block' : 'none'};">
+        <div class="field"><label>Read by *</label><input class="pv-reader" dir="auto" value="${esc(v.reader_name)}"><div class="hint">This name is shown next to the recording.</div></div>
+        <div class="field"><label>Recording * ${v.audio_path ? '<span class="hint">(already attached; choose another to replace it)</span>' : ''}</label><input class="pv-audio" type="file" accept=".mp3,.m4a,.mp4,.aac,.ogg,.opus,.webm,audio/*">
+          <div class="hint">MP3 or M4A plays on every phone. Up to 25 MB, which is about 50 minutes of voice.</div></div>
+      </div>
+      <div class="pv-doc" style="display:${!v.media_type || v.media_type === 'DOC' ? 'block' : 'none'};">
       <div class="field"><label>Text</label><textarea class="pv-body" dir="auto" rows="6">${esc(v.body)}</textarea></div>
       <div class="field"><label>Or load the text from Word <span class="hint">(.docx; the file itself is not kept)</span></label><input class="pv-word" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"><div class="hint pv-word-status"></div></div>
       <div class="field"><label>PDF file ${v.draft_path ? '<span class="hint">(already attached; choose another to replace it)</span>' : ''}</label><input class="pv-file" type="file" accept=".pdf"></div>
+      </div>
       ${form.versions.length > 1 ? '<div class="btn-row"><button class="btn danger pv-remove" style="padding:4px 10px;">Remove this version</button></div>' : ''}
     </div>`).join('');
   box.querySelectorAll('[data-version]').forEach(card => {
@@ -273,6 +323,17 @@ function renderVersions() {
       renderVersions();
     });
     card.querySelector('.pv-file').addEventListener('change', e => { form.versions[i].file = e.target.files[0] || null; });
+    card.querySelector('.pv-format').addEventListener('change', e => {
+      card.querySelector('.pv-doc').style.display = e.target.value === 'DOC' ? 'block' : 'none';
+      card.querySelector('.pv-aud').style.display = e.target.value === 'AUD' ? 'block' : 'none';
+      card.querySelector('.pv-vid').style.display = e.target.value === 'VID' ? 'block' : 'none';
+    });
+    card.querySelector('.pv-audio').addEventListener('change', e => {
+      const file = e.target.files[0] || null;
+      const problem = file && audioFileProblem(file);
+      if (problem) { alert(problem); e.target.value = ''; form.versions[i].audioFile = null; return; }
+      form.versions[i].audioFile = file;
+    });
     card.querySelector('.pv-word').addEventListener('change', async e => {
       const file = e.target.files[0];
       e.target.value = '';
@@ -303,6 +364,10 @@ function collectForm() {
     v.original_title = card.querySelector('.pv-title').value;
     v.access_level = card.querySelector('.pv-level').value;
     v.body = card.querySelector('.pv-body').value;
+    v.media_type = card.querySelector('.pv-format').value;
+    v.external_url = card.querySelector('.pv-link').value.trim();
+    v.reader_name = card.querySelector('.pv-reader').value;
+    if (v.media_type === 'VID') v.duration = card.querySelector('.pv-duration').value;
   });
 }
 
@@ -310,8 +375,26 @@ function collectForm() {
 async function persist() {
   collectForm();
   const status = document.getElementById('pf-status');
+  // Before any file goes up, so a mistyped link doesn't leave an unused recording behind.
   for (const v of form.versions) {
-    if (!v.file) continue;
+    if (v.media_type === 'VID' && v.external_url && !isMediaLinkOk(v.external_url)) {
+      throw new Error('A video link must be an https link to YouTube or Google Drive.');
+    }
+  }
+  for (const v of form.versions) {
+    if (v.media_type !== 'AUD' || !v.audioFile) continue;
+    const [ending, mime] = AUDIO_FORMATS[(v.audioFile.name.split('.').pop() || '').toLowerCase()];
+    status.textContent = `Uploading ${v.audioFile.name}...`;
+    const path = `${crypto.randomUUID()}.${ending}`;
+    await withStatus(sb.storage.from(AUDIO_BUCKET).upload(path, v.audioFile, { contentType: mime }), 'Uploading the recording...');
+    v.duration = await audioDurationOf(v.audioFile);
+    v.audio_path = path;
+    v.audio_mime = mime;
+    v.audio_size = v.audioFile.size;
+    v.audioFile = null;
+  }
+  for (const v of form.versions) {
+    if (v.media_type !== 'DOC' || !v.file) continue;
     if (v.file.size > MAX_FILE_BYTES) throw new Error(`"${v.file.name}" is larger than 50 MB.`);
     status.textContent = `Uploading ${v.file.name}...`;
     const path = `proposal-${crypto.randomUUID()}.pdf`;
@@ -328,11 +411,13 @@ async function persist() {
     versions: form.versions.map(v => ({
       document_id: v.document_id, language: v.language, original_title: v.original_title, body: v.body,
       draft_path: v.draft_path, pages: v.pages, access_level: v.access_level,
+      media_type: v.media_type, external_url: v.external_url, duration: v.duration,
+      audio_path: v.audio_path, audio_mime: v.audio_mime, audio_size: v.audio_size, reader_name: v.reader_name,
     })),
   };
   form.id = await withStatus(sb.rpc('save_submission', { p_id: form.id, p_payload: payload }), 'Saving...');
   const saved = await withStatus(sb.rpc('get_submission_detail', { p_id: form.id }));
-  form.versions = saved.versions.map(v => ({ ...v, body: v.body || '', file: null }));
+  form.versions = saved.versions.map(v => ({ ...v, body: v.body || '', file: null, audioFile: null }));
   form.work_id = saved.work_id;
   form.newWork = false;
 }
@@ -374,7 +459,7 @@ async function runSearch(q) {
   const fromText = textIds.length ? await withStatus(sb.from('documents').select(SEARCH_FIELDS).in('document_id', textIds)) : [];
   const score = d => Math.max(titleOverlapScore(q, d.en_title), titleOverlapScore(q, d.title), titleOverlapScore(q, d.original_title));
   const rows = [...byTitle, ...fromText]
-    .filter(d => d.work_id && !HIDDEN_STATUSES.includes(d.workflow_status))
+    .filter(d => d.work_id && !HIDDEN_DOC_STATUSES.includes(d.workflow_status))
     .sort((a, b) => score(b) - score(a))
     .slice(0, 10);
   if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing similar found.</div>'; return; }
@@ -482,9 +567,12 @@ async function renderDetail(main, id) {
       ${d.work_documents.length ? `<div class="field"><label>Other versions of this work, already in the archive</label>${d.work_documents.map(w => `<div class="hint"><span dir="auto">${esc(w.title)}</span> &middot; ${esc(labelOf(State.langs, w.language))} &middot; #${esc(w.document_id)}</div>`).join('')}</div>` : '<div class="hint">Proposed as a new work, not linked to anything in the archive.</div>'}
       ${d.versions.map(v => `
         <div class="subpanel" style="margin-top:12px;" data-doc="${esc(v.document_id)}">
-          <h3 style="margin-top:0;">${esc(labelOf(State.langs, v.language))}${v.access_level === 'reserved' ? ' <span class="count-badge" style="padding:1px 6px;">Reserved</span>' : ''}</h3>
+          <h3 style="margin-top:0;">${esc(labelOf(State.langs, v.language))}${v.media_type === 'DOC' ? '' : ` <span class="count-badge" style="padding:1px 6px;">${esc(labelOf(FORMATS, v.media_type))}</span>`}${v.access_level === 'reserved' ? ' <span class="count-badge" style="padding:1px 6px;">Reserved</span>' : ''}</h3>
           <div dir="auto" style="font-weight:600;">${esc(v.original_title)}</div>
-          ${v.body ? `<div dir="auto" style="white-space:pre-wrap;max-height:320px;overflow:auto;border:1px solid var(--line);padding:8px;margin:6px 0;">${esc(v.body)}</div>` : '<div class="hint">No text: only searchable by title and tags.</div>'}
+          ${v.duration ? `<div class="hint">Duration: ${esc(v.duration)}</div>` : ''}
+          ${v.media_type === 'VID' ? `<div class="btn-row">${v.external_url ? videoLinkHtml(v.external_url, 'Watch the video', true) : '<span class="hint">No link yet.</span>'}</div>` : ''}
+          ${v.media_type === 'AUD' ? `<div class="pd-audio">${v.audio_path ? '' : '<span class="hint">No recording yet.</span>'}</div>` : ''}
+          ${v.media_type !== 'DOC' ? '' : v.body ? `<div dir="auto" style="white-space:pre-wrap;max-height:320px;overflow:auto;border:1px solid var(--line);padding:8px;margin:6px 0;">${esc(v.body)}</div>` : '<div class="hint">No text: only searchable by title and tags.</div>'}
           ${v.draft_path ? '<div class="btn-row"><button class="btn secondary pd-file">Open the PDF</button></div>' : ''}
           ${canDecide && v.body ? `<label style="display:flex;align-items:center;gap:8px;margin-top:6px;text-transform:none;letter-spacing:normal;font-size:13.5px;"><input type="checkbox" class="pd-read" style="width:auto;flex:none;" value="${esc(v.document_id)}"> I have read this text against its source</label>` : ''}
         </div>`).join('')}
@@ -505,6 +593,7 @@ async function renderDetail(main, id) {
   main.querySelectorAll('[data-doc]').forEach(card => {
     const v = d.versions.find(x => String(x.document_id) === card.dataset.doc);
     card.querySelector('.pd-file')?.addEventListener('click', () => openFile(v.draft_path));
+    if (v.media_type === 'AUD' && v.audio_path) mountAudioPlayer(card.querySelector('.pd-audio'), { path: v.audio_path, reader_name: v.reader_name }, false);
   });
   const reload = () => renderDetail(main, id);
   const closeToQueue = () => { currentTab = 'queue'; renderProposalsView(main); };

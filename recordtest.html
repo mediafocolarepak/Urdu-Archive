@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recording test</title>
+<style>
+  :root { --bg:#f4f1ea; --panel:#fff; --ink:#2b2620; --soft:#6b6255; --line:#d8d0c0; --accent:#7a5230; --accent-ink:#fff; --good:#2f6b34; --bad:#b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1c1a17; --panel:#262320; --ink:#eee7da; --soft:#a89d8b; --line:#3c372f; --accent:#c99a5f; --accent-ink:#201a10; --good:#8fc487; --bad:#f2b8b5; color-scheme: dark; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 "Segoe UI", Tahoma, Arial, sans-serif; padding: 16px; }
+  main { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  h1 { font-size: 22px; margin: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  button, .file-btn { font: inherit; font-weight: 600; min-height: 48px; padding: 0 18px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+  button.secondary { background: transparent; color: var(--accent); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  a.save { font-weight: 600; color: var(--accent); }
+  audio { width: 100%; }
+  input[type=file] { font: inherit; width: 100%; }
+  label.check { display: flex; gap: 8px; align-items: center; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .hint { color: var(--soft); font-size: 14px; }
+  .ok { color: var(--good); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  #timer { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; background: var(--bg); padding: 8px; border-radius: 6px; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Recording test</h1>
+  <p class="hint">A short test for the Digital Urdu Archive (DUA): can this phone record a reading, and can it play one recorded on another phone? Nothing is sent anywhere and nothing is saved. It takes about two minutes.</p>
+
+  <div class="panel">
+    <strong>1. What this device can do</strong>
+    <div id="status" class="hint">Checking...</div>
+  </div>
+
+  <div class="panel">
+    <strong>2. Record 30 seconds</strong>
+    <div class="hint">Read something aloud, at your normal distance from the phone. The phone will ask for the microphone: please allow it. If you can, also try turning the screen off, or switching to another app, for a few seconds.</div>
+    <label class="check"><input type="checkbox" id="noise" checked> Noise reduction</label>
+    <div id="timer" aria-live="off">0:00</div>
+    <div class="row">
+      <button id="start">Start recording</button>
+      <button id="stop" class="secondary" disabled>Stop</button>
+    </div>
+    <div id="rec-status" class="hint" role="status"></div>
+  </div>
+
+  <div class="panel" id="result" hidden>
+    <strong>3. Listen to it</strong>
+    <audio id="playback" controls></audio>
+    <div id="rec-facts" class="hint"></div>
+    <a id="save" class="save" href="#">Save this recording, to try it on another phone</a>
+  </div>
+
+  <div class="panel">
+    <strong>4. Try a recording from another phone</strong>
+    <div class="hint">If someone sent you a recording made with this test, choose it here. This is the most important check: an iPhone may not play what an Android phone records.</div>
+    <input type="file" id="other" accept="audio/*,.webm,.m4a,.mp3,.ogg,.opus">
+    <audio id="other-audio" controls hidden></audio>
+    <div id="other-status" class="hint" role="status"></div>
+  </div>
+
+  <div class="panel">
+    <strong>5. Send the result</strong>
+    <div class="hint">In your message to Alessandro, say: did the voice sound clear? Did the recording stop by itself when the screen went off or when you changed app? Then press Copy and paste the report below into the same message.</div>
+    <pre id="report"></pre>
+    <div class="row"><button id="copy" class="secondary">Copy the report</button></div>
+    <div id="copied" class="ok" hidden>Copied.</div>
+  </div>
+</main>
+<script>
+(function () {
+  var MAX_SECONDS = 30;
+  // AAC in MP4 first, the likeliest to play everywhere; plain 'audio/mp4' can mean Opus inside, as in Chrome.
+  var FORMATS = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/aac', 'audio/mpeg'];
+  var PLAY = [['MP3', 'audio/mpeg'], ['M4A', 'audio/mp4; codecs="mp4a.40.2"'], ['WEBM', 'audio/webm; codecs="opus"'], ['OGG', 'audio/ogg; codecs="opus"']];
+  var hasRecorder = !!(window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  var canRecord = hasRecorder ? FORMATS.filter(function (f) { return MediaRecorder.isTypeSupported(f); }) : [];
+  var probe = document.createElement('audio');
+  var canPlay = PLAY.map(function (p) { return p[0] + ': ' + (probe.canPlayType(p[1]) || 'no'); });
+  var facts = { recording: 'not tried yet', other: 'not tried yet' };
+  var recorder, stream, chunks, startedAt, ticker, wakeLock, pauses = 0;
+
+  var el = function (id) { return document.getElementById(id); };
+  var mmss = function (s) { return Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0'); };
+
+  function renderStatus() {
+    var parts = [];
+    if (!window.isSecureContext) parts.push('<span class="bad">This page is not on a secure address, so the microphone will not work.</span>');
+    if (!hasRecorder) parts.push('<span class="bad">This browser cannot record.</span> Try another browser, or record with the phone\'s own recorder.');
+    else if (!canRecord.length) parts.push('<span class="bad">This browser reports no recording format.</span>');
+    else parts.push('<span class="ok">This browser can record.</span> Formats: ' + canRecord.join(', '));
+    parts.push('Plays: ' + canPlay.join(', '));
+    parts.push('Keeps the screen on: ' + ('wakeLock' in navigator ? 'yes' : 'no'));
+    el('status').innerHTML = parts.join('<br>');
+    el('start').disabled = !canRecord.length;
+    buildReport();
+  }
+
+  function buildReport() {
+    el('report').textContent = [
+      'Recording test report',
+      'Browser: ' + navigator.userAgent,
+      'Secure address: ' + (window.isSecureContext ? 'yes' : 'no'),
+      'Can record: ' + (canRecord.length ? canRecord.join(', ') : 'no'),
+      'Plays: ' + canPlay.join(', '),
+      'Keeps the screen on: ' + ('wakeLock' in navigator ? 'yes' : 'no'),
+      'Noise reduction: ' + (el('noise').checked ? 'on' : 'off'),
+      'Recording: ' + facts.recording,
+      'Recording from another phone: ' + facts.other
+    ].join('\n');
+  }
+
+  function keepScreenOn() {
+    if (!('wakeLock' in navigator)) return;
+    navigator.wakeLock.request('screen').then(function (l) { wakeLock = l; }, function () { /* not essential */ });
+  }
+
+  function stopAll() {
+    clearInterval(ticker);
+    if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+    if (wakeLock) { wakeLock.release().catch(function () {}); wakeLock = null; }
+    el('start').disabled = false;
+    el('stop').disabled = true;
+  }
+
+  function finish(ranFor) {
+    stopAll();
+    var type = (recorder && recorder.mimeType) || canRecord[0];
+    var blob = new Blob(chunks, { type: type });
+    var kb = Math.round(blob.size / 1024);
+    var ending = /mp4|aac/.test(type) ? 'm4a' : /ogg/.test(type) ? 'ogg' : /mpeg/.test(type) ? 'mp3' : 'webm';
+    var url = URL.createObjectURL(blob);
+    var player = el('playback');
+    player.src = url;
+    el('save').href = url;
+    el('save').download = 'dua-recording-test.' + ending;
+    el('result').hidden = false;
+    var perMinute = ranFor > 0 ? (blob.size / 1024 / 1024) / (ranFor / 60) : 0;
+    var line = type + ', ' + mmss(ranFor) + ' recorded, ' + kb + ' KB (' + perMinute.toFixed(2) + ' MB a minute)'
+      + (pauses ? ', interrupted ' + pauses + ' time(s)' : '');
+    facts.recording = line;
+    el('rec-facts').textContent = line;
+    el('rec-status').textContent = 'Finished. Please listen to it below.';
+    player.onloadedmetadata = function () {
+      var d = isFinite(player.duration) ? mmss(player.duration) : 'unknown to the file';
+      facts.recording = line + ', length read from the file: ' + d;
+      el('rec-facts').textContent = facts.recording;
+      buildReport();
+    };
+    player.onerror = function () {
+      facts.recording = line + ', could NOT play it back on this device';
+      el('rec-facts').innerHTML = '<span class="bad">This device could not play its own recording.</span>';
+      buildReport();
+    };
+    buildReport();
+  }
+
+  el('start').addEventListener('click', function () {
+    el('rec-status').textContent = 'Waiting for the microphone...';
+    el('start').disabled = true;
+    pauses = 0;
+    var noise = el('noise').checked;
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: noise, noiseSuppression: noise, autoGainControl: true } }).then(function (s) {
+      stream = s;
+      chunks = [];
+      recorder = new MediaRecorder(stream, { mimeType: canRecord[0], audioBitsPerSecond: 64000 });
+      recorder.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+      recorder.onpause = function () { pauses++; };
+      recorder.onerror = function (e) { el('rec-status').textContent = 'The recording stopped with an error: ' + (e.error && e.error.name); };
+      recorder.onstop = function () { finish((Date.now() - startedAt) / 1000); };
+      recorder.start(5000);
+      startedAt = Date.now();
+      keepScreenOn();
+      el('stop').disabled = false;
+      el('rec-status').textContent = 'Recording. It stops by itself after 30 seconds.';
+      ticker = setInterval(function () {
+        var t = (Date.now() - startedAt) / 1000;
+        el('timer').textContent = mmss(t);
+        if (t >= MAX_SECONDS && recorder.state !== 'inactive') recorder.stop();
+      }, 250);
+    }, function (e) {
+      facts.recording = 'the microphone was refused or not found (' + e.name + ')';
+      el('rec-status').innerHTML = '<span class="bad">The microphone did not start (' + e.name + ').</span> Check the permission for this browser in the phone\'s settings.';
+      el('start').disabled = false;
+      buildReport();
+    });
+  });
+
+  el('stop').addEventListener('click', function () { if (recorder && recorder.state !== 'inactive') recorder.stop(); });
+  el('noise').addEventListener('change', buildReport);
+  // A phone call or a locked screen can end the recording without any stop being pressed.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && recorder && recorder.state === 'recording') keepScreenOn();
+  });
+
+  el('other').addEventListener('change', function (e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var player = el('other-audio');
+    player.hidden = false;
+    player.src = URL.createObjectURL(file);
+    el('other-status').textContent = 'Please press play.';
+    var name = file.name + ' (' + (file.type || 'type unknown') + ', ' + Math.round(file.size / 1024) + ' KB)';
+    player.onloadedmetadata = function () {
+      facts.other = name + ': opened on this device';
+      el('other-status').innerHTML = '<span class="ok">This device opened it.</span> Please check that you really hear it.';
+      buildReport();
+    };
+    player.onerror = function () {
+      facts.other = name + ': could NOT be played on this device';
+      el('other-status').innerHTML = '<span class="bad">This device cannot play this recording.</span> Please say so in your message.';
+      buildReport();
+    };
+  });
+
+  el('copy').addEventListener('click', function () {
+    var text = el('report').textContent;
+    var done = function () { var c = el('copied'); c.hidden = false; setTimeout(function () { c.hidden = true; }, 2500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, selectReport);
+    else selectReport();
+  });
+  function selectReport() {
+    var r = document.createRange(); r.selectNodeContents(el('report'));
+    var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    alert('Press and hold the selected text, then choose Copy.');
+  }
+
+  renderStatus();
+})();
+</script>
+</body>
+</html>

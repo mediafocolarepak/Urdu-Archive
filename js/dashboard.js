@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20261105162447';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261105162447';
+import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES } from './core.js?v=20261105183254';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261105183254';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
@@ -22,6 +22,22 @@ async function renderFromBoards() {
     window.__renderTab('boards');
   }));
 }
+
+// Which Works have a reading or a video, for the marks on the list. Those records are few.
+let mediaWorks = { aud: new Set(), vid: new Set() };
+async function loadMediaWorks() {
+  const rows = await withStatus(sb.from('documents').select('work_id,media_type,workflow_status,external_url').in('media_type', ['AUD', 'VID']));
+  const visible = rows.filter(r => r.work_id && !HIDDEN_DOC_STATUSES.includes(r.workflow_status));
+  mediaWorks = {
+    aud: new Set(visible.filter(r => r.media_type === 'AUD').map(r => r.work_id)),
+    vid: new Set(visible.filter(r => r.media_type === 'VID' && r.external_url).map(r => r.work_id)),
+  };
+}
+const AUDIO_ICON = '<span title="Audio" aria-label="Audio">&#128266;</span> ';
+const VIDEO_ICON = '<span title="Video" aria-label="Video">&#9654;</span> ';
+const mediaIcons = r => (mediaWorks.aud.has(r.work_id) ? AUDIO_ICON : '') + (mediaWorks.vid.has(r.work_id) ? VIDEO_ICON : '');
+const mediaBadges = r => (mediaWorks.aud.has(r.work_id) ? '<span class="count-badge" style="padding:1px 6px;">&#128266; Audio</span>' : '')
+  + (mediaWorks.vid.has(r.work_id) ? '<span class="count-badge" style="padding:1px 6px;">&#9654; Video</span>' : '');
 
 export async function renderDashboardView(main) {
   // Operator shares the simplified read/search-only Dashboard layout with User - their write
@@ -48,6 +64,7 @@ export async function renderDashboardView(main) {
         ${isAdmin() ? '<button class="btn" id="dash-new">+ New document</button>' : ''}
         ${canWrite() ? '<button class="btn secondary" id="dash-propose">+ Propose content</button>' : ''}
       </div>
+      <div class="btn-row" style="margin-top:0;"><button class="btn ${State.dashFilters.withMedia ? '' : 'secondary'}" id="dash-media" aria-pressed="${State.dashFilters.withMedia}">&#128266; &#9654; Audio and video only</button></div>
       <details class="dash-filters" id="dash-filters">
       <summary id="dash-filters-summary">Filters</summary>
       <div class="field-grid" style="margin-bottom:10px;">
@@ -94,7 +111,7 @@ export async function renderDashboardView(main) {
   // down); on a wide screen they stay open and the toggle is hidden by CSS.
   document.getElementById('dash-filters').open = !window.matchMedia('(max-width: 900px)').matches;
   document.getElementById('dash-clear-filters').addEventListener('click', () => {
-    Object.assign(State.dashFilters, { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', access_level: '', collection: '', recipient: '', source: '', language: '', legacyOnly: false, pendingOnly: false });
+    Object.assign(State.dashFilters, { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', access_level: '', collection: '', recipient: '', source: '', language: '', legacyOnly: false, pendingOnly: false, withMedia: false });
     renderDashboardView(main);
   });
   document.getElementById('dash-back').addEventListener('click', () => { if (history.state && history.state.dashDetail) history.back(); else closeDocDetailScreen(); });
@@ -103,6 +120,12 @@ export async function renderDashboardView(main) {
   document.getElementById('dash-search').addEventListener('input', e => { State.dashFilters.search = e.target.value; refreshDashGrid(); });
   document.getElementById('dash-search-id').addEventListener('input', e => { State.dashFilters.idSearch = e.target.value; refreshDashGrid(); });
   document.getElementById('dash-propose')?.addEventListener('click', () => window.__renderTab('proposals'));
+  document.getElementById('dash-media').addEventListener('click', e => {
+    State.dashFilters.withMedia = !State.dashFilters.withMedia;
+    e.currentTarget.className = `btn ${State.dashFilters.withMedia ? '' : 'secondary'}`;
+    e.currentTarget.setAttribute('aria-pressed', State.dashFilters.withMedia);
+    refreshDashGrid();
+  });
   if (isAdmin()) document.getElementById('dash-new').addEventListener('click', () => createNewDocument(refreshDashGrid));
   document.getElementById('f-category').addEventListener('change', e => { State.dashFilters.category = e.target.value; refreshDashGrid(); });
   document.getElementById('f-author').addEventListener('change', e => { State.dashFilters.author = e.target.value; refreshDashGrid(); });
@@ -123,8 +146,14 @@ export async function renderDashboardView(main) {
   // importing this module (which would create a circular import - see docdetail.js).
   window.__refreshDashGrid = refreshDashGrid;
 
+  await loadMediaWorks();
   await refreshDashGrid();
   await renderDocDetail(State.selectedDocId);
+  // Coming from a card that opens one document: on a phone, show it at once rather than the list.
+  if (State.dashOpenDetail) {
+    State.dashOpenDetail = false;
+    if (window.matchMedia('(max-width: 900px)').matches) openDocDetailScreen();
+  }
   renderFromBoards();
 }
 
@@ -135,7 +164,7 @@ export async function renderDashboardView(main) {
 // .or() as the title/tag ilike below because it reads a different table, so it runs first as a
 // separate query and its document_ids are added as one more branch of that same .or().
 async function buildDashQuery(selectAll) {
-  let q = sb.from('documents').select(selectAll ? '*' : 'document_id,category,author,main_topic,recipient,title,original_title,en_title,place,ref_date,pending_deletion,is_preferred,access_level');
+  let q = sb.from('documents').select(selectAll ? '*' : 'document_id,category,author,main_topic,recipient,title,original_title,en_title,place,ref_date,pending_deletion,is_preferred,access_level,work_id,media_type');
   const f = State.dashFilters;
   if (f.search && f.search.trim()) {
     const term = f.search.trim();
@@ -149,6 +178,10 @@ async function buildDashQuery(selectAll) {
     const idNum = parseInt(f.idSearch.trim(), 10);
     q = Number.isFinite(idNum) ? q.eq('document_id', idNum) : q.eq('document_id', -1);
   }
+  // A reading is reached from its text or through this button; among the texts it would only double
+  // the list (PROTOCOLLO §10.3). Looking for its number finds it anyway.
+  if (f.withMedia) q = q.in('media_type', ['AUD', 'VID']);
+  else if (!(f.idSearch && f.idSearch.trim())) q = q.or('media_type.is.null,media_type.neq.AUD');
   if (f.category) q = q.eq('category', f.category);
   if (f.author) q = q.eq('author', f.author);
   if (f.main_topic) q = q.eq('main_topic', f.main_topic);
@@ -223,7 +256,7 @@ export async function refreshDashGrid() {
       const star = r.is_preferred ? '&#9733; ' : '';
       return `<tr data-id="${esc(r.document_id)}" class="${String(r.document_id) === String(State.selectedDocId) ? 'selected' : ''}">
       <td>${esc(r.document_id)}${r.pending_deletion ? ' <span class="count-badge" style="padding:1px 6px;background:var(--danger);color:#fff;">pending deletion</span>' : ''}${r.access_level === 'reserved' ? ' <span class="count-badge" style="padding:1px 6px;">Reserved</span>' : ''}</td>
-      <td>${star}${esc(r.title)}</td><td>${esc(r.original_title)}</td>
+      <td>${star}${mediaIcons(r)}${esc(r.title)}</td><td>${esc(r.original_title)}</td>
       <td>${esc(labelOf(State.authors, r.author))}</td>
       <td>${esc(r.place)}</td>
       <td>${esc(labelOf(State.categories, r.category))}</td>
@@ -260,6 +293,7 @@ export async function refreshDashGrid() {
         <div class="dash-card-meta">#${esc(r.document_id)} &middot; ${esc(labelOf(State.authors, r.author))} &middot; ${esc(r.place)} &middot; ${esc(labelOf(State.categories, r.category))}</div>
         ${r.pending_deletion ? '<span class="count-badge" style="padding:1px 6px;background:var(--danger);color:#fff;">pending deletion</span>' : ''}
         ${r.access_level === 'reserved' ? '<span class="count-badge" style="padding:1px 6px;">Reserved</span>' : ''}
+        ${mediaBadges(r)}
         <div class="dash-card-actions"><button class="btn secondary dash-card-open">Details &rsaquo;</button></div>
       </div>`;
     }).join('') || '<div class="empty-msg">No documents match the current filters.</div>';
