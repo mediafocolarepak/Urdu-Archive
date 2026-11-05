@@ -1,7 +1,11 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.14 (2026-11-05) — decisions taken by the Owner; all of phases 1 through 3 are built and
-merged (migrations 80–114). Team comments welcome, changes go through a new version.**
+**Status: v1.15 (2026-11-05) — decisions taken by the Owner; all of phases 1 through 3 are built and
+merged (migrations 80–115). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.15:** the Word of Life of a month is one package, and a magazine issue is a record of
+its own (§5.17, migration 115). A board post reaches the archive only through the proposal form, and anyone
+can suggest one (§2.6).
 
 **What changed in v1.14:** anyone signed in can read a text aloud (§5.16, migration 114). They consent,
 hold the text for 7 days and record it or upload a file. Someone listens, and an approved reading gets a
@@ -309,8 +313,10 @@ Boards are where formatori and members meet: ideas, proposals, texts for meditat
 a video, an image. They are **not part of the archive** and never become archive records: the
 archive is the official corpus with its catalogue fields, revision workflow and credits; a
 board post has none of those and must not pollute searches, reports, tasks or statistics.
-If a board text deserves the archive, a formatore or coordinator **promotes** it — a document
-is created in the normal revision workflow, with the usual review and approval.
+If a post deserves the archive, whoever looks after the board or a Coordinator **proposes** it: the proposal
+form (§5.14) opens already filled in, and it goes through the usual review. This works for posts with only an
+image or a link too. Anyone else can **suggest** a post; the suggestion reaches that board's editors, Archive &
+Data and Coordinators, who propose it or decline it (migration 115).
 
 Who may post:
 - **Board editors** (formatori assigned to that board) and **Coordinators**: publish directly;
@@ -864,7 +870,7 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
   a task (Owner's decision).
 - **Not yet part of this door:** a task correction keeps its own path, with Admin's final decision (row 12),
   since credits depend on it. Promoting a board post still creates a hidden draft outside the queue,
-  until the Boards change.
+  until the Boards change (done in §2.6: promoting no longer exists).
 
 ### 5.15 Video and audio (migration 113)
 
@@ -915,6 +921,24 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
 - **Readers:** Coordination, HR and Admin see each reader's published, waiting, sent-back and not-accepted
   readings and their listens, to give the best readers the most important work. That work would go through a
   task; the `READER` qualification and a reading task category aren't built yet.
+
+### 5.17 The month's Word of Life and the magazine (migration 115)
+
+- **One Work per month,** found by its month (`works.series`, `series_period`) rather than by guessing a title.
+- **Proposals → Word of Life:** for a chosen month, shows Italian, English, Urdu, video and audio, each with its
+  state or marked as missing. Pieces can be proposed together, as one package published at once, or added later.
+- **Existing documents:** if a month's documents already share one Work, that Work becomes the month's. If they
+  are in several, nothing merges by itself (§1): they are listed as not linked, and a Coordinator or Admin links
+  them. A star already held for a language and format stays where it is.
+- **Tasks:** translation and video remain Coordination's tasks. The month shows open translation tasks and leads
+  a Coordinator to the source text to create one. A translation made through a task now becomes a version in
+  Urdu, and keeps the source's date, recipients and topic.
+- **The star:** per Work, language and format in every path now, tasks and "Set preferred" included.
+- **The magazine:** an issue is its own record (category Magazine issue), with its own month and PDF. What it
+  contains points to it (`contained_in_document_id`, `contained_page`), and each side links to the other. A Word of
+  Life keeps its own month. Issue records don't exist yet: they are added as proposals as their PDFs are ready.
+- **Data cleaned:** periods holding a page (`2001-04p.7`) now hold only the month. The page stays in the issue
+  field, and the old values are in the log.
 
 ---
 
@@ -1084,4 +1108,4 @@ it was answered 2026-09-17 (see its own entry below) and nothing here remains op
     alone and everything passes through a shared review, with Admin above it all during development.
     Decided in full in `Documentazione\PROTOCOLLO_Ingresso_archivio_v1.md` §3 (one door for new
     content, public / private / reserved documents, reminders, volunteer audio readings, Word of Life
-    dated by its own month). Built so far: §5.12 to §5.16. The rest follows in phases.
+    dated by its own month). Built: §5.12 to §5.17.

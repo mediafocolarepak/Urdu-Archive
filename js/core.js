@@ -740,8 +740,14 @@ export async function separateDocument(docId, newTitle) {
 }
 
 // Only one document per Work may be the preferred version - clear the others first.
+// One star per Work, language and format: choosing the Urdu version must not take it from the Italian.
 export async function setPreferredVersion(docId, workId) {
-  await withStatus(sb.from('documents').update({ is_preferred: false }).eq('work_id', workId));
+  const rows = await withStatus(sb.from('documents').select('language,media_type').eq('document_id', docId));
+  const { language, media_type: media } = rows[0] || {};
+  let q = sb.from('documents').update({ is_preferred: false }).eq('work_id', workId);
+  q = language ? q.eq('language', language) : q.is('language', null);
+  q = !media || media === 'DOC' ? q.or('media_type.is.null,media_type.eq.DOC') : q.eq('media_type', media);
+  await withStatus(q);
   await withStatus(sb.from('documents').update({ is_preferred: true }).eq('document_id', docId));
 }
 

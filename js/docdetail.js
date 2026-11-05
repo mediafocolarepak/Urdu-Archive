@@ -9,7 +9,7 @@ import {
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, videoLinkHtml, mountAudioPlayer, eraseMyAudioFiles,
-} from './core.js?v=20261105214210';
+} from './core.js?v=20261105231300';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -234,6 +234,8 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
       <div style="font-weight:600;font-size:14px;margin-bottom:2px;">${esc(doc.en_title) || '<span class="hint">(no title)</span>'}</div>
       ${doc.ur_title ? `<div dir="auto" style="font-size:14px;margin-bottom:6px;">${esc(doc.ur_title)}</div>` : ''}
       ${renderDocSummary(doc)}
+      ${doc.contained_in_document_id ? `<div>In the magazine issue <a href="#" id="doc-contained-in">#${esc(doc.contained_in_document_id)}</a>${doc.contained_page ? `, page ${esc(doc.contained_page)}` : ''}</div>` : ''}
+      <div id="doc-contains"></div>
     </div>
     <div class="field">
       <label>Recipient(s)</label>
@@ -249,6 +251,24 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     ${canEdit ? renderDocTasksBox(doc) : ''}
   `;
   document.getElementById('doc-download-gdrive')?.addEventListener('click', () => downloadFromGDrive(doc.file_name));
+  document.getElementById('doc-contained-in')?.addEventListener('click', async e => {
+    e.preventDefault();
+    State.selectedDocId = doc.contained_in_document_id;
+    await renderDocDetail(doc.contained_in_document_id);
+  });
+  // What a magazine issue holds. Asked only for an issue: other documents contain nothing.
+  if (labelOf(State.categories, doc.category) === 'Magazine issue') {
+    sb.from('documents').select('document_id,title,en_title,contained_page').eq('contained_in_document_id', doc.document_id).order('contained_page').then(({ data }) => {
+      const slot = document.getElementById('doc-contains');
+      if (!slot || !data || !data.length) return;
+      slot.innerHTML = `<div style="margin-top:4px;"><b>In this issue:</b></div>${data.map(d => `<div><a href="#" data-contained="${esc(d.document_id)}" dir="auto">${esc(d.en_title || d.title)}</a>${d.contained_page ? ` <span class="hint">p. ${esc(d.contained_page)}</span>` : ''}</div>`).join('')}`;
+      slot.querySelectorAll('[data-contained]').forEach(a => a.addEventListener('click', async e => {
+        e.preventDefault();
+        State.selectedDocId = a.dataset.contained;
+        await renderDocDetail(a.dataset.contained);
+      }));
+    }, () => {});
+  }
   const mediaPlayer = document.getElementById('doc-media-player');
   box.querySelectorAll('.doc-listen').forEach(btn => btn.addEventListener('click', () => mountAudioPlayer(mediaPlayer, media[parseInt(btn.dataset.i, 10)], true)));
   if (ownReading) mountAudioPlayer(mediaPlayer, ownReading, false);
@@ -740,6 +760,8 @@ async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
       ${selectField('Operator', 'operator', doc.operator, State.operators)}
       ${textField('Episode number', 'episode_number', doc.episode_number)}
       ${textField('Bible verse', 'bible_verse', doc.bible_verse)}
+      ${textField('Contained in magazine issue (its number)', 'contained_in_document_id', doc.contained_in_document_id, 'number')}
+      ${textField('Page in that issue', 'contained_page', doc.contained_page, 'number')}
       <div class="field"><label>Pages</label>
         <div class="btn-row" style="margin:0;gap:6px;">
           <input data-f="pages" type="number" value="${esc(doc.pages)}">

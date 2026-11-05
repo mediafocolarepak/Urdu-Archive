@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES } from './core.js?v=20261105214210';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261105214210';
+import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES } from './core.js?v=20261105231300';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261105231300';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
@@ -102,8 +102,9 @@ export async function renderDashboardView(main) {
         </div>
       </div>
     </div>
-    <div class="panel">
-      <h2>From the boards</h2>
+    <div class="panel" style="border-style:dashed;background:transparent;margin-top:28px;">
+      <h2 style="margin-bottom:2px;">From the boards</h2>
+      <p class="hint" style="margin-top:0;">Boards are a shared space, separate from the archive: these posts are not archive documents.</p>
       <div id="dash-from-boards-list"><div class="hint">Loading...</div></div>
     </div>`;
 
