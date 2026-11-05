@@ -835,8 +835,9 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
 - **Form:** three steps. Is it new or does it already exist (a search suggests, a person decides, nothing
   is linked by itself); what the versions share (English title, category, author, date or period, and
   optionally recipient, topic, tags, Bible verse); then one version per language, with its title and
-  its text or a PDF. Numbers, file names, status and the preferred mark are set by the system. Pasting
-  the text is what makes a document searchable.
+  its text or a PDF. The text can be pasted or loaded from a Word `.docx`, of which only the text is
+  kept; Urdu in InPage goes through the InPage Converter first. Numbers, file names, status and the
+  preferred mark are set by the system. Adding the text is what makes a document searchable.
 - **States:** draft, awaiting review, to correct (with a note), published, rejected. Each version is a
   normal record in the hidden status `proposed`, visible only to the proposer and to those who can
   review it. Every version of a proposal is published at once.
