@@ -4,10 +4,10 @@
 // collects and shows, and the database is the real gate.
 
 import {
-  sb, State, esc, withStatus, optionsHtml, labelOf, isAdmin, canManageReserved, canWrite, BUCKET, likeSafe,
+  sb, State, esc, withStatus, optionsHtml, labelOf, isAdmin, isCoordinator, canManageReserved, canWrite, BUCKET, likeSafe,
   titleOverlapScore, ACCESS_LEVELS, readPdfPageCountFromBlob, getDriveAccessToken, uploadPdfToGDrive,
   AUDIO_BUCKET, AUDIO_FORMATS, audioFileProblem, audioDurationOf, HIDDEN_DOC_STATUSES, isMediaLinkOk, videoLinkHtml, mountAudioPlayer,
-} from './core.js?v=20261105214210';
+} from './core.js?v=20261105231300';
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // the Supabase Free plan's limit per file
 const FORMATS = [['DOC', 'Text or PDF'], ['AUD', 'Audio'], ['VID', 'Video']];
@@ -80,8 +80,16 @@ async function textFromWord(file) {
 
 export async function renderProposalsView(main) {
   main.innerHTML = '<div class="empty-msg">Loading...</div>';
+  // Coming from a board post, already filled in.
+  if (State.proposalPrefill) {
+    const prefill = State.proposalPrefill;
+    State.proposalPrefill = null;
+    currentTab = 'mine';
+    await renderForm(main, null, prefill);
+    return;
+  }
   const canReview = await withStatus(sb.rpc('can_review_submissions'));
-  const tabs = [['mine', 'My proposals']];
+  const tabs = [['mine', 'My proposals'], ['month', 'Word of Life']];
   if (canReview) tabs.push(['queue', 'To review']);
   if (isAdmin()) tabs.push(['drive', 'Files for Drive']);
   if (!tabs.some(([id]) => id === currentTab)) currentTab = 'mine';
@@ -98,6 +106,7 @@ export async function renderProposalsView(main) {
   }));
   const body = document.getElementById('prop-body');
   if (currentTab === 'queue') await renderQueue(main, body);
+  else if (currentTab === 'month') await renderMonth(main, body);
   else if (currentTab === 'drive') await renderDriveList(body);
   else await renderMine(main, body);
   refreshProposalsBadge();
@@ -152,6 +161,107 @@ async function renderMine(main, body) {
   });
 }
 
+// ---------- The Word of Life of a month: one package ----------
+
+const MONTH_SLOTS = [
+  { key: 'ITA', label: 'Italian', language: 'ITA', media: 'DOC' },
+  { key: 'ENG', label: 'English', language: 'ENG', media: 'DOC' },
+  { key: 'URD', label: 'Urdu', language: 'URD', media: 'DOC' },
+  { key: 'VID', label: 'Video', language: 'URD', media: 'VID' },
+  { key: 'AUD', label: 'Audio', language: 'URD', media: 'AUD' },
+];
+const MONTH_STATES = { draft: 'Being prepared', submitted: 'Awaiting review', to_correct: 'To correct', rejected: 'Not accepted' };
+const TASK_STATES = { open: 'open', claimed: 'being worked on', submitted: 'being reviewed', approved: 'approved' };
+const TRANSLATION_TASKS = ['IT_UR', 'EN_UR'];
+let monthPeriod = null;
+
+const thisMonth = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+const monthName = period => {
+  const [y, m] = period.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('en', { month: 'long', year: 'numeric' });
+};
+const versionState = v => {
+  if (v.submission_status && v.workflow_status === 'proposed') return MONTH_STATES[v.submission_status] || v.submission_status;
+  if (['revision', 'pending_publish'].includes(v.workflow_status)) return 'Being worked on, through a task';
+  return 'In the archive';
+};
+
+async function renderMonth(main, body) {
+  monthPeriod = monthPeriod || thisMonth();
+  const d = await withStatus(sb.rpc('get_word_of_life_month', { p_period: monthPeriod }));
+  const inSlot = slot => d.versions.filter(v => v.media_type === slot.media && (slot.media !== 'DOC' || v.language === slot.language));
+  const translationTasks = d.tasks.filter(t => TRANSLATION_TASKS.includes(t.category));
+  const filled = slot => inSlot(slot).length > 0 || (slot.key === 'URD' && translationTasks.length > 0);
+  const missing = MONTH_SLOTS.filter(slot => !filled(slot));
+  const canLink = isCoordinator() || isAdmin();
+  // A translation is worked on from its source text.
+  const source = d.versions.find(v => v.language === 'ITA' && v.media_type === 'DOC') || d.versions.find(v => v.language === 'ENG' && v.media_type === 'DOC');
+
+  body.innerHTML = `
+    <div class="panel">
+      <div class="field" style="max-width:220px;"><label>Month</label><input id="pm-month" type="month" value="${esc(monthPeriod)}"></div>
+      <p class="hint" style="margin-top:0;">Everything for ${esc(monthName(monthPeriod))} in one place. The month is the Word of Life's own, not the magazine's. A piece that comes late is simply added later.</p>
+      ${MONTH_SLOTS.map(slot => {
+        const here = inSlot(slot);
+        return `<div class="btn-row" data-slot="${slot.key}" style="justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding:8px 0;margin:0;">
+          <div style="min-width:0;flex:1 1 200px;">
+            <b>${esc(slot.label)}</b>
+            ${here.map(v => `<div class="hint"><a href="#" data-open-doc="${esc(v.document_id)}" dir="auto">${esc(v.title) || '#' + esc(v.document_id)}</a> &middot; ${esc(versionState(v))}${slot.media === 'DOC' ? '' : ` &middot; ${esc(labelOf(State.langs, v.language))}`}${v.in_series ? '' : ' &middot; not linked to this month yet'}</div>`).join('')}
+            ${slot.key === 'URD' ? translationTasks.map(t => `<div class="hint">Task #${esc(t.id)}, translation: ${esc(TASK_STATES[t.status] || t.status)}</div>`).join('') : ''}
+            ${filled(slot) ? '' : '<div class="hint">Missing</div>'}
+          </div>
+          <div class="btn-row" style="margin:0;">
+            ${here.filter(v => !v.in_series && canLink).map(v => `<button class="btn secondary pm-link" data-doc="${esc(v.document_id)}" style="padding:3px 10px;white-space:nowrap;">Link to this month</button>`).join('')}
+            ${filled(slot) ? '' : `<button class="btn secondary pm-add" style="padding:3px 10px;white-space:nowrap;">+ Add</button>`}
+            ${slot.key === 'URD' && !filled(slot) && source && canLink ? `<button class="btn secondary pm-task" style="padding:3px 10px;white-space:nowrap;">Create a translation task</button>` : ''}
+          </div>
+        </div>`;
+      }).join('')}
+      ${missing.length > 1 ? '<div class="btn-row"><button class="btn" id="pm-add-all">Propose everything missing together</button></div>' : ''}
+    </div>`;
+
+  document.getElementById('pm-month').addEventListener('change', e => {
+    if (!e.target.value) return;
+    monthPeriod = e.target.value;
+    renderMonth(main, body);
+  });
+  const open = async slots => {
+    let workId;
+    if (!await act(async () => { workId = await withStatus(sb.rpc('ensure_word_of_life_month', { p_period: monthPeriod }), 'Preparing the month...'); })) return;
+    const known = d.versions.find(v => v.en_title) || {};
+    const anyAuthor = d.versions.find(v => v.author);
+    await renderForm(main, null, {
+      workId,
+      workLabel: `Word of Life, ${monthName(monthPeriod)}`,
+      common: { en_title: known.en_title || `Word of Life, ${monthName(monthPeriod)}`, category: d.category || '', author: anyAuthor?.author || '', ref_period: monthPeriod },
+      versions: slots.map(slot => ({ language: slot.language, media_type: slot.media })),
+    });
+  };
+  body.querySelectorAll('[data-slot]').forEach(row => {
+    const slot = MONTH_SLOTS.find(s => s.key === row.dataset.slot);
+    row.querySelector('.pm-add')?.addEventListener('click', () => open([slot]));
+    row.querySelector('.pm-task')?.addEventListener('click', () => {
+      State.selectedDocId = source.document_id;
+      State.dashOpenDetail = true;
+      window.__renderTab('dashboard');
+    });
+  });
+  document.getElementById('pm-add-all')?.addEventListener('click', () => open(missing));
+  body.querySelectorAll('[data-open-doc]').forEach(a => a.addEventListener('click', e => {
+    e.preventDefault();
+    State.selectedDocId = a.dataset.openDoc;
+    State.dashOpenDetail = true;
+    window.__renderTab('dashboard');
+  }));
+  body.querySelectorAll('.pm-link').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Link this document, and any versions already linked to it, to this month?')) return;
+    if (await act(() => withStatus(sb.rpc('link_document_to_month', { p_document_id: parseInt(btn.dataset.doc, 10), p_period: monthPeriod }), 'Linking...'))) renderMonth(main, body);
+  }));
+}
+
 // ---------- The form ----------
 
 let form = null;
@@ -163,8 +273,17 @@ function emptyVersion(language) {
   };
 }
 
-async function renderForm(main, id) {
+// prefill: what another screen already knows (a month's package, a board post). Nothing is saved until
+// the person saves.
+async function renderForm(main, id, prefill) {
   form = { id, work_id: null, newWork: false, workLabel: '', common: {}, versions: [emptyVersion('URD')], decisionNote: null, status: 'draft' };
+  if (prefill) {
+    form.work_id = prefill.workId || null;
+    form.workLabel = prefill.workLabel || '';
+    form.common = { ...prefill.common };
+    form.versions = prefill.versions.map(v => ({ ...emptyVersion(v.language), ...v }));
+    form.requestId = prefill.requestId || null;
+  }
   if (id) {
     const d = await withStatus(sb.rpc('get_submission_detail', { p_id: id }));
     form.work_id = d.work_id;
@@ -182,6 +301,7 @@ async function renderForm(main, id) {
         <button class="btn secondary" id="pf-back">Back</button>
       </div>
       <p class="hint">Proposing earns no credits by itself. If you would like a compensation, agree with the team first: they will create a task for it.</p>
+      ${prefill?.note ? `<p class="hint">${esc(prefill.note)}${(prefill.links || []).map(([label, url]) => ` <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>.`).join('')}</p>` : ''}
       ${form.decisionNote ? `<p style="white-space:pre-wrap;" dir="auto"><b>Reviewer's note:</b> ${esc(form.decisionNote)}</p>` : ''}
       <div class="subpanel">
         <h3>1. Is it new, or does it already exist?</h3>
@@ -251,6 +371,8 @@ function renderCommon() {
       <div class="field"><label>Main topic <span class="hint">(optional)</span></label><select id="pf-main_topic">${optionsHtml(State.mainTopics, c.main_topic, true)}</select></div>
       <div class="field"><label>Topic tags <span class="hint">(optional, separated by commas)</span></label><input id="pf-secondary_tags" list="pf-tag-list" dir="auto" value="${esc(c.secondary_tags)}"><datalist id="pf-tag-list"></datalist></div>
       <div class="field"><label>Bible verse <span class="hint">(optional)</span></label><input id="pf-bible_verse" dir="auto" value="${esc(c.bible_verse)}"></div>
+      <div class="field"><label>Contained in a magazine issue <span class="hint">(optional: the issue's number in the archive)</span></label><input id="pf-contained" type="number" min="1" value="${esc(c.contained_in_document_id)}"></div>
+      <div class="field"><label>Page in that issue <span class="hint">(optional)</span></label><input id="pf-contained-page" type="number" min="1" value="${esc(c.contained_page)}"></div>
     </div>`;
 }
 
@@ -324,6 +446,7 @@ function collectForm() {
     en_title: val('pf-en_title'), category: val('pf-category'), author: val('pf-author'),
     ref_date: val('pf-ref_date'), ref_period: val('pf-ref_period'), recipient: val('pf-recipient'),
     main_topic: val('pf-main_topic'), secondary_tags: val('pf-secondary_tags'), bible_verse: val('pf-bible_verse'),
+    contained_in_document_id: val('pf-contained'), contained_page: val('pf-contained-page'),
   };
   document.querySelectorAll('#pf-versions [data-version]').forEach(card => {
     const v = form.versions[parseInt(card.dataset.version, 10)];
@@ -380,6 +503,7 @@ async function persist() {
       draft_path: v.draft_path, pages: v.pages, access_level: v.access_level,
       media_type: v.media_type, external_url: v.external_url, duration: v.duration,
       audio_path: v.audio_path, audio_mime: v.audio_mime, audio_size: v.audio_size, reader_name: v.reader_name,
+      source_board_post_id: v.source_board_post_id,
     })),
   };
   form.id = await withStatus(sb.rpc('save_submission', { p_id: form.id, p_payload: payload }), 'Saving...');
@@ -387,6 +511,11 @@ async function persist() {
   form.versions = saved.versions.map(v => ({ ...v, body: v.body || '', file: null, audioFile: null }));
   form.work_id = saved.work_id;
   form.newWork = false;
+  // A suggestion from a board is settled only once there is really a proposal to show for it.
+  if (form.requestId) {
+    await withStatus(sb.rpc('close_archive_request', { p_id: form.requestId, p_outcome: 'proposed' }), 'Saving...');
+    form.requestId = null;
+  }
 }
 
 function renderWorkChoice() {

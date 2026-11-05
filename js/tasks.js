@@ -7,7 +7,7 @@
 // un'operazione tecnica). RLS impedisce di toccare un task preso da qualcun altro (vedi
 // 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel vincolo, non lo sostituiscono.
 
-import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId } from './core.js?v=20261105214210';
+import { sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId } from './core.js?v=20261105231300';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -434,9 +434,13 @@ async function uploadCorrectedFile(task, file) {
     await withStatus(sb.from('documents').update({ draft_inp_path: draftPath }).eq('document_id', old.document_id), 'Replacing corrected file...');
   } else {
     const newId = await nextDocumentId();
+    const isTranslation = ['IT_UR', 'EN_UR'].includes(task.category);
     await withStatus(sb.from('documents').insert({
-      document_id: newId, work_id: orig.work_id, title: orig.title, original_title: orig.original_title,
-      ur_title: orig.ur_title, category: orig.category, author: orig.author, language: orig.language,
+      document_id: newId, work_id: orig.work_id, title: orig.title, en_title: orig.en_title,
+      original_title: isTranslation ? null : orig.original_title, ur_title: isTranslation ? null : orig.ur_title,
+      category: orig.category, author: orig.author, language: isTranslation ? 'URD' : orig.language,
+      ref_date: orig.ref_date, ref_period: orig.ref_period, recipient: orig.recipient, main_topic: orig.main_topic,
+      secondary_tags: orig.secondary_tags, bible_verse: orig.bible_verse, media_type: orig.media_type || 'DOC',
       workflow_status: 'revision', source_task_id: task.id, draft_inp_path: draftPath,
       is_preferred: false, legacy_migrated: false,
     }), 'Creating revision record...');

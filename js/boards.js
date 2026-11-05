@@ -10,12 +10,14 @@
 import {
   sb, State, esc, withStatus, canReviewApplications, getDisplayNameByEmail,
   openBoardPostPopup, likeSafe, DEFAULT_BOARD_FOR_MEMBERSHIP, BOARD_MEDIA_BUCKET, ackBoardPolicy,
-  createWorkFor, uniqueFileName, computeFileName, nextDocumentId,
-} from './core.js?v=20261105214210';
+  canWrite, isMediaLinkOk,
+} from './core.js?v=20261105231300';
 
 // Shown once, before a person's first post (84_boards_moderation.sql) - keep this in sync with
 // the Help entries board_usage_policy_en/it, which say the same thing at more length.
-const BOARD_POLICY_TEXT = `Keep it relevant to the group and in the spirit of the programme. No commercial promotion, no political campaigning, no content that wouldn't be appropriate to read aloud to the group.
+const BOARD_POLICY_TEXT = `Boards are a shared space, separate from the archive: what you post here is not an archive document. If a post deserves the archive, it can be proposed, and it then goes through the usual review.
+
+Keep it relevant to the group and in the spirit of the programme. No commercial promotion, no political campaigning, no content that wouldn't be appropriate to read aloud to the group.
 
 A post from a User is held for review by that board's editors before anyone else sees it; an Operator's post is published immediately. An editor can reject or remove a post, with a reason. Repeated misuse can lead to a reduced reputation (Operators) or to being blocked from posting (Users) - always proposed by an editor and approved by a Formation or HR lead, never by one person alone.`;
 
@@ -89,6 +91,8 @@ export async function renderBoardsView(main) {
   main.innerHTML = `
     <div class="panel">
       <h2>Boards</h2>
+      <p class="hint" style="margin-top:0;">A shared space, separate from the archive: what is posted here is not an archive document.</p>
+      <div id="board-archive-requests"></div>
       <div class="btn-row" id="board-pills" style="margin-bottom:10px;">
         ${shownBoards.map(([code, label]) => `<button class="board-pill${code === active ? ' active' : ''}" data-board="${esc(code)}">${esc(label)}</button>`).join('')}
       </div>
@@ -118,10 +122,65 @@ export async function renderBoardsView(main) {
     renderPendingQueue(document.getElementById('board-pending-queue'), active, posts.filter(p => p.board_code === active && p.status === 'pending'), main);
   }
   renderPostsForBoard(active, postsForActiveBoard(), docById, textById, myEmail, main);
+  renderArchiveRequests(document.getElementById('board-archive-requests'), main);
 
   if (canReviewApplications()) {
     renderEditorsPanel(document.getElementById('board-editors-panel'), allBoards, active);
   }
+}
+
+// ---------- Going to the archive: always through the proposal form ----------
+
+// The form opens already filled in. A post can be just an image or a link, so whatever the form has no
+// place for is shown at the top of it, for the person to decide. Nothing is saved until they save.
+function openProposalFromPost(post, requestId) {
+  const imageUrl = post.image_path ? sb.storage.from(BOARD_MEDIA_BUCKET).getPublicUrl(post.image_path).data.publicUrl : null;
+  const hasText = !!(post.body && post.body.trim());
+  const asVideo = !hasText && isMediaLinkOk(post.link_url);
+  State.proposalPrefill = {
+    requestId,
+    common: { en_title: /^[\x00-\x7F]+$/.test(post.title) ? post.title : '' },
+    versions: [{
+      language: 'URD', original_title: post.title, body: post.body || '', source_board_post_id: post.id,
+      media_type: asVideo ? 'VID' : 'DOC', external_url: asVideo ? post.link_url : '',
+    }],
+    note: 'Filled in from a board post. Please check it and complete what is missing.',
+    links: [
+      ...(post.link_url && !asVideo ? [['The link in the post', post.link_url]] : []),
+      ...(imageUrl ? [['The image in the post', imageUrl]] : []),
+    ],
+  };
+  window.__renderTab('proposals');
+}
+
+// Suggestions waiting for whoever looks after this board, or for Archive & Data.
+async function renderArchiveRequests(box, main) {
+  if (!box) return;
+  const rows = await withStatus(sb.rpc('get_archive_requests'));
+  if (!rows.length) { box.innerHTML = ''; return; }
+  const boards = State.optionListsByName.board || [];
+  box.innerHTML = `
+    <div class="subpanel" style="margin-bottom:12px;">
+      <b>Suggested for the archive</b> <span class="count-badge">${rows.length}</span>
+      ${rows.map(r => `
+        <div data-request="${esc(r.id)}" style="padding:8px 0;border-top:1px solid var(--line);margin-top:6px;">
+          <div style="font-weight:600;" dir="auto">${esc(r.title)}</div>
+          <div class="hint">${esc((boards.find(([c]) => c === r.board_code) || [])[1] || r.board_code)} &middot; ${esc((r.requested_at || '').slice(0, 10))}</div>
+          ${r.body ? `<div class="hint" dir="auto">${esc(textPreview(r.body, 140))}</div>` : ''}
+          <div class="btn-row">
+            ${canWrite() ? '<button class="btn req-propose" style="padding:4px 10px;">Propose for archive</button>' : ''}
+            <button class="btn secondary req-decline" style="padding:4px 10px;">Not for the archive</button>
+          </div>
+        </div>`).join('')}
+    </div>`;
+  box.querySelectorAll('[data-request]').forEach(el => {
+    const r = rows.find(x => String(x.id) === el.dataset.request);
+    el.querySelector('.req-propose')?.addEventListener('click', () => openProposalFromPost({ ...r, id: r.post_id }, r.id));
+    el.querySelector('.req-decline').addEventListener('click', async () => {
+      await withStatus(sb.rpc('close_archive_request', { p_id: r.id, p_outcome: 'declined' }), 'Saving...');
+      renderBoardsView(main);
+    });
+  });
 }
 
 // ---------- Pending queue (that board's editors, or Coordinator/Admin) ----------
@@ -174,10 +233,10 @@ async function renderPostsForBoard(boardCode, posts, docById, textById, myEmail,
   const myReadSet = new Set(myReadRows.map(r => r.post_id));
   const countByPost = {}; for (const c of countRows) countByPost[c.post_id] = c.read_count;
 
-  // Which of these posts already has an archive document promoted from it - so "Promote to
-  // archive" doesn't offer to create a second one for the same post.
+  // Which of these posts already went to the archive, or was suggested for it, so neither is offered twice.
   const promotedRows = postIds.length ? await withStatus(sb.from('documents').select('source_board_post_id').in('source_board_post_id', postIds)) : [];
   const promotedPostIds = new Set(promotedRows.map(r => r.source_board_post_id));
+  const requestedPostIds = new Set(await withStatus(sb.rpc('get_requested_posts')));
 
   // "Letto" is automatic on viewing: anything not yet in myReadSet is counted right now, so the
   // checkmark/count are right on this very render, and persisted in the background below rather
@@ -189,7 +248,7 @@ async function renderPostsForBoard(boardCode, posts, docById, textById, myEmail,
     ${canPost
       ? '<div class="btn-row" style="margin-bottom:10px;"><button class="btn" id="board-new-post">+ New post</button></div>'
       : '<p class="hint">You have been blocked from posting on boards.</p>'}
-    <div id="board-posts-list">${posts.map(p => renderPostCard(p, docById[p.document_id], textById[p.document_id], myEmail, myReadSet.has(p.id), countByPost[p.id] || 0, promotedPostIds.has(p.id))).join('') || '<div class="empty-msg">No posts match here yet.</div>'}</div>`;
+    <div id="board-posts-list">${posts.map(p => renderPostCard(p, docById[p.document_id], textById[p.document_id], myEmail, myReadSet.has(p.id), countByPost[p.id] || 0, promotedPostIds.has(p.id), requestedPostIds.has(p.id))).join('') || '<div class="empty-msg">No posts match here yet.</div>'}</div>`;
 
   if (canPost) {
     document.getElementById('board-new-post').addEventListener('click', () => openBoardPostPopupGated({
@@ -218,7 +277,7 @@ const STATUS_BADGE = {
   rejected: '<span class="hint" style="color:var(--danger);">Rejected</span>',
 };
 
-function renderPostCard(p, doc, text, myEmail, iRead, readCount, alreadyPromoted) {
+function renderPostCard(p, doc, text, myEmail, iRead, readCount, alreadyPromoted, alreadyRequested) {
   const isModerator = State.myBoards.has(p.board_code);
   const isMine = p.posted_by_email === myEmail;
   // Edit: the author (any role, own text) or a moderator. Delete stays narrower - unchanged
@@ -227,9 +286,11 @@ function renderPostCard(p, doc, text, myEmail, iRead, readCount, alreadyPromoted
   const canEditThis = canReviewApplications() || isModerator || isMine;
   const canDeleteThis = canReviewApplications() || (isMine && isModerator);
   const canSeeReaders = canReviewApplications() || isModerator;
-  // Promoting writes a document_texts row, which needs Operator+ (68_document_texts.sql) -
-  // a board editor who happens to still be a plain User couldn't actually complete this.
-  const canPromote = (canReviewApplications() || isModerator) && State.currentRole !== 'user' && p.body && p.body.trim() && !alreadyPromoted;
+  // The proposal form needs Operator or above, so a board editor who is still a plain User suggests,
+  // as anyone else can. A post that only shows a document already in the archive has nothing to add.
+  const worthProposing = p.status === 'published' && !p.document_id && !alreadyPromoted;
+  const canPropose = worthProposing && (canReviewApplications() || isModerator) && canWrite();
+  const canSuggest = worthProposing && !canPropose;
   const imageUrl = p.image_path ? sb.storage.from(BOARD_MEDIA_BUCKET).getPublicUrl(p.image_path).data.publicUrl : null;
   return `
     <div class="panel board-post" data-id="${p.id}">
@@ -256,7 +317,9 @@ function renderPostCard(p, doc, text, myEmail, iRead, readCount, alreadyPromoted
         ${canEditThis ? `<button class="btn secondary" data-edit="${p.id}">Edit</button>` : ''}
         ${canDeleteThis ? `<button class="btn danger" data-delete="${p.id}">Delete</button>` : ''}
         ${canReviewApplications() ? `<button class="btn secondary" data-pin="${p.id}">${p.pinned ? 'Unpin' : 'Pin'}</button>` : ''}
-        ${canPromote ? `<button class="btn secondary" data-promote="${p.id}">Promote to archive</button>` : ''}
+        ${canPropose ? `<button class="btn secondary" data-promote="${p.id}">Propose for archive</button>` : ''}
+        ${canSuggest && !alreadyRequested ? `<button class="btn secondary" data-suggest="${p.id}">Suggest for the archive</button>` : ''}
+        ${canSuggest && alreadyRequested ? '<span class="hint">Suggested for the archive</span>' : ''}
       </div>
     </div>`;
 }
@@ -293,29 +356,14 @@ function wirePostActions(posts, docById, myEmail, main) {
     await withStatus(sb.from('board_posts').update({ pinned: !post.pinned }).eq('id', post.id), 'Saving...');
     renderBoardsView(main);
   }));
-  document.querySelectorAll('[data-promote]').forEach(btn => btn.addEventListener('click', async () => {
-    const post = posts.find(p => String(p.id) === btn.dataset.promote);
-    if (!confirm(`Create an archive document from "${post.title}"? It will start in revision, same as any other draft.`)) return;
-    await promotePostToArchive(post);
+  document.querySelectorAll('[data-promote]').forEach(btn => btn.addEventListener('click', () => {
+    openProposalFromPost(posts.find(p => String(p.id) === btn.dataset.promote), null);
+  }));
+  document.querySelectorAll('[data-suggest]').forEach(btn => btn.addEventListener('click', async () => {
+    await withStatus(sb.rpc('request_post_for_archive', { p_post_id: parseInt(btn.dataset.suggest, 10) }), 'Sending...');
+    alert('Thank you: whoever looks after this board will see your suggestion.');
     renderBoardsView(main);
   }));
-}
-
-// Creates a new archive document (workflow_status 'revision', same stage as any other draft
-// awaiting review - see tasks.js's uploadCorrectedFile for the same status used elsewhere) from
-// a board post's title/text, with its own Work and a document_texts row so the text is actually
-// readable/searchable like any other document, not just cross-linked.
-async function promotePostToArchive(post) {
-  const { data: { user } } = await sb.auth.getUser();
-  const newId = await nextDocumentId();
-  const workId = await createWorkFor(post.title);
-  const draft = {
-    document_id: newId, title: post.title, work_id: workId, language: 'URD',
-    workflow_status: 'revision', source_board_post_id: post.id, legacy_migrated: false, is_preferred: false,
-  };
-  draft.file_name = await uniqueFileName(computeFileName(draft), null);
-  await withStatus(sb.from('documents').insert(draft), 'Creating archive draft...');
-  await withStatus(sb.from('document_texts').insert({ document_id: newId, body: post.body, source: 'typed', reviewed: false, updated_by_email: user.email }), 'Saving text...');
 }
 
 // ---------- Board editors panel (Coordinator/Admin only) ----------
