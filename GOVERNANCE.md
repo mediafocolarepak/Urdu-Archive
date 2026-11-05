@@ -909,4 +909,8 @@ it was answered 2026-09-17 (see its own entry below) and nothing here remains op
     (دعا in Urdu, "prayer") is easier to say and to remember. The code, manifest and app icons use
     the new name; the repository and the live address keep the old "Urdu-Archive" name, because
     renaming them would change the web address that installed copies and shared links point to.
+    Sheril confirmed the name sounds right in Urdu. **Rule: the program is always written "DUA" in
+    Latin letters, never in Urdu script, even inside Urdu texts that mention it** — it is an acronym,
+    not a word to translate or transliterate (this applies to the Start Here cards, the guides and the
+    Translate prompt's output alike).
     Earlier sections and decision entries keep the name that was in use when they were written.
