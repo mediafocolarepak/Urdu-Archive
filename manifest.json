@@ -1,7 +1,7 @@
 {
-  "name": "Focolare Urdu Archive",
-  "short_name": "Urdu Archive",
-  "description": "Browse, search, and download documents from the Focolare Urdu Archive.",
+  "name": "Digital Urdu Archive",
+  "short_name": "DUA",
+  "description": "Browse, search, and download documents from the Digital Urdu Archive (DUA), the Urdu library of the Focolare Movement in Pakistan.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

@@ -8,7 +8,7 @@ import {
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup,
-} from './core.js?v=20261028182632';
+} from './core.js?v=20261105082046';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -909,7 +909,7 @@ export async function renderTrackingSheet(id) {
       <button class="btn" id="print-tracking">Print / Export PDF</button>
     </div>
     <div class="report-view" style="max-width:800px;margin:0 auto;">
-      <h2>Focolare Urdu Archive - Document Tracking Sheet</h2>
+      <h2>Digital Urdu Archive - Document Tracking Sheet</h2>
       <table style="margin-bottom:16px;">
         <tr><th style="width:30%;">Document ID</th><td>${esc(doc.document_id)}</td></tr>
         <tr><th>Title</th><td>${esc(doc.title)}</td></tr>

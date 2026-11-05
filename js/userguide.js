@@ -3,7 +3,7 @@
 // which now live in the `help_pages` table (51_help_pages.sql) instead of external Claude
 // Artifacts. Admin can edit/save them in place (raw HTML source) from this same view.
 
-import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20261028182632';
+import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20261105082046';
 
 let helpPagesCache = null;
 const helpView = { slug: null, editing: false };
@@ -48,7 +48,7 @@ function renderHelpList(main, pages) {
       'your role')}
     <div class="panel report-view" style="max-width:820px;margin:0 auto;">
       <h2>User Guide</h2>
-      <p class="hint">A short guide to finding and downloading documents in the Focolare Urdu Archive.</p>
+      <p class="hint">A short guide to finding and downloading documents in the Digital Urdu Archive.</p>
 
       <h3>1. The Dashboard</h3>
       <p>When you sign in, you land on the <b>Dashboard</b>. It has two parts: a list of documents on the left, and a detail panel on the right that shows whichever document you click.</p>

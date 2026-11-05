@@ -93,7 +93,7 @@ Applications report (Print Reports, Admin/HR) was added, reusing existing data s
 migration. No organisational decision changes in v1.2 or v1.3 either; both are "catch the docs up
 to the code" passes.
 
-This document describes how the people who run the **Focolare Urdu Archive Manager** are
+This document describes how the people who run the **Digital Urdu Archive (DUA)** are
 organised: who does what, who decides what, and how that maps onto the software. It exists
 because the project has moved from a one-person effort to a team spread across several cities,
 and decisions that used to live in one head now need to be written down.
@@ -904,3 +904,9 @@ it was answered 2026-09-17 (see its own entry below) and nothing here remains op
     from Options, as its lead, to give the cataloguing tools a home and the people who use them a
     Team channel of their own to coordinate in. A department is data (§1.1), so no migration was
     needed.
+15. **The program is renamed "Digital Urdu Archive" (DUA), 2026-11-05:** the Owner changed the name
+    from "Focolare Urdu Archive" because its initials, FUA, can be read badly in English; "DUA"
+    (دعا in Urdu, "prayer") is easier to say and to remember. The code, manifest and app icons use
+    the new name; the repository and the live address keep the old "Urdu-Archive" name, because
+    renaming them would change the web address that installed copies and shared links point to.
+    Earlier sections and decision entries keep the name that was in use when they were written.
