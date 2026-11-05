@@ -5,7 +5,7 @@
 // reviewed. Deliberately does not import from collaboration.js (project convention: modules
 // only import from core.js), so the skill-chip rendering is duplicated here in small form.
 
-import { sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml } from './core.js?v=20261105132836';
+import { sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml } from './core.js?v=20261105144540';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -24,11 +24,12 @@ let editing = false;
 export async function renderMyProfileView(main) {
   main.innerHTML = '<div class="empty-msg">Loading...</div>';
   const { data: { user } } = await sb.auth.getUser();
-  const [roleRows, profileRows, qualRows, certRows] = await Promise.all([
+  const [roleRows, profileRows, qualRows, certRows, reservedAccess] = await Promise.all([
     withStatus(sb.from('user_roles').select('role').eq('user_id', user.id)),
     withStatus(sb.from('user_profiles').select('*').eq('user_id', user.id)),
     withStatus(sb.from('user_qualifications').select('qualification_code').eq('user_id', user.id)),
     withStatus(sb.from('formation_certificates').select('*, formation_paths(title)').eq('user_id', user.id).order('issued_at', { ascending: false })),
+    withStatus(sb.rpc('has_reserved_access')),
   ]);
   const role = roleRows[0]?.role || 'user';
   const profile = profileRows[0] || {};
@@ -50,6 +51,7 @@ export async function renderMyProfileView(main) {
         <div class="field"><label>Email</label><div style="font-size:13.5px;padding:4px 0;">${esc(user.email)}</div></div>
         <div class="field"><label>Role</label><div style="font-size:13.5px;padding:4px 0;">${esc(ROLE_LABEL[role] || role)}</div></div>
         <div class="field"><label>Qualifications</label><div style="font-size:13.5px;padding:4px 0;">${myQualLabels.map(esc).join(', ') || '—'}</div></div>
+        ${reservedAccess ? '<div class="field"><label>Reserved documents</label><div style="font-size:13.5px;padding:4px 0;">You can read them</div></div>' : ''}
       </div>
       ${certRows.length ? `<div class="subpanel" style="margin-top:16px;">
         <h3>My Certificates</h3>

@@ -1,7 +1,12 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.10 (2026-11-05) — decisions taken by the Owner; all of phases 1 through 3 are built and
-merged (migrations 80–110). Team comments welcome, changes go through a new version.**
+**Status: v1.11 (2026-11-05) — decisions taken by the Owner; all of phases 1 through 3 are built and
+merged (migrations 80–111). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.11:** access levels (§5.13, migration 111). Every document version is public,
+private or reserved. A reserved document exists only for Admin, Formation members and people they
+enable. **The limit is written down on purpose:** PDFs stay on Drive with a public link, so a level
+decides what the app shows and does not make a file on Drive secret.
 
 **What changed in v1.10:** the first part of the archive intake protocol
 (`Documentazione\PROTOCOLLO_Ingresso_archivio_v1.md`), migrations 109–110:
@@ -786,13 +791,39 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
   person, Admin and the HR lead.
 - **Deleting:** `soft_delete_document()` needs a reason and hides the document from everyone. The
   record and its files stay, and Admin restores it from My Department → Archive & Data. Nobody can
-  erase a document through the app. Until the access levels are built, the text of a deleted document
-  remains readable through the API by a signed-in user who asks for it by number.
+  erase a document through the app.
 - **Task review (migration 109):** a Revisor, Coordinator or Admin gives the verdict; nobody reviews
   their own task, except Admin. Credits and reputation are written once, at Admin's decision, and the
   document then moves to `pending_publish`. A task reviewed by the person who did it stays
   recognisable (`reviewed_by = claimed_by`), so Reward reports can leave test credits out.
 - **A Word of Life** extracted from the Hayat index takes its own month (`data_pdv`), not the issue's.
+
+
+### 5.13 Access levels (migration 111)
+
+| Level | Who sees it in the app | Where the file can be |
+|---|---|---|
+| **Public** | Registered users; it may also exist outside the archive | A link to YouTube or elsewhere, or Drive |
+| **Private** (the default, and every document that existed on 2026-11-05) | Registered users | Drive |
+| **Reserved** | Admin, Formation members, people they have enabled | Drive; text and records protected in the database |
+
+- **For anyone not enabled, a reserved document does not exist:** not in lists, search, tasks, boards,
+  formation paths, favourites or history. A Work whose documents are all reserved hides its title too.
+  Task lists for Coordination and Reward show "(reserved)" in place of its title and note.
+- **Who decides:** only Admin and Formation members can give or take away the reserved level, or
+  enable a person, from My Department → Formation. Who is enabled is visible only to them, and every
+  change is in the log (§5.12). A correction made through a task inherits the level of the document
+  it corrects, and nobody without the right can lower it.
+- **What this does not protect, by the Owner's decision:** PDFs and `.inp` files stay in the current
+  Drive folder, open to anyone with the link. The folder's identifier is in the published JavaScript,
+  and a file's name contains the document's title. Records, texts and files in Supabase Storage are
+  protected. For a very delicate document, keep only the text here and do not upload the PDF. A link
+  to a video also works outside the app.
+- **Also protected now:** nobody but those who can see a document can read its text, so the text of a
+  hidden draft or a deleted document is no longer readable through the API.
+- **Not yet:** a Formation member can make an existing document reserved, but cannot yet add a new one
+  by themselves or see their own hidden draft. The proposal form (the next phase) brings this, with
+  a second Formation member or Admin approving.
 
 ---
 

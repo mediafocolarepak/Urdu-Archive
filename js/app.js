@@ -1,25 +1,25 @@
-import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20261105132836';
-import { renderDashboardView } from './dashboard.js?v=20261105132836';
-import { renderReportsView } from './reports.js?v=20261105132836';
-import { renderHayatView } from './hayatindex.js?v=20261105132836';
-import { renderMatchReviewView } from './matchreview.js?v=20261105132836';
-import { renderBulkImportView } from './bulkimport.js?v=20261105132836';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20261105132836';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20261105132836';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20261105132836';
-import { renderHayatEditorView } from './hayateditor.js?v=20261105132836';
-import { renderInPageConverterView } from './inpageconverter.js?v=20261105132836';
-import { renderUserGuideView } from './userguide.js?v=20261105132836';
-import { renderJoinTeamView } from './collaboration.js?v=20261105132836';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20261105132836';
-import { renderMyProfileView } from './profile.js?v=20261105132836';
-import { renderMySpaceView } from './myspace.js?v=20261105132836';
-import { renderBoardsView } from './boards.js?v=20261105132836';
-import { renderFormationView } from './formation.js?v=20261105132836';
-import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261105132836';
-import { renderOnboardingView } from './onboarding.js?v=20261105132836';
-import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20261105132836';
-import { registerServiceWorker, initInstallBanner } from './pwa-register.js?v=20261105132836';
+import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20261105144540';
+import { renderDashboardView } from './dashboard.js?v=20261105144540';
+import { renderReportsView } from './reports.js?v=20261105144540';
+import { renderHayatView } from './hayatindex.js?v=20261105144540';
+import { renderMatchReviewView } from './matchreview.js?v=20261105144540';
+import { renderBulkImportView } from './bulkimport.js?v=20261105144540';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20261105144540';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20261105144540';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20261105144540';
+import { renderHayatEditorView } from './hayateditor.js?v=20261105144540';
+import { renderInPageConverterView } from './inpageconverter.js?v=20261105144540';
+import { renderUserGuideView } from './userguide.js?v=20261105144540';
+import { renderJoinTeamView } from './collaboration.js?v=20261105144540';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20261105144540';
+import { renderMyProfileView } from './profile.js?v=20261105144540';
+import { renderMySpaceView } from './myspace.js?v=20261105144540';
+import { renderBoardsView } from './boards.js?v=20261105144540';
+import { renderFormationView } from './formation.js?v=20261105144540';
+import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261105144540';
+import { renderOnboardingView } from './onboarding.js?v=20261105144540';
+import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20261105144540';
+import { registerServiceWorker, initInstallBanner } from './pwa-register.js?v=20261105144540';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.

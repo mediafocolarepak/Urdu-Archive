@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, isAdmin, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20261105132836';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261105132836';
+import { sb, State, esc, labelOf, optionsHtml, isAdmin, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20261105144540';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261105144540';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
@@ -55,6 +55,7 @@ export async function renderDashboardView(main) {
         <div class="field"><label>Author</label><select id="f-author">${optionsHtml(State.authors, State.dashFilters.author, true, 'All')}</select></div>
         <div class="field"><label>Main topic</label><select id="f-main_topic">${optionsHtml(State.mainTopics, State.dashFilters.main_topic, true, 'All')}</select></div>
         ${isUser ? '' : `<div class="field"><label>Workflow status</label><select id="f-status">${optionsHtml(State.statuses, State.dashFilters.workflow_status, true, 'All')}</select></div>`}
+        ${isUser && !canManageReserved() ? '' : `<div class="field"><label>Access level</label><select id="f-access">${optionsHtml(ACCESS_LEVELS, State.dashFilters.access_level, true, 'All')}</select></div>`}
         <div class="field"><label>Recipient</label><select id="f-recipient">${optionsHtml(State.recipients, State.dashFilters.recipient, true, 'All')}</select></div>
         <div class="field"><label>Source</label><select id="f-source">${optionsHtml(State.sources, State.dashFilters.source, true, 'All')}</select></div>
         <div class="field"><label>Collection</label><select id="f-collection">${optionsHtml(State.collections, State.dashFilters.collection, true, 'All')}</select></div>
@@ -92,7 +93,7 @@ export async function renderDashboardView(main) {
   // down); on a wide screen they stay open and the toggle is hidden by CSS.
   document.getElementById('dash-filters').open = !window.matchMedia('(max-width: 900px)').matches;
   document.getElementById('dash-clear-filters').addEventListener('click', () => {
-    Object.assign(State.dashFilters, { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', collection: '', recipient: '', source: '', language: '', legacyOnly: false, pendingOnly: false });
+    Object.assign(State.dashFilters, { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', access_level: '', collection: '', recipient: '', source: '', language: '', legacyOnly: false, pendingOnly: false });
     renderDashboardView(main);
   });
   document.getElementById('dash-back').addEventListener('click', () => { if (history.state && history.state.dashDetail) history.back(); else closeDocDetailScreen(); });
@@ -104,6 +105,7 @@ export async function renderDashboardView(main) {
   document.getElementById('f-category').addEventListener('change', e => { State.dashFilters.category = e.target.value; refreshDashGrid(); });
   document.getElementById('f-author').addEventListener('change', e => { State.dashFilters.author = e.target.value; refreshDashGrid(); });
   document.getElementById('f-main_topic').addEventListener('change', e => { State.dashFilters.main_topic = e.target.value; refreshDashGrid(); });
+  document.getElementById('f-access')?.addEventListener('change', e => { State.dashFilters.access_level = e.target.value; refreshDashGrid(); });
   if (!isUser) {
     document.getElementById('f-status').addEventListener('change', e => { State.dashFilters.workflow_status = e.target.value; refreshDashGrid(); });
     document.getElementById('f-legacy').addEventListener('change', e => { State.dashFilters.legacyOnly = e.target.checked; refreshDashGrid(); });
@@ -131,7 +133,7 @@ export async function renderDashboardView(main) {
 // .or() as the title/tag ilike below because it reads a different table, so it runs first as a
 // separate query and its document_ids are added as one more branch of that same .or().
 async function buildDashQuery(selectAll) {
-  let q = sb.from('documents').select(selectAll ? '*' : 'document_id,category,author,main_topic,recipient,title,original_title,en_title,place,ref_date,pending_deletion,is_preferred');
+  let q = sb.from('documents').select(selectAll ? '*' : 'document_id,category,author,main_topic,recipient,title,original_title,en_title,place,ref_date,pending_deletion,is_preferred,access_level');
   const f = State.dashFilters;
   if (f.search && f.search.trim()) {
     const term = f.search.trim();
@@ -149,6 +151,7 @@ async function buildDashQuery(selectAll) {
   if (f.author) q = q.eq('author', f.author);
   if (f.main_topic) q = q.eq('main_topic', f.main_topic);
   if (f.workflow_status) q = q.eq('workflow_status', f.workflow_status);
+  if (f.access_level) q = q.eq('access_level', f.access_level);
   if (f.legacyOnly) q = q.eq('legacy_migrated', true);
   if (f.pendingOnly) q = q.eq('pending_deletion', true);
   if (f.recipient) q = q.overlaps('recipient', [f.recipient]);
@@ -207,7 +210,7 @@ export async function refreshDashGrid() {
   rows = await filterByCollection(rows);
   document.getElementById('dash-count').textContent = rows.length;
   const f = State.dashFilters;
-  const activeFilters = [f.idSearch, f.category, f.author, f.main_topic, f.workflow_status, f.recipient, f.source, f.collection, f.language, f.legacyOnly, f.pendingOnly].filter(Boolean).length;
+  const activeFilters = [f.idSearch, f.category, f.author, f.main_topic, f.workflow_status, f.access_level, f.recipient, f.source, f.collection, f.language, f.legacyOnly, f.pendingOnly].filter(Boolean).length;
   const sum = document.getElementById('dash-filters-summary');
   if (sum) sum.textContent = activeFilters ? `Filters (${activeFilters} active)` : 'Filters';
   const arrow = (col) => col !== State.dashSort.col ? '' : (State.dashSort.asc ? ' &uarr;' : ' &darr;');
@@ -217,7 +220,7 @@ export async function refreshDashGrid() {
     <tbody>${rows.map(r => {
       const star = r.is_preferred ? '&#9733; ' : '';
       return `<tr data-id="${esc(r.document_id)}" class="${String(r.document_id) === String(State.selectedDocId) ? 'selected' : ''}">
-      <td>${esc(r.document_id)}${r.pending_deletion ? ' <span class="count-badge" style="padding:1px 6px;background:var(--danger);color:#fff;">pending deletion</span>' : ''}</td>
+      <td>${esc(r.document_id)}${r.pending_deletion ? ' <span class="count-badge" style="padding:1px 6px;background:var(--danger);color:#fff;">pending deletion</span>' : ''}${r.access_level === 'reserved' ? ' <span class="count-badge" style="padding:1px 6px;">Reserved</span>' : ''}</td>
       <td>${star}${esc(r.title)}</td><td>${esc(r.original_title)}</td>
       <td>${esc(labelOf(State.authors, r.author))}</td>
       <td>${esc(r.place)}</td>
@@ -254,6 +257,7 @@ export async function refreshDashGrid() {
         <div class="dash-card-title dash-card-open">${star}${title}</div>
         <div class="dash-card-meta">#${esc(r.document_id)} &middot; ${esc(labelOf(State.authors, r.author))} &middot; ${esc(r.place)} &middot; ${esc(labelOf(State.categories, r.category))}</div>
         ${r.pending_deletion ? '<span class="count-badge" style="padding:1px 6px;background:var(--danger);color:#fff;">pending deletion</span>' : ''}
+        ${r.access_level === 'reserved' ? '<span class="count-badge" style="padding:1px 6px;">Reserved</span>' : ''}
         <div class="dash-card-actions"><button class="btn secondary dash-card-open">Details &rsaquo;</button></div>
       </div>`;
     }).join('') || '<div class="empty-msg">No documents match the current filters.</div>';
