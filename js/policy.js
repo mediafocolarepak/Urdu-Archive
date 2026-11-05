@@ -6,7 +6,7 @@
 // People: any department lead or Admin) and from admin.js (per-row "Propose..." buttons that
 // replace the old direct-edit inputs on the reputation-tiers/policy-values/task-category panels).
 
-import { sb, State, esc, withStatus, canProposePolicyChange, canApprovePolicyChange } from './core.js?v=20261105092353';
+import { sb, State, esc, withStatus, canProposePolicyChange, canApprovePolicyChange } from './core.js?v=20261105132836';
 
 // Who may propose a change to each policy_values key (GOVERNANCE.md §2.8 "who owns which
 // policy table"). task_category_rates and task_reputation_tiers are Reward's alone.
@@ -247,7 +247,7 @@ function renderPendingQueue(pending, myEmail, container, departmentFilter) {
         <td>${esc(p.proposed_by_email)}</td>
         <td>${esc((p.proposed_at || '').slice(0, 10))}</td>
         <td>
-          ${p.proposed_by_email === myEmail
+          ${p.proposed_by_email === myEmail && !canApprovePolicyChange()
             ? '<button class="btn secondary pp-withdraw-btn" style="padding:4px 10px;">Withdraw</button>'
             : (canApprovePolicyChange()
               ? '<button class="btn pp-approve-btn" style="padding:4px 10px;">Approve</button><button class="btn danger pp-reject-btn" style="padding:4px 10px;">Reject</button>'

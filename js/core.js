@@ -450,6 +450,43 @@ export function canReviewTeamApplications() { return isDeptMember('HR') || isAdm
 export function canProposePolicyChange(departmentCode) { return isAdmin() || isDeptLead(departmentCode); }
 export function canApprovePolicyChange() { return isAdmin(); }
 
+// ---------- Archive log (110_doors_and_archive_log.sql) ----------
+
+const LOG_TABLE_LABELS = {
+  documents: 'Document', document_texts: 'Text', document_original_texts: 'Original text',
+  document_collections: 'Collection', process_history: 'Process step', works: 'Work', tasks: 'Task',
+  user_roles: 'Role', user_qualifications: 'Qualification', department_members: 'Department',
+};
+const LOG_ACTION_LABELS = { insert: 'added', update: 'changed', delete: 'removed' };
+
+function logValue(v) {
+  if (v === undefined || v === null) return '\u2014';
+  const s = typeof v === 'string' ? v : JSON.stringify(v);
+  return s.length > 80 ? s.slice(0, 80) + '\u2026' : s;
+}
+
+function logWhat(r) {
+  const deleted = r.table_name === 'documents' && r.changes?.deleted_at;
+  if (deleted) return deleted.new ? 'Document deleted' : 'Document restored';
+  return `${LOG_TABLE_LABELS[r.table_name] || r.table_name} ${LOG_ACTION_LABELS[r.action] || r.action}`;
+}
+
+// Shared by a document's history and a person's activity. showActor: who did it (a document's
+// history); otherwise which document it was about (a person's activity).
+export function logEntriesHtml(rows, showActor) {
+  if (!rows.length) return '<div class="hint">Nothing recorded yet.</div>';
+  return `
+    <div class="grid-wrap"><table class="grid">
+      <thead><tr><th>When</th><th>${showActor ? 'Who' : 'Document'}</th><th>What</th><th>Details</th></tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td>${esc((r.at || '').slice(0, 16).replace('T', ' '))}</td>
+        <td>${showActor ? `${esc(r.actor)}${r.actor_role === 'admin' ? ' <span class="hint">(Admin)</span>' : ''}` : (r.document_id ? '#' + esc(r.document_id) : '')}</td>
+        <td>${esc(logWhat(r))}</td>
+        <td style="white-space:normal;" dir="auto">${Object.entries(r.changes || {}).map(([field, c]) => `${esc(field)}: ${esc(logValue(c.old))} &rarr; ${esc(logValue(c.new))}`).join('<br>')}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
 // ---------- Standing widget (credits + reputation, shown in the topbar for Operator+) ----------
 
 const GOOD_PRACTICES = [
@@ -547,6 +584,12 @@ export async function uniqueFileName(base, excludeDocId) {
   }
 }
 
+// Document numbers come from the server (110_doors_and_archive_log.sql). Computing max + 1 here went
+// wrong for anyone who could not see hidden rows, and would reuse the number of a deleted document.
+export async function nextDocumentId() {
+  return await withStatus(sb.rpc('next_document_id'));
+}
+
 // Creates a fresh single-item Work for a new document and returns its work_id.
 export async function createWorkFor(title) {
   const rows = await withStatus(sb.from('works').insert({ canonical_title: title }).select('work_id'));
@@ -567,8 +610,7 @@ function mapHayatAuthor(name) {
 // one). category codes now match documents.category 1:1 (both are the original Access cat_id
 // codes), so no translation table is needed here any more. Returns the new document_id.
 export async function extractHayatRowToDocument(row) {
-  const maxRows = await withStatus(sb.from('documents').select('document_id').order('document_id', { ascending: false }).limit(1));
-  const newId = (maxRows[0]?.document_id || 0) + 1;
+  const newId = await nextDocumentId();
   const workId = await createWorkFor(row.titolo || row.title);
   const draft = {
     document_id: newId, title: row.title || row.titolo, original_title: row.titolo || row.title,
@@ -577,7 +619,9 @@ export async function extractHayatRowToDocument(row) {
     hayat_index_ref: row.id, to_whom: row.branca,
     hayat_issue: `${row.mese_anno || ''}p.${row.pagina || ''}`,
     category: row.category || null, author: mapHayatAuthor(row.autore), main_topic: 'GENR', secondary_tags: row.argomento,
-    ref_period: row.mese_anno || null,
+    // A Word of Life is dated by its own month, not the issue's (Owner's decision 2026-11-05):
+    // the December issue can carry January's Word of Life. The issue stays in hayat_issue above.
+    ref_period: row.data_pdv || row.mese_anno || null,
     language: 'URD', workflow_status: 'ENTR', legacy_migrated: false,
     source: 'HAYAT', media_type: 'DOC', work_id: workId,
   };

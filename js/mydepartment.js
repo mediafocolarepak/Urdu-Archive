@@ -6,10 +6,10 @@
 import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
   nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt,
-} from './core.js?v=20261105092353';
-import { renderPolicySection } from './policy.js?v=20261105092353';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261105092353';
-import { renderApplicationsView } from './collaboration.js?v=20261105092353';
+} from './core.js?v=20261105132836';
+import { renderPolicySection } from './policy.js?v=20261105132836';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261105132836';
+import { renderApplicationsView } from './collaboration.js?v=20261105132836';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -358,7 +358,7 @@ async function renderUsersStatsPanel(box) {
 }
 
 const ARCHIVE_TOOLS = [
-  ['hayat', 'Hayat Index', 'Browse and extract from the original Hayat register.'],
+  ['hayat', 'Hayat Index', 'Browse the original Hayat register.'],
   ['matchreview', 'Match Review', 'Review and confirm automatic matches against existing documents.'],
   ['workconsolidation', 'Work Consolidation', 'Merge duplicate/split entries into a single document.'],
   ['hayateditor', 'Hayat Editor', 'Correct a Hayat register entry directly.'],
@@ -371,13 +371,39 @@ function renderArchiveTools(box) {
     <div class="panel">
       <h2>Archive tools</h2>
       <p class="hint">Data cataloguing tools for this department - open one to work on it.</p>
-      <div class="field-grid wide">${ARCHIVE_TOOLS.map(([id, label, desc]) => `
+      <div class="field-grid wide">${ARCHIVE_TOOLS.filter(([id]) => id !== 'bulkimport' || isAdmin()).map(([id, label, desc]) => `
         <div class="panel" style="cursor:pointer;" data-open-tab="${id}">
           <div style="font-weight:600;">${esc(label)}</div>
           <div class="hint">${esc(desc)}</div>
         </div>`).join('')}</div>
-    </div>`;
+    </div>
+    ${isAdmin() ? '<div id="mydept-deleted-documents"></div>' : ''}`;
   box.querySelectorAll('[data-open-tab]').forEach(el => el.addEventListener('click', () => window.__renderTab(el.dataset.openTab)));
+  if (isAdmin()) renderDeletedDocuments(document.getElementById('mydept-deleted-documents'));
+}
+
+// Deleting leaves the record in place, hidden from everyone (110_doors_and_archive_log.sql).
+async function renderDeletedDocuments(box) {
+  const rows = await withStatus(sb.rpc('get_deleted_documents'));
+  box.innerHTML = `
+    <div class="panel">
+      <h2>Deleted documents</h2>
+      ${rows.length ? `<div class="grid-wrap"><table class="grid">
+        <thead><tr><th>Document</th><th>Title</th><th>Deleted</th><th>By</th><th>Reason</th><th></th></tr></thead>
+        <tbody>${rows.map(r => `<tr>
+          <td>#${esc(r.document_id)}</td>
+          <td dir="auto">${esc(r.title)}</td>
+          <td>${esc((r.deleted_at || '').slice(0, 10))}</td>
+          <td>${esc(r.deleted_by_email)}</td>
+          <td style="white-space:normal;">${esc(r.deleted_reason)}</td>
+          <td><button class="btn secondary" data-restore-document="${esc(r.document_id)}" style="padding:2px 8px;">Restore</button></td>
+        </tr>`).join('')}</tbody>
+      </table></div>` : '<div class="empty-msg">No deleted documents.</div>'}
+    </div>`;
+  box.querySelectorAll('[data-restore-document]').forEach(btn => btn.addEventListener('click', async () => {
+    await withStatus(sb.rpc('restore_document', { p_document_id: parseInt(btn.dataset.restoreDocument, 10) }), 'Restoring...');
+    await renderDeletedDocuments(box);
+  }));
 }
 
 // ---------- Translation prompt editor (106_translation_prompts.sql) ----------
@@ -547,7 +573,7 @@ async function renderCoordinationOverview(box) {
   // not folded into a TABS entry, because it cuts across every status bucket above (a task can
   // be 'claimed' or 'submitted' and still be pending on its extra credits at the same time) and
   // it's the one place in this panel with a real write action, not just a read-only overview.
-  const canApproveExtraCredits = isDeptLead('COORD');
+  const canApproveExtraCredits = isDeptLead('COORD') || isAdmin();
   const extraCreditsRowHtml = r => `<tr>
     <td>${esc(r.title)}</td>
     <td>${esc(r.category)}</td>

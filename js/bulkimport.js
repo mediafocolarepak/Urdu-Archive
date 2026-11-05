@@ -4,7 +4,7 @@
 // (by title similarity against what's already catalogued) are still detected, but only
 // reported afterwards in the summary, not used to block or pre-exclude anything.
 
-import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob } from './core.js?v=20261105092353';
+import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob, nextDocumentId } from './core.js?v=20261105132836';
 
 export function titleFromFilename(name) {
   const noExt = name.replace(/\.[a-z0-9]+$/i, '');
@@ -100,11 +100,16 @@ async function scanAndImport() {
     return;
   }
 
-  const existing = await withStatus(sb.from('documents').select('document_id,title,file_name,legacy_file_name').order('document_id'), 'Checking for similar items already catalogued...');
-  const maxRows = await withStatus(sb.from('documents').select('document_id').order('document_id', { ascending: false }).limit(1));
-  let nextId = (maxRows[0]?.document_id || 0) + 1;
+  // Asked before planning, so cancelling doesn't use up document numbers from the server.
+  if (!confirm(`Import ${files.length} file(s) and move renamed copies into a "renamed" subfolder? This cannot be easily undone.`)) {
+    body.innerHTML = '';
+    return;
+  }
 
-  const plan = files.map(entry => {
+  const existing = await withStatus(sb.from('documents').select('document_id,title,file_name,legacy_file_name').order('document_id'), 'Checking for similar items already catalogued...');
+
+  const plan = [];
+  for (const entry of files) {
     const title = titleFromFilename(entry.name);
     const { ref_date, ref_period } = extractDateFromFilename(entry.name);
     let bestMatch = null, bestScore = 0;
@@ -112,20 +117,15 @@ async function scanAndImport() {
       const score = Math.max(titleOverlapScore(title, doc.title), titleOverlapScore(entry.name, doc.file_name), titleOverlapScore(entry.name, doc.legacy_file_name));
       if (score > bestScore) { bestScore = score; bestMatch = doc; }
     }
-    const document_id = nextId++;
+    const document_id = await nextDocumentId();
     const ext = entry.name.slice(entry.name.lastIndexOf('.'));
     const base = baseNameOf(entry.name);
     const newFileName = computeFileName({ document_id, title }).replace(/\.pdf$/, ext);
-    return {
+    plan.push({
       entry, originalName: entry.name, document_id, title, ref_date, ref_period, newFileName,
       original_inp_file_name: `${base}.inp`, original_doc_file_name: `${base}.docx`,
       isDuplicateSuspect: bestScore >= 0.5, duplicateOf: bestMatch,
-    };
-  });
-
-  if (!confirm(`Import ${plan.length} file(s) and move renamed copies into a "renamed" subfolder? This cannot be easily undone.`)) {
-    body.innerHTML = '';
-    return;
+    });
   }
 
   // Renamed copies go into a subfolder, not next to the originals - writing a brand new file
@@ -167,8 +167,7 @@ async function scanAndImport() {
       // Collections are a many-to-many join in document_collections, which is what the document
       // editor, the Dashboard filter and Match Review all read. Writing them to a column on
       // documents instead (as this did until migration 67) made every bulk-imported document
-      // invisible to all three. No rollback needed for this row: the delete below takes the
-      // document with it, and the foreign key cascades.
+      // invisible to all three.
       if (batchCollection) {
         await withStatus(sb.from('document_collections')
           .insert({ document_id: r.document_id, collection_code: batchCollection }));
@@ -198,7 +197,7 @@ async function scanAndImport() {
         try { await outDirHandle.removeEntry(r.newFileName); } catch {}
       }
       if (inserted) {
-        await sb.from('documents').delete().eq('document_id', r.document_id);
+        await sb.rpc('soft_delete_document', { p_document_id: r.document_id, p_reason: 'Bulk Import failed partway through this file' });
       }
       // Confirmed 2026-09-03: a USB flash drive reliably triggers this - copy the folder to an
       // internal HDD/SSD first and it goes away. A cloud-sync placeholder (OneDrive "Files
