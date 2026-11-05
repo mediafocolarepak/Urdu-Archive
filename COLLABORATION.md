@@ -1,6 +1,6 @@
 # Collaborare su questo progetto
 
-Documento per chi si aggiunge allo sviluppo di **Focolare Urdu Archive Manager** insieme ad
+Documento per chi si aggiunge allo sviluppo di **Digital Urdu Archive (DUA)** insieme ad
 Alessandro (proprietario del repo). Copre solo il flusso di lavoro condiviso — per l'ambiente di
 sviluppo locale (clonare il repo, script PowerShell, server locale) vedi `NUOVO_COMPUTER_SETUP.md`,
 che Alessandro ti passa direttamente (non è nel repo, per lo stesso motivo per cui non lo sono gli

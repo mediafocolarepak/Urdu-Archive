@@ -5,7 +5,7 @@
 // the UI) - only Admin can set 'approved', paired with the actual role promotion in
 // user_roles (already an admin-only action, see 05_roles_and_permissions.sql).
 
-import { sb, State, esc, canReviewTeamApplications, isAdmin, withStatus, nameMapForEmails } from './core.js?v=20261028182632';
+import { sb, State, esc, canReviewTeamApplications, isAdmin, withStatus, nameMapForEmails } from './core.js?v=20261105082046';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -38,7 +38,7 @@ export async function renderJoinTeamView(main) {
   main.innerHTML = `
     <div class="panel">
       <h2>Join the Team</h2>
-      <p>The Focolare Urdu Archive is entirely kept up by volunteers - correcting texts, translating,
+      <p>The Digital Urdu Archive (DUA) is entirely kept up by volunteers - correcting texts, translating,
       cross-checking sources, and putting together collections for future generations. If you'd like
       to help, here's what it involves and how to apply.</p>
 
