@@ -1,7 +1,11 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.13 (2026-11-05) — decisions taken by the Owner; all of phases 1 through 3 are built and
-merged (migrations 80–113). Team comments welcome, changes go through a new version.**
+**Status: v1.14 (2026-11-05) — decisions taken by the Owner; all of phases 1 through 3 are built and
+merged (migrations 80–114). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.14:** anyone signed in can read a text aloud (§5.16, migration 114). They consent,
+hold the text for 7 days and record it or upload a file. Someone listens, and an approved reading gets a
+Listen button and the reader's name. Whoever withdraws consent has their readings removed at once.
 
 **What changed in v1.13:** video links and audio readings (§5.15, migration 113). A proposal can now
 hold a video or a recording alongside the text, a document shows Listen and Watch video buttons, and Start
@@ -879,11 +883,38 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
 - **Finding them:** Listen and Watch video buttons on every version of the Work; marks on the Library list; an
   "Audio and video only" button; and a Word of Life of the month card in Start Here, for those who can't
   look for it by typing. Readings stay out of the normal list and of reports, so they don't double them.
-- **Not built yet (next phase):** recording inside the app, the consent, reservations and the listening queue.
-  Readings so far are uploaded by the team as ordinary proposals. Deleting a reading closes its file at once
-  for everyone, but erasing the file itself, for a reader who withdraws consent, still needs doing by hand in
-  Supabase.
+- Readings can also be uploaded by the team as ordinary proposals. Readings by anyone signed in follow §5.16.
 - `recordtest.html` tests what a phone can record and play. It sends nothing and saves nothing.
+
+### 5.16 Reading aloud (migration 114)
+
+- **Who:** anyone signed in, User included, with no audition (Owner's decision). No credits by itself; a
+  compensation is agreed with the team first, through a task.
+- **Which texts:** those already reread, or whose source is `STE` (Owner's decision on Stella's texts). So the
+  `ALE` transcriptions wait until they are reread. Not reserved texts: those are recorded by the team through
+  the proposal form. One published reading per text; a Coordinator or Admin may have a new one replace it.
+- **Consent:** accepted once, per version of the wording, and logged. The name shown comes from the person's
+  profile. The first wording is English only until the Owner gives the Urdu.
+- **Holding a text:** 7 days, so two people don't read the same one. A first reading is limited to 4,000
+  characters and one text at a time; after the first approved reading, 20,000 characters and three texts.
+- **Recording:** in the browser, with a 10-second trial, pause and the text on screen, or by uploading a file.
+  Pieces are saved on the phone every 5 seconds until the server has confirmed the recording.
+- **Review:** by the `AUDIO_REVIEWER` qualification, Coordinators and Admin, never one's own (Admin excepted,
+  §1 principle 3). Revisors of written texts don't review readings, since judging a voice is a different
+  skill. OK, OK with a note, record again (no consequences) or not accepted (the text is free again). Claims,
+  reminders, overdue marks and the log are those of proposals (§5.14), in their own queue.
+- **The reader's name stays off the review screens,** though a voice can be recognised, and a technical person
+  could read it through the API. It is meant to keep the review on the voice, not as a guarantee.
+- **Withdrawing consent:** from the same section, or by Admin on request. Every reading of that person leaves
+  at once, and any in review is discarded. Copies already saved on someone's device can't be called back.
+- **Files:** a file nothing uses goes on a list and closes at once. It is then removed by the person's browser
+  or by Admin, since a database can't remove a stored file. A not-accepted recording stays 30 days. Admin also
+  sees files nothing points at. The row stays in the log, without the content.
+- **Space:** no new texts can be held once recordings reach 500 MB, on the Free plan's 1 GB shared with PDFs.
+- **Listens are only counted,** per reading and per day. Who listened is not recorded (§5.9).
+- **Readers:** Coordination, HR and Admin see each reader's published, waiting, sent-back and not-accepted
+  readings and their listens, to give the best readers the most important work. That work would go through a
+  task; the `READER` qualification and a reading task category aren't built yet.
 
 ---
 
@@ -1053,4 +1084,4 @@ it was answered 2026-09-17 (see its own entry below) and nothing here remains op
     alone and everything passes through a shared review, with Admin above it all during development.
     Decided in full in `Documentazione\PROTOCOLLO_Ingresso_archivio_v1.md` §3 (one door for new
     content, public / private / reserved documents, reminders, volunteer audio readings, Word of Life
-    dated by its own month). Built so far: §5.12 to §5.15. The rest follows in phases.
+    dated by its own month). Built so far: §5.12 to §5.16. The rest follows in phases.

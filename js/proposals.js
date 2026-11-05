@@ -6,17 +6,11 @@
 import {
   sb, State, esc, withStatus, optionsHtml, labelOf, isAdmin, canManageReserved, canWrite, BUCKET, likeSafe,
   titleOverlapScore, ACCESS_LEVELS, readPdfPageCountFromBlob, getDriveAccessToken, uploadPdfToGDrive,
-  AUDIO_BUCKET, HIDDEN_DOC_STATUSES, isMediaLinkOk, videoLinkHtml, mountAudioPlayer,
-} from './core.js?v=20261105183254';
+  AUDIO_BUCKET, AUDIO_FORMATS, audioFileProblem, audioDurationOf, HIDDEN_DOC_STATUSES, isMediaLinkOk, videoLinkHtml, mountAudioPlayer,
+} from './core.js?v=20261105214210';
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // the Supabase Free plan's limit per file
 const FORMATS = [['DOC', 'Text or PDF'], ['AUD', 'Audio'], ['VID', 'Video']];
-const MAX_AUDIO_BYTES = 25 * 1024 * 1024; // the reading-audio bucket's limit (113_media.sql)
-// File name ending -> the name kept in the bucket and the type it is served as.
-const AUDIO_FORMATS = {
-  mp3: ['mp3', 'audio/mpeg'], m4a: ['m4a', 'audio/mp4'], mp4: ['m4a', 'audio/mp4'], aac: ['aac', 'audio/aac'],
-  ogg: ['ogg', 'audio/ogg'], opus: ['ogg', 'audio/ogg'], webm: ['webm', 'audio/webm'],
-};
 const STATUS_LABELS = {
   draft: 'Draft',
   submitted: 'Awaiting review',
@@ -80,33 +74,6 @@ async function textFromWord(file) {
   const text = result.value.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   if (!text) throw new Error('No text found in this file. It may contain only images: if so, paste the text by hand.');
   return text;
-}
-
-// Null when the file can be used, otherwise why not.
-function audioFileProblem(file) {
-  const ending = (file.name.split('.').pop() || '').toLowerCase();
-  if (ending === 'wav') return 'A WAV file is too large. Please convert it to MP3 or M4A first.';
-  if (!AUDIO_FORMATS[ending]) return `"${file.name}" is not a recording this app can keep: please use MP3, M4A, OGG or WEBM.`;
-  if (file.size > MAX_AUDIO_BYTES) return `"${file.name}" is larger than 25 MB. Please convert it to a smaller MP3 or M4A.`;
-  return null;
-}
-
-// How long it lasts, if the file says so. Some recordings don't, and nothing depends on it.
-function audioDurationOf(file) {
-  return new Promise(resolve => {
-    const url = URL.createObjectURL(file);
-    const audio = new Audio();
-    const done = value => { clearTimeout(timer); URL.revokeObjectURL(url); resolve(value); };
-    const timer = setTimeout(() => done(null), 5000);
-    audio.preload = 'metadata';
-    audio.onerror = () => done(null);
-    audio.onloadedmetadata = () => {
-      if (!Number.isFinite(audio.duration)) { done(null); return; }
-      const total = Math.round(audio.duration);
-      done(`${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`);
-    };
-    audio.src = url;
-  });
 }
 
 // ---------- The section ----------

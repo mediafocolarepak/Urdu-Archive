@@ -462,7 +462,48 @@ export async function audioFileUrl(path) {
 export function videoLinkHtml(url, label, secondary) {
   return `<a class="btn${secondary ? ' secondary' : ''}" href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="flex:0 0 auto;white-space:nowrap;text-decoration:none;">&#9654; ${esc(label)}</a>`;
 }
-// One player for the document panel, the Start Here card and the review screen. reading: { path, reader_name }.
+// File name ending -> the name kept in the bucket and the type it is served as.
+export const AUDIO_FORMATS = {
+  mp3: ['mp3', 'audio/mpeg'], m4a: ['m4a', 'audio/mp4'], mp4: ['m4a', 'audio/mp4'], aac: ['aac', 'audio/aac'],
+  ogg: ['ogg', 'audio/ogg'], opus: ['ogg', 'audio/ogg'], webm: ['webm', 'audio/webm'],
+};
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024; // the reading-audio bucket's limit (113_media.sql)
+// Null when the file can be used, otherwise why not.
+export function audioFileProblem(file) {
+  const ending = (file.name.split('.').pop() || '').toLowerCase();
+  if (ending === 'wav') return 'A WAV file is too large. Please convert it to MP3 or M4A first.';
+  if (!AUDIO_FORMATS[ending]) return `"${file.name}" is not a recording this app can keep: please use MP3, M4A, OGG or WEBM.`;
+  if (file.size > MAX_AUDIO_BYTES) return `"${file.name}" is larger than 25 MB. Please convert it to a smaller MP3 or M4A.`;
+  return null;
+}
+// How long it lasts, if the file says so. Some recordings don't, and nothing depends on it.
+export function audioDurationOf(file) {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const audio = new Audio();
+    const done = value => { clearTimeout(timer); URL.revokeObjectURL(url); resolve(value); };
+    const timer = setTimeout(() => done(null), 5000);
+    audio.preload = 'metadata';
+    audio.onerror = () => done(null);
+    audio.onloadedmetadata = () => {
+      if (!Number.isFinite(audio.duration)) { done(null); return; }
+      const total = Math.round(audio.duration);
+      done(`${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`);
+    };
+    audio.src = url;
+  });
+}
+// Removes from the bucket whatever this person can remove and no record uses any more (114_readings.sql).
+// Whatever fails stays on the list, already closed to listeners, for the next try or for Admin.
+export async function eraseMyAudioFiles() {
+  const { data: paths } = await sb.rpc('get_my_files_to_erase');
+  if (!paths || !paths.length) return;
+  const { error } = await sb.storage.from(AUDIO_BUCKET).remove(paths);
+  if (error) return;
+  for (const path of paths) await sb.rpc('confirm_audio_file_erased', { p_path: path });
+}
+// One player for the document panel, the Start Here card and the review screen.
+// reading: { path, reader_name, document_id }. With a document_id, a listen is counted (never who).
 export async function mountAudioPlayer(box, reading, autoplay) {
   box.innerHTML = '<div class="hint">Loading the recording...</div>';
   let url;
@@ -472,6 +513,7 @@ export async function mountAudioPlayer(box, reading, autoplay) {
     <audio controls preload="metadata" style="width:100%;margin-top:6px;" src="${esc(url)}"></audio>
     ${reading.reader_name ? `<div class="hint" dir="auto">Read by ${esc(reading.reader_name)}</div>` : ''}`;
   const audio = box.querySelector('audio');
+  if (reading.document_id) audio.addEventListener('play', () => { sb.rpc('count_audio_play', { p_document_id: reading.document_id }).then(() => {}, () => {}); }, { once: true });
   audio.addEventListener('error', () => {
     box.insertAdjacentHTML('beforeend', '<div class="hint">This device could not play the recording. Please tell us with "Report a problem", and say which phone you use.</div>');
   });
