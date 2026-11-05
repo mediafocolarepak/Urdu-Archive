@@ -10,8 +10,8 @@
 import {
   sb, State, esc, withStatus, canReviewApplications, getDisplayNameByEmail,
   openBoardPostPopup, likeSafe, DEFAULT_BOARD_FOR_MEMBERSHIP, BOARD_MEDIA_BUCKET, ackBoardPolicy,
-  createWorkFor, uniqueFileName, computeFileName,
-} from './core.js?v=20261105092353';
+  createWorkFor, uniqueFileName, computeFileName, nextDocumentId,
+} from './core.js?v=20261105132836';
 
 // Shown once, before a person's first post (84_boards_moderation.sql) - keep this in sync with
 // the Help entries board_usage_policy_en/it, which say the same thing at more length.
@@ -307,8 +307,7 @@ function wirePostActions(posts, docById, myEmail, main) {
 // readable/searchable like any other document, not just cross-linked.
 async function promotePostToArchive(post) {
   const { data: { user } } = await sb.auth.getUser();
-  const maxRows = await withStatus(sb.from('documents').select('document_id').order('document_id', { ascending: false }).limit(1));
-  const newId = (maxRows[0]?.document_id || 0) + 1;
+  const newId = await nextDocumentId();
   const workId = await createWorkFor(post.title);
   const draft = {
     document_id: newId, title: post.title, work_id: workId, language: 'URD',

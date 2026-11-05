@@ -7,8 +7,8 @@
 // anyone outside HR/a department lead/Admin, so that's still the real gate either way.
 
 import {
-  sb, State, esc, withStatus, isAdmin, isDeptMember, isDeptLead, labelOf, optionsHtml,
-} from './core.js?v=20261105092353';
+  sb, State, esc, withStatus, isAdmin, isDeptMember, isDeptLead, labelOf, optionsHtml, logEntriesHtml,
+} from './core.js?v=20261105132836';
 
 const STANDING_BADGE = {
   active: '',
@@ -201,6 +201,10 @@ async function toggleHistoryRow(uid) {
         <td style="white-space:normal;">${esc(d.decision_note) || ''}</td>
       </tr>`).join('')}</tbody>
     </table></div>` : '<div class="hint">No decisions recorded about this person yet.</div>';
+  if (isAdmin() || isDeptLead('HR')) {
+    const activity = await withStatus(sb.rpc('get_person_activity', { p_user_id: uid }));
+    cell.insertAdjacentHTML('beforeend', `<h3 style="margin-top:12px;">Activity</h3>${logEntriesHtml(activity, false)}`);
+  }
 }
 
 // ---------- Propose a decision ----------
@@ -295,7 +299,7 @@ export async function renderPendingDecisions(main) {
         <td>${esc(r.proposed_by_email)}</td>
         <td>${esc((r.proposed_at || '').slice(0, 10))}</td>
         <td>
-          ${r.proposed_by_email === myEmail
+          ${r.proposed_by_email === myEmail && !isAdmin()
             ? '<button class="btn secondary pd-withdraw-btn" style="padding:4px 10px;">Withdraw</button>'
             : (canApproveTypeClientSide(r.decision_type)
               ? '<button class="btn pd-approve-btn" style="padding:4px 10px;">Approve</button><button class="btn danger pd-reject-btn" style="padding:4px 10px;">Reject</button>'

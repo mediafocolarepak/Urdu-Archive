@@ -7,8 +7,8 @@ import {
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
-  openFormationPostPopup, canReviewApplications, openTranslatePopup,
-} from './core.js?v=20261105092353';
+  openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
+} from './core.js?v=20261105132836';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -716,9 +716,10 @@ async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
       ${canWrite() ? '<button class="btn" id="doc-save">Save changes</button>' : ''}
       ${ctx.mode === 'overlay' ? '<button class="btn secondary" id="doc-editor-close">Close</button>' : ''}
       <button class="btn secondary" id="doc-tracking-sheet">Print Tracking Sheet</button>
-      ${canDelete() ? '<button class="btn danger" id="doc-delete">Delete permanently</button>' : ''}
+      ${canDelete() ? '<button class="btn danger" id="doc-delete">Delete</button>' : ''}
     </div>
     ${renderProcessHistorySection(doc)}
+    ${renderChangeHistorySection()}
   `;
 
   document.getElementById('doc-tracking-sheet').addEventListener('click', () => renderTrackingSheet(id));
@@ -742,6 +743,7 @@ async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
     });
   }
   await wireProcessHistorySection(id, doc, ctx.refreshSelf);
+  wireChangeHistorySection(id);
   if (!canWrite()) return;
 
   function collectFields() {
@@ -815,9 +817,10 @@ async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
 
   if (!canDelete()) return;
   document.getElementById('doc-delete').addEventListener('click', async () => {
-    if (!confirm(`Permanently delete document #${id}? This cannot be undone.`)) return;
-    if (doc.storage_path) await sb.storage.from(BUCKET).remove([doc.storage_path]);
-    await withStatus(sb.from('documents').delete().eq('document_id', id));
+    const reason = prompt(`Why are you deleting document #${id}? It leaves the archive, but nothing is erased: Admin can restore it from My Department -> Archive & Data.`);
+    if (reason === null) return;
+    if (!reason.trim()) { alert('Please enter a reason.'); return; }
+    await withStatus(sb.rpc('soft_delete_document', { p_document_id: parseInt(id, 10), p_reason: reason.trim() }), 'Deleting...');
     await ctx.onDelete();
   });
 }
@@ -882,11 +885,31 @@ async function refreshProcessHistoryLog(documentId, refreshSelf) {
   }));
 }
 
+// ---------- Change history: written by the database, nobody can edit it ----------
+
+function renderChangeHistorySection() {
+  if (!isCoordinator() && !isAdmin()) return '';
+  return `
+    <details class="panel" id="doc-change-history" style="margin-top:14px;">
+      <summary style="cursor:pointer;font-weight:600;">Change history</summary>
+      <div id="doc-change-history-body" style="margin-top:8px;"><div class="hint">Loading...</div></div>
+    </details>`;
+}
+
+function wireChangeHistorySection(documentId) {
+  const box = document.getElementById('doc-change-history');
+  if (!box) return;
+  box.addEventListener('toggle', async () => {
+    if (!box.open) return;
+    const rows = await withStatus(sb.rpc('get_document_history', { p_document_id: parseInt(documentId, 10) }));
+    document.getElementById('doc-change-history-body').innerHTML = logEntriesHtml(rows, true);
+  });
+}
+
 // ---------- New document ----------
 
 export async function createNewDocument(afterCreate) {
-  const maxRows = await withStatus(sb.from('documents').select('document_id').order('document_id', { ascending: false }).limit(1));
-  const newId = (maxRows[0]?.document_id || 0) + 1;
+  const newId = await nextDocumentId();
   const workId = await createWorkFor(null);
   await withStatus(sb.from('documents').insert({ document_id: newId, workflow_status: 'ENTR', legacy_migrated: false, work_id: workId }));
   State.selectedDocId = String(newId);

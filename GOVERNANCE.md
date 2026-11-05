@@ -1,7 +1,18 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.9 (2026-10-21) — decisions taken by the Owner; all of phases 1 through 3 are built and
-merged (migrations 80–106). Team comments welcome, changes go through a new version.**
+**Status: v1.10 (2026-11-05) — decisions taken by the Owner; all of phases 1 through 3 are built and
+merged (migrations 80–110). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.10:** the first part of the archive intake protocol
+(`Documentazione\PROTOCOLLO_Ingresso_archivio_v1.md`), migrations 109–110:
+- **Only Admin can make a document visible**, and this is enforced in the database (§5.12). + New
+  document, Bulk Import and Hayat Extract are Admin-only; everyone else can add only hidden drafts.
+- **During development Admin may do everything, reviewing and approving their own work included**
+  (§1 principle 3, §4), with every action recorded. Compensation runs keep the second person.
+- **A log nobody can edit records every change to the archive** (§5.12), and **deleting is now
+  reversible**: nobody can erase a document through the app.
+- **The task review chain was repaired** (§5.12): credits had been paid at review and again at
+  publish, and Admin's Reject always failed.
 
 **What changed in v1.9:** a catch-up and one principle, no new migration. v1.8 stopped at migration
 98; the software then moved through migrations 99–106 and several user-facing changes that this
@@ -123,7 +134,13 @@ the team, session by session).
    hats, the rule is *the one who proposes does not approve*.
 3. **Admin is a technical role, not a governance role.** Admin means "can change configuration
    and data". It does not mean "decides". Decisions on people, work and money belong to the
-   departments; Admin executes them and keeps the system running.
+   departments; Admin executes them and keeps the system running. **During development and testing
+   the Admin may do everything, with no approval from anyone, including reviewing their own tasks and
+   approving their own proposals (Owner's decision, 2026-11-05):** the Owner is at once developer,
+   Admin and head of the focolare, there is no other way to test each role alone, and the Admins
+   already work in unity outside the platform. Every such action is recorded (§5.12). Compensation
+   runs (row 15) keep a second person, because they concern money. To be reviewed when Revisors start
+   working in the app.
 4. **Every decision that affects a person, a task's value or a payment is recorded** with who
    proposed it, who approved it, when, and why. This is already how credits and reputation work
    (`task_outcome_events`): the same append-only pattern is extended to people decisions.
@@ -359,9 +376,10 @@ documents of different languages are linked — and own the tools that do it.
 Created by the Owner from Options (a department is data, no migration), with the Owner as its lead
 (§1.5) and a small group of members, so that the department's own Team channel (§5.3) gives
 cataloguing work a place to coordinate. Responsibilities:
-- Run the **cataloguing tools**: Hayat Index, Match Review, Work Consolidation, Hayat Editor and
-  Bulk Import. They used to be separate Operator tabs gated by a "Data Assistant" qualification;
-  they are now launched from My Department → Archive & Data (the tools themselves are unchanged).
+- Run the **cataloguing tools**: Hayat Index, Match Review, Work Consolidation and Hayat Editor. They
+  used to be separate Operator tabs gated by a "Data Assistant" qualification; they are now launched
+  from My Department → Archive & Data. **Bulk Import and Hayat Extract are Admin-only since
+  2026-11-05** (§5.12): they add visible documents, so they are not routine cataloguing work.
 - Keep **dates, links and texts** right: a document's `ref_date` is the date of the Collegamento and
   must equal the date in its title; every language version is its own record, linked by `work_id`
   (§5.10).
@@ -382,9 +400,9 @@ do not replace it.
 | Role | What it grants (DB level) |
 |---|---|
 | **User** | Read the archive; report problems; apply to join the team. |
-| **Operator** | Everything above + write documents, claim and submit tasks. Qualifications (Translator, Revisor, Proof Reader, Content Creator…) gate which task categories they can take. |
+| **Operator** | Everything above + edit existing documents, add new ones only as hidden drafts (§5.12), claim and submit tasks. Qualifications (Translator, Revisor, Proof Reader, Content Creator…) gate which task categories they can take. |
 | **Coordinator** | Everything above + create/assign/review tasks, see applications and everyone's qualifications and outcome history, recommend applicants. |
-| **Admin** | Everything above + change roles and qualifications, publish/reject reviewed tasks, edit option lists, rates, tiers, budget ledger, announcements; delete. |
+| **Admin** | Everything above + change roles and qualifications, publish/reject reviewed tasks, edit option lists, rates, tiers, budget ledger, announcements; add visible documents, publish or withdraw any document, delete and restore (§5.12). |
 
 Department membership will add *specific* permissions to whoever holds it (e.g. HR members can
 see the HR view whatever their technical role). It never removes a permission the technical role
@@ -428,7 +446,7 @@ proposed.
 | 25 | Change a canonical translation term, or save a new version of the Translate prompt | Anyone (a translator's flagged uncertain term, or a mining cycle) | Owner (Admin saves the version) | Translators | The style guide's version, a new row in `translation_prompts`, and a row in `skill_corpus_analysis_log` when it follows a mining cycle (§5.11) |
 
 Rules that apply to the whole table:
-- Proposer and approver are never the same person.
+- Proposer and approver are never the same person, except an Admin during development (§1 principle 3).
 - Every row marked "people-decision log" needs a written reason; a decision without one is
   invalid.
 - Silence is not approval. A proposal with no decision after 7 days is escalated to the Owner.
@@ -750,6 +768,32 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
 - **Not built**: a real call to Claude from the app, and saving the "uncertain terms" list the
   prompt asks the model to return, which would let everyday use feed the next mining cycle.
 
+
+### 5.12 Archive doors, task review and the log (migrations 109–110)
+
+- **Who can make a document visible:** only Admin. A trigger on `documents`
+  (`guard_document_visibility`) enforces it whatever the app does: anyone else can insert only a
+  hidden `revision` draft and cannot move a document between hidden and visible. Moves between two
+  visible states stay open (the old process steps), and so does editing the metadata of a published
+  document: narrowing that is a later decision, because Archive & Data needs it.
+- **Document numbers** come from the server (`next_document_id()`, a sequence), never from the
+  browser, and a number is never reused.
+- **The log:** `archive_log` records who, when, what, with the value before and after, for documents,
+  texts, collections, process steps, Works, tasks, roles, qualifications and department members. It
+  is written by database triggers, and nobody can change or empty it. It starts on the day migration
+  110 ran: what happened before cannot be reconstructed. It records who changes things, never who
+  reads them. **Change history** on a document: Coordinators and Admin. **Activity** of a person: that
+  person, Admin and the HR lead.
+- **Deleting:** `soft_delete_document()` needs a reason and hides the document from everyone. The
+  record and its files stay, and Admin restores it from My Department → Archive & Data. Nobody can
+  erase a document through the app. Until the access levels are built, the text of a deleted document
+  remains readable through the API by a signed-in user who asks for it by number.
+- **Task review (migration 109):** a Revisor, Coordinator or Admin gives the verdict; nobody reviews
+  their own task, except Admin. Credits and reputation are written once, at Admin's decision, and the
+  document then moves to `pending_publish`. A task reviewed by the person who did it stays
+  recognisable (`reviewed_by = claimed_by`), so Reward reports can leave test credits out.
+- **A Word of Life** extracted from the Hayat index takes its own month (`data_pdv`), not the issue's.
+
 ---
 
 ## 6. What's left to build
@@ -914,3 +958,8 @@ it was answered 2026-09-17 (see its own entry below) and nothing here remains op
     not a word to translate or transliterate (this applies to the Start Here cards, the guides and the
     Translate prompt's output alike).
     Earlier sections and decision entries keep the name that was in use when they were written.
+16. **Who brings content into the archive, 2026-11-05:** the Owner decided that nobody adds content
+    alone and everything passes through a shared review, with Admin above it all during development.
+    Decided in full in `Documentazione\PROTOCOLLO_Ingresso_archivio_v1.md` §3 (one door for new
+    content, public / private / reserved documents, reminders, volunteer audio readings, Word of Life
+    dated by its own month). Built so far: §5.12. The rest follows in phases.

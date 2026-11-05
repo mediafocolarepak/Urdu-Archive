@@ -5,7 +5,7 @@
 // reviewed. Deliberately does not import from collaboration.js (project convention: modules
 // only import from core.js), so the skill-chip rendering is duplicated here in small form.
 
-import { sb, State, esc, withStatus, labelOf, optionsHtml } from './core.js?v=20261105092353';
+import { sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml } from './core.js?v=20261105132836';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -66,6 +66,10 @@ export async function renderMyProfileView(main) {
         <div class="btn-row"><button class="btn" id="pw-save-btn">Update Password</button></div>
         <div id="pw-status" class="hint"></div>
       </div>
+      <details class="subpanel" id="profile-activity" style="margin-top:16px;">
+        <summary style="cursor:pointer;font-weight:600;">My activity in the archive</summary>
+        <div id="profile-activity-body" style="margin-top:8px;"><div class="hint">Loading...</div></div>
+      </details>
     </div>`;
 
   // Sign out is also in the top bar, which on a phone is easy to miss (owner's report 2026-10-27);
@@ -76,6 +80,12 @@ export async function renderMyProfileView(main) {
     renderEditable(document.getElementById('profile-editable'), profile, skillList, storedSkills, otherSkills, user.id, main);
   }
   wireChangePassword();
+  const activityBox = document.getElementById('profile-activity');
+  activityBox.addEventListener('toggle', async () => {
+    if (!activityBox.open) return;
+    const rows = await withStatus(sb.rpc('get_person_activity', { p_user_id: user.id }));
+    document.getElementById('profile-activity-body').innerHTML = logEntriesHtml(rows, false);
+  });
 }
 
 // Age bracket + gender (85_signup_demographics.sql): collected at signup for HR statistics,
