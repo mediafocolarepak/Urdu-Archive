@@ -1,7 +1,11 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.11 (2026-11-05) — decisions taken by the Owner; all of phases 1 through 3 are built and
-merged (migrations 80–111). Team comments welcome, changes go through a new version.**
+**Status: v1.12 (2026-11-05) — decisions taken by the Owner; all of phases 1 through 3 are built and
+merged (migrations 80–112). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.12:** the one door for new content (§5.14, migration 112). Anyone on the team
+fills in a proposal; a Revisor or Coordinator approves, and that alone publishes it. Whoever proposed
+it always sees where it stands and can send a reminder, and reviewers always see the queue.
 
 **What changed in v1.11:** access levels (§5.13, migration 111). Every document version is public,
 private or reserved. A reserved document exists only for Admin, Formation members and people they
@@ -441,13 +445,14 @@ proposed.
 | 15 | Execute a compensation run | Reward | Lead Reward + Owner | Persons paid | `compensation_runs`/`compensation_lines`, since migration 91 — Admin stands in for "Owner" (§5.5) |
 | 16 | Budget top-up | Owner | Owner | Reward | `budget_ledger` |
 | 17 | Publish a formation path | Formatore | Lead Formation | — | `formation_paths` |
-| 18 | Import formation material into the archive | Formatore | Normal document workflow (Coordination) | — | `documents` |
+| 18 | Import formation material into the archive | Formatore | The proposal review (§5.14) | — | `archive_submissions` |
 | 19 | Release / announce a feature | Engineering | Owner | Everyone | Announcements + `TEAM_UPDATE` |
 | 20 | Create / retire a department | Owner | Owner | Everyone | `option_lists` (`department`) |
 | 21 | Publish / reject a User's board submission; remove a post that breaks the usage policy | Board editor of that board (or Coordinator) | — (editor decides, must give reason) | Author | `board_posts.status`, moderation note |
 | 22 | Penalise board misuse (reputation penalty for an Operator, loss of posting rights for a User) | Board editor | Lead Formation or Lead HR (not the proposer) | Person, HR | people-decision log; `task_outcome_events` (`board_misuse`) |
 | 23 | Add / remove a co-author on a formation path | Path owner | — | Co-author | `formation_path_editors` |
 | 24 | Promote a board post into the archive | Board editor / Coordinator | Normal document workflow | Author | `documents` (new record in `revision`) |
+| 26 | Publish new content | Any team member (the proposal form) | A Revisor or Coordinator, not the proposer; for reserved content, another Formation member or Admin. Admin may also publish directly | Proposer | `archive_submissions`, `submission_events`, `archive_log` |
 | 25 | Change a canonical translation term, or save a new version of the Translate prompt | Anyone (a translator's flagged uncertain term, or a mining cycle) | Owner (Admin saves the version) | Translators | The style guide's version, a new row in `translation_prompts`, and a row in `skill_corpus_analysis_log` when it follows a mining cycle (§5.11) |
 
 Rules that apply to the whole table:
@@ -821,9 +826,36 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
   to a video also works outside the app.
 - **Also protected now:** nobody but those who can see a document can read its text, so the text of a
   hidden draft or a deleted document is no longer readable through the API.
-- **Not yet:** a Formation member can make an existing document reserved, but cannot yet add a new one
-  by themselves or see their own hidden draft. The proposal form (the next phase) brings this, with
-  a second Formation member or Admin approving.
+- **Adding a reserved document:** through the proposal form (§5.14), with a second Formation member or
+  Admin approving.
+
+
+### 5.14 Proposals: the one door for new content (migration 112)
+
+- **Form:** three steps. Is it new or does it already exist (a search suggests, a person decides, nothing
+  is linked by itself); what the versions share (English title, category, author, date or period, and
+  optionally recipient, topic, tags, Bible verse); then one version per language, with its title and
+  its text or a PDF. Numbers, file names, status and the preferred mark are set by the system. Pasting
+  the text is what makes a document searchable.
+- **States:** draft, awaiting review, to correct (with a note), published, rejected. Each version is a
+  normal record in the hidden status `proposed`, visible only to the proposer and to those who can
+  review it. Every version of a proposal is published at once.
+- **Who decides:** a Revisor or Coordinator, never on their own proposal. Reserved content is reviewed
+  only by another Formation member or Admin. Admin may review their own, and may publish directly.
+  A proposal's text cannot be changed by direct writes, only through the form.
+- **A text counts as reread only if the reviewer says so,** version by version. The rest stays unverified.
+- **Nothing gets stuck:** the proposer sees how long it has waited and can send a reminder after 3 days,
+  then once every 3 days. It reaches the queue, not a person. Taking a proposal holds it for 48 hours,
+  then it returns by itself. After 7 days it is marked as overdue (§4). All of this is computed from
+  dates. It works inside the app only: a tab count and a note at sign-in, no email.
+- **PDFs:** they stay in Supabase during review. After approval, Admin copies them to Drive from
+  Proposals → Files for Drive, and the Supabase copy is removed, because the project is on the Free plan.
+  Until then the document offers a download link, and its Open PDF button doesn't find the file.
+- **Credits:** none for proposing. Whoever wants a compensation agrees with the team first, which creates
+  a task (Owner's decision).
+- **Not yet part of this door:** a task correction keeps its own path, with Admin's final decision (row 12),
+  since credits depend on it. Promoting a board post still creates a hidden draft outside the queue,
+  until the Boards change. The form takes text and PDF; audio and video links come next.
 
 ---
 
