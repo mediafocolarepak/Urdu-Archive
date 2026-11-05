@@ -8,8 +8,8 @@ import {
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
-  ACCESS_LEVELS, canManageReserved,
-} from './core.js?v=20261105162447';
+  ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, videoLinkHtml, mountAudioPlayer,
+} from './core.js?v=20261105183254';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -29,7 +29,7 @@ function renderDocSummary(doc) {
     line(doc.place ? 'Place: ' + esc(doc.place) : '', doc.ref_date ? 'Reference date: ' + esc(doc.ref_date) : ''),
     doc.secondary_tags ? 'Tags: ' + esc(doc.secondary_tags) : '',
     line('Language: ' + esc(labelOf(State.langs, doc.language)), esc(labelOf(State.mediaTypes, doc.media_type)),
-      doc.media_type === 'VID' && doc.duration ? 'Duration: ' + esc(doc.duration) : '',
+      ['VID', 'AUD'].includes(doc.media_type) && doc.duration ? 'Duration: ' + esc(doc.duration) : '',
       doc.media_type === 'VID' && doc.quality ? 'Quality: ' + esc(labelOf(State.qualities, doc.quality)) : ''),
   ].filter(Boolean);
   return lines.map(l => `<div>${l}</div>`).join('');
@@ -200,7 +200,11 @@ function openDocTextPopup(doc, text) {
   });
 }
 
-export function renderDocDetailConsultation(box, doc, workSiblings, docCollections, canEdit, text, originalText) {
+export function renderDocDetailConsultation(box, doc, workSiblings, docCollections, canEdit, text, originalText, media = []) {
+  // A video with its link, or a reading, has no PDF to open.
+  const noPdf = doc.media_type === 'AUD' || (doc.media_type === 'VID' && doc.external_url);
+  const langOf = m => esc(labelOf(State.langs, m.language) || '?');
+  const ownReading = media.find(m => m.media_type === 'AUD' && String(m.document_id) === String(doc.document_id));
   box.innerHTML = `
     <div class="btn-row" style="justify-content:space-between;align-items:center;margin:0 0 8px;">
       <h3 style="margin:0;">Document #${esc(doc.document_id)}</h3>
@@ -209,16 +213,20 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
         <button class="btn secondary" id="doc-fav">${favLabel(doc.document_id)}</button>
         ${State.myBoards.size > 0 && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-board">+ Board</button>' : ''}
         ${(State.isFormatore || canReviewApplications()) && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-path">+ Path</button>' : ''}
-        <button class="btn" id="doc-download-gdrive" style="white-space:nowrap;">Open PDF</button>
+        ${noPdf ? '' : '<button class="btn" id="doc-download-gdrive" style="white-space:nowrap;">Open PDF</button>'}
       </div>
     </div>
     <div class="btn-row" style="margin:0 0 8px;">
+      ${media.map((m, i) => m === ownReading ? '' : m.media_type === 'VID'
+        ? videoLinkHtml(m.external_url, `Watch video (${labelOf(State.langs, m.language) || '?'})`)
+        : `<button class="btn doc-listen" data-i="${i}" style="flex:0 0 auto;white-space:nowrap;">&#128266; Listen (${langOf(m)})</button>`).join('')}
       ${text ? '<button class="btn" id="doc-text-read" style="flex:0 0 auto;white-space:nowrap;">Read (large print)</button>' : ''}
       ${text ? '<button class="btn secondary" id="doc-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Open editable text</button>' : ''}
       ${originalText ? '<button class="btn secondary" id="doc-original-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Original text (Italian)</button>' : ''}
       ${canWrite() ? '<button class="btn secondary" id="doc-translate" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Translate</button>' : ''}
       <button class="btn secondary" id="doc-report-problem" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Report a problem</button>
     </div>
+    <div id="doc-media-player"></div>
     <div class="field" style="font-size:13px;line-height:1.7;">
       <div style="font-weight:600;font-size:14px;margin-bottom:2px;">${esc(doc.en_title) || '<span class="hint">(no title)</span>'}</div>
       ${doc.ur_title ? `<div dir="auto" style="font-size:14px;margin-bottom:6px;">${esc(doc.ur_title)}</div>` : ''}
@@ -237,7 +245,10 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     ${doc.storage_path ? `<div class="field"><label>File</label><a href="#" id="doc-download">Download</a></div>` : ''}
     ${canEdit ? renderDocTasksBox(doc) : ''}
   `;
-  document.getElementById('doc-download-gdrive').addEventListener('click', () => downloadFromGDrive(doc.file_name));
+  document.getElementById('doc-download-gdrive')?.addEventListener('click', () => downloadFromGDrive(doc.file_name));
+  const mediaPlayer = document.getElementById('doc-media-player');
+  box.querySelectorAll('.doc-listen').forEach(btn => btn.addEventListener('click', () => mountAudioPlayer(mediaPlayer, media[parseInt(btn.dataset.i, 10)], true)));
+  if (ownReading) mountAudioPlayer(mediaPlayer, ownReading, false);
   const textToggle = document.getElementById('doc-text-toggle');
   if (textToggle) textToggle.addEventListener('click', () => {
     const body = document.getElementById('doc-text-body');
@@ -502,8 +513,11 @@ function wireWorkSiblingsClicks(box, workId, navigate) {
     const openBtn = tr.querySelector('.sibling-open');
     if (openBtn) openBtn.addEventListener('click', async e => {
       e.stopPropagation();
-      const rows = await withStatus(sb.from('documents').select('file_name').eq('document_id', tr.dataset.siblingId));
-      downloadFromGDrive(rows[0]?.file_name);
+      const rows = await withStatus(sb.from('documents').select('file_name,media_type,external_url').eq('document_id', tr.dataset.siblingId));
+      const sibling = rows[0];
+      if (sibling?.media_type === 'AUD') { await navigate(tr.dataset.siblingId); return; }
+      if (sibling?.media_type === 'VID' && sibling.external_url) { window.open(sibling.external_url, '_blank', 'noopener'); return; }
+      downloadFromGDrive(sibling?.file_name);
     });
     const prefBtn = tr.querySelector('.sibling-set-preferred');
     if (prefBtn) prefBtn.addEventListener('click', async e => {
@@ -517,12 +531,39 @@ function wireWorkSiblingsClicks(box, workId, navigate) {
 
 async function fetchWorkSiblings(workId) {
   if (!workId) return [];
-  return await withStatus(sb.from('documents').select('document_id,title,category,author,language,source,media_type,file_name,is_preferred,storage_path').eq('work_id', workId));
+  return await withStatus(sb.from('documents').select('document_id,title,category,author,language,source,media_type,file_name,is_preferred,storage_path,external_url,workflow_status').eq('work_id', workId));
+}
+
+// The video links and readings to offer on this document: from its whole Work, one for each language
+// and format. The record open now comes first, then the starred one, so a newer reading takes over
+// from an older one without deleting it, and an older one can still be opened and heard.
+async function fetchDocMedia(doc, siblings) {
+  const isCurrent = d => String(d.document_id) === String(doc.document_id);
+  const candidates = [doc, ...(siblings || []).filter(s => !isCurrent(s))]
+    .filter(d => (d.media_type === 'AUD' || (d.media_type === 'VID' && d.external_url))
+      && (isCurrent(d) || !HIDDEN_DOC_STATUSES.includes(d.workflow_status)))
+    .sort((a, b) => (isCurrent(b) - isCurrent(a)) || (!!b.is_preferred - !!a.is_preferred));
+  const picked = new Map();
+  candidates.forEach(d => { const key = `${d.language}|${d.media_type}`; if (!picked.has(key)) picked.set(key, d); });
+  const list = [...picked.values()];
+  const audioIds = list.filter(d => d.media_type === 'AUD').map(d => d.document_id);
+  if (!audioIds.length) return list;
+  const readings = await withStatus(sb.from('audio_readings').select('document_id,path,reader_name').in('document_id', audioIds));
+  const byDoc = new Map(readings.map(r => [String(r.document_id), r]));
+  return list
+    .map(d => (d.media_type === 'AUD' ? { ...d, ...byDoc.get(String(d.document_id)) } : d))
+    .filter(d => d.media_type !== 'AUD' || d.path);
 }
 
 // Downloads a specific version, preferring the app-managed Storage copy (signed URL) over the
 // Google Drive lookup-by-name fallback - same precedence the single-document download already uses.
 async function downloadVersion(v) {
+  if (v.media_type === 'VID' && v.external_url) { window.open(v.external_url, '_blank', 'noopener'); return; }
+  if (v.media_type === 'AUD') {
+    const rows = await withStatus(sb.from('audio_readings').select('path').eq('document_id', v.document_id));
+    if (rows[0]?.path) window.open(await audioFileUrl(rows[0].path), '_blank', 'noopener');
+    return;
+  }
   if (v.storage_path) {
     const { data } = await sb.storage.from(BUCKET).createSignedUrl(v.storage_path, 60);
     if (data?.signedUrl) { window.open(data.signedUrl, '_blank'); return; }
@@ -542,7 +583,7 @@ function renderAllVersionsBar(doc, siblings) {
         const isCurrent = String(v.document_id) === String(doc.document_id);
         const lang = labelOf(State.langs, v.language) || '?';
         const src = labelOf(State.sources, v.source);
-        const kind = v.media_type === 'VID' ? ' video' : '';
+        const kind = v.media_type === 'VID' ? ' video' : v.media_type === 'AUD' ? ' audio' : '';
         return `<button class="btn${isCurrent ? '' : ' secondary'} version-download" data-id="${esc(v.document_id)}">
           Download ${esc(lang)}${kind}${src ? ' — ' + esc(src) : ''}${isCurrent ? ' (this one)' : ''}
         </button>`;
@@ -573,6 +614,7 @@ export async function renderDocDetail(id, opts = {}) {
   if (!rows.length) { box.innerHTML = '<div class="empty-msg">Document not found.</div>'; return; }
   const doc = rows[0];
   const siblings = await fetchWorkSiblings(doc.work_id);
+  const media = await fetchDocMedia(doc, siblings);
   const docCollections = await getCollectionsForDocument(doc.document_id);
   const textRows = await withStatus(sb.from('document_texts').select('body,char_count,reviewed').eq('document_id', doc.document_id));
   const text = textRows[0] || null;
@@ -594,7 +636,7 @@ export async function renderDocDetail(id, opts = {}) {
   }
 
   const canEdit = isCoordinator() || isAdmin();
-  renderDocDetailConsultation(box, doc, siblings, docCollections, canEdit, text, originalText);
+  renderDocDetailConsultation(box, doc, siblings, docCollections, canEdit, text, originalText, media);
 }
 
 // Opens the full field editor for a document in a full-screen overlay (Coordinator/Admin only,
@@ -663,7 +705,7 @@ async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
       ${selectField('Language', 'language', doc.language, State.langs)}
       ${selectField('Access level', 'access_level', doc.access_level, ACCESS_LEVELS.filter(([code]) => code !== 'reserved' || canManageReserved() || doc.access_level === 'reserved'))}
       ${textField('Reference period', 'ref_period', doc.ref_period)}
-      ${selectField('Media type', 'media_type', doc.media_type, State.mediaTypes)}
+      ${selectField('Media type', 'media_type', doc.media_type, State.mediaTypes.filter(([code]) => code !== 'AUD' || doc.media_type === 'AUD'))}
       ${selectField('Source', 'source', doc.source, State.sources)}
       ${selectField('Operator', 'operator', doc.operator, State.operators)}
       ${textField('Episode number', 'episode_number', doc.episode_number)}
@@ -676,7 +718,8 @@ async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
         <div class="hint" id="doc-read-pages-status"></div>
       </div>
       <div class="field"><label>File name</label><input value="${esc(doc.file_name)}" disabled></div>
-      ${textField('Duration (video only)', 'duration', doc.duration)}
+      ${textField('Duration (video or audio)', 'duration', doc.duration)}
+      ${textField('Video link (YouTube or Google Drive)', 'external_url', doc.external_url)}
       ${selectField('Quality (video only)', 'quality', doc.quality, State.qualities)}
       <div class="field"><label>Legacy file name</label><input value="${esc(doc.legacy_file_name)}" disabled></div>
     </div>
@@ -775,6 +818,8 @@ async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
 
   document.getElementById('doc-save').addEventListener('click', async () => {
     const vals = collectFields();
+    if (vals.media_type !== 'VID') vals.external_url = null;
+    if (vals.external_url && !isMediaLinkOk(vals.external_url)) { alert('A video link must be an https link to YouTube or Google Drive.'); return; }
     const fileInput = document.getElementById('doc-file-input');
     const uploadingNewFile = fileInput.files && fileInput.files[0];
     let storagePath = doc.storage_path;
@@ -803,7 +848,7 @@ async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
       await withStatus(sb.storage.from(BUCKET).upload(finalName, fileInput.files[0], { upsert: true }), 'Uploading file...');
       storagePath = finalName;
       vals.file_name = finalName;
-    } else if (!doc.file_name) {
+    } else if (!doc.file_name && !['VID', 'AUD'].includes(vals.media_type)) {
       // Nothing linked yet at all - a placeholder name is harmless since there's no real file to disconnect from.
       const baseName = computeFileName({ document_id: doc.document_id, ...vals });
       vals.file_name = await uniqueFileName(baseName, doc.document_id);

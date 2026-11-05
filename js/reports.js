@@ -1,4 +1,4 @@
-import { sb, State, esc, labelOf, optionsHtml, withStatus, withStatusCount, isDeptMember, isAdmin, reportTable, nameMapForEmails } from './core.js?v=20261105162447';
+import { sb, State, esc, labelOf, optionsHtml, withStatus, withStatusCount, isDeptMember, isAdmin, reportTable, nameMapForEmails } from './core.js?v=20261105183254';
 
 const APPLICATION_STATUS_LABEL = {
   pending: 'Pending', recommended: 'Recommended to Admin', approved: 'Approved', rejected: 'Rejected',
@@ -172,7 +172,8 @@ async function generateFilteredReport() {
   const from = document.getElementById('r-from').value;
   const to = document.getElementById('r-to').value;
 
-  let q = sb.from('documents').select('*', { count: 'exact' });
+  // A reading is a record of its own, not one more document to count (PROTOCOLLO §10.3).
+  let q = sb.from('documents').select('*', { count: 'exact' }).or('media_type.is.null,media_type.neq.AUD');
   if (category) q = q.eq('category', category);
   if (mainTopic) q = q.eq('main_topic', mainTopic);
   if (author) q = q.eq('author', author);

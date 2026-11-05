@@ -6,6 +6,7 @@ export const SUPABASE_URL = 'https://tvabpsxfwofiqriwbolz.supabase.co';
 export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2YWJwc3hmd29maXFyaXdib2x6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NTQ2OTksImV4cCI6MjEwMjAzMDY5OX0.ltxl-K6lHKp1NC3-t9xzMOML9JVyqrpcQjkHkauiGBY';
 export const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 export const BUCKET = 'archive-files';
+export const AUDIO_BUCKET = 'reading-audio';
 
 // Debug escape hatch: lets a DevTools console diagnose issues against the real, already-
 // authenticated session without creating a second Supabase client (which collides with this
@@ -270,7 +271,7 @@ export const State = {
   appShown: false,
   selectedDocId: null,
   selectedCategoryId: null,
-  dashFilters: { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', access_level: '', collection: '', recipient: '', source: '', language: '', legacyOnly: false, pendingOnly: false },
+  dashFilters: { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', access_level: '', collection: '', recipient: '', source: '', language: '', legacyOnly: false, pendingOnly: false, withMedia: false },
   dashUserDefaultsApplied: false,
   dashSort: { col: 'document_id', asc: false },
   reportFilters: { category: '', main_topic: '', author: '', recipient: '', workflow_status: '', from: '', to: '' },
@@ -448,6 +449,34 @@ export function isAnyDeptLead() { return State.myDepartments.some(d => d.is_lead
 // is the real gate, and a reserved document simply does not reach anyone who isn't enabled.
 export const ACCESS_LEVELS = [['public', 'Public'], ['private', 'Private (registered users)'], ['reserved', 'Reserved']];
 export function canManageReserved() { return isAdmin() || isDeptMember('FORM'); }
+
+// Video links and recordings (113_media.sql). The database is the real gate on links; this check only
+// gives a clear message first. Statuses a reviewer may be able to read, but which aren't published:
+export const HIDDEN_DOC_STATUSES = ['proposed', 'revision', 'pending_publish', 'removed'];
+export function isMediaLinkOk(url) { return /^https:\/\/((www\.|m\.)?youtube\.com|youtu\.be|drive\.google\.com)\/\S+$/.test(url || ''); }
+export async function audioFileUrl(path) {
+  const { data, error } = await sb.storage.from(AUDIO_BUCKET).createSignedUrl(path, 3600);
+  if (error) throw error;
+  return data.signedUrl;
+}
+export function videoLinkHtml(url, label, secondary) {
+  return `<a class="btn${secondary ? ' secondary' : ''}" href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="flex:0 0 auto;white-space:nowrap;text-decoration:none;">&#9654; ${esc(label)}</a>`;
+}
+// One player for the document panel, the Start Here card and the review screen. reading: { path, reader_name }.
+export async function mountAudioPlayer(box, reading, autoplay) {
+  box.innerHTML = '<div class="hint">Loading the recording...</div>';
+  let url;
+  try { url = await audioFileUrl(reading.path); }
+  catch (e) { box.innerHTML = `<div class="hint">Could not open the recording: ${esc(e.message)}</div>`; return; }
+  box.innerHTML = `
+    <audio controls preload="metadata" style="width:100%;margin-top:6px;" src="${esc(url)}"></audio>
+    ${reading.reader_name ? `<div class="hint" dir="auto">Read by ${esc(reading.reader_name)}</div>` : ''}`;
+  const audio = box.querySelector('audio');
+  audio.addEventListener('error', () => {
+    box.insertAdjacentHTML('beforeend', '<div class="hint">This device could not play the recording. Please tell us with "Report a problem", and say which phone you use.</div>');
+  });
+  if (autoplay) audio.play().catch(() => { /* the browser wants a second tap on the player */ });
+}
 
 // Team Applications tab visibility, moved from Coordinator to HR (GOVERNANCE.md phase 2a) -
 // Coordinators still keep RLS access for now (migration 80 §8) until migration 81 removes it,
