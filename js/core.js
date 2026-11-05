@@ -140,6 +140,10 @@ export async function downloadInpFromGDrive(fileName) {
 // Document" Drive folder as every other original - so a future correction task on this
 // document can download it the same way (see downloadInpFromGDrive above). Returns the Drive
 // file id; the caller is responsible for recording `fileName` in documents.renamed_inp_file_name.
+export async function uploadPdfToGDrive(fileName, blob, accessToken) {
+  return await driveUploadOrReplace(GDRIVE_FOLDER_ID, fileName, blob, accessToken);
+}
+
 export async function uploadInpToGDrive(fileName, blob, accessToken) {
   return await driveUploadOrReplace(GDRIVE_INP_FOLDER_ID, fileName, blob, accessToken);
 }

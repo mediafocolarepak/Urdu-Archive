@@ -1,25 +1,26 @@
-import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20261105144540';
-import { renderDashboardView } from './dashboard.js?v=20261105144540';
-import { renderReportsView } from './reports.js?v=20261105144540';
-import { renderHayatView } from './hayatindex.js?v=20261105144540';
-import { renderMatchReviewView } from './matchreview.js?v=20261105144540';
-import { renderBulkImportView } from './bulkimport.js?v=20261105144540';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20261105144540';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20261105144540';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20261105144540';
-import { renderHayatEditorView } from './hayateditor.js?v=20261105144540';
-import { renderInPageConverterView } from './inpageconverter.js?v=20261105144540';
-import { renderUserGuideView } from './userguide.js?v=20261105144540';
-import { renderJoinTeamView } from './collaboration.js?v=20261105144540';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20261105144540';
-import { renderMyProfileView } from './profile.js?v=20261105144540';
-import { renderMySpaceView } from './myspace.js?v=20261105144540';
-import { renderBoardsView } from './boards.js?v=20261105144540';
-import { renderFormationView } from './formation.js?v=20261105144540';
-import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261105144540';
-import { renderOnboardingView } from './onboarding.js?v=20261105144540';
-import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20261105144540';
-import { registerServiceWorker, initInstallBanner } from './pwa-register.js?v=20261105144540';
+import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20261105160714';
+import { renderDashboardView } from './dashboard.js?v=20261105160714';
+import { renderReportsView } from './reports.js?v=20261105160714';
+import { renderHayatView } from './hayatindex.js?v=20261105160714';
+import { renderMatchReviewView } from './matchreview.js?v=20261105160714';
+import { renderBulkImportView } from './bulkimport.js?v=20261105160714';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20261105160714';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20261105160714';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20261105160714';
+import { renderHayatEditorView } from './hayateditor.js?v=20261105160714';
+import { renderInPageConverterView } from './inpageconverter.js?v=20261105160714';
+import { renderUserGuideView } from './userguide.js?v=20261105160714';
+import { renderJoinTeamView } from './collaboration.js?v=20261105160714';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20261105160714';
+import { renderMyProfileView } from './profile.js?v=20261105160714';
+import { renderMySpaceView } from './myspace.js?v=20261105160714';
+import { renderBoardsView } from './boards.js?v=20261105160714';
+import { renderFormationView } from './formation.js?v=20261105160714';
+import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261105160714';
+import { renderOnboardingView } from './onboarding.js?v=20261105160714';
+import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20261105160714';
+import { renderProposalsView, initProposalNotifications } from './proposals.js?v=20261105160714';
+import { registerServiceWorker, initInstallBanner } from './pwa-register.js?v=20261105160714';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -59,6 +60,7 @@ function getTabs() {
     tabs.push({ id: 'boards', label: 'Boards' });
     tabs.push({ id: 'formation', label: 'Formation Paths' });
     tabs.push({ id: 'tasks', label: 'Tasks' });
+    tabs.push({ id: 'proposals', label: 'Proposals' });
     tabs.push({ id: 'inpageconverter', label: 'InPage Converter' });
     tabs.push({ id: 'chat', label: 'Report a Problem or Suggestion' });
     // Share with us: Operators can now give their own feedback to the team leads/Admin the same
@@ -92,6 +94,7 @@ function getTabs() {
       { id: 'boards', label: 'Boards' },
       { id: 'formation', label: 'Formation Paths' },
       { id: 'tasks', label: 'Tasks' },
+      { id: 'proposals', label: 'Proposals' },
       { id: 'announcements', label: 'Announcements' },
       { id: 'chat', label: 'Messages' },
       { id: 'sharewithus', label: 'Share with us' },
@@ -121,6 +124,7 @@ function getTabs() {
   ];
   if (State.myDepartments.length > 0) { tabs.push({ id: 'mydepartment', label: 'My Department' }); }
   tabs.push({ id: 'tasks', label: 'Tasks' });
+  tabs.push({ id: 'proposals', label: 'Proposals' });
   tabs.push({ id: 'profile', label: 'My Profile' });
   tabs.push({ id: 'chat', label: 'Messages' });
   tabs.push({ id: 'help', label: 'Help' });
@@ -197,6 +201,7 @@ function renderTab(id) {
   else if (id === 'workconsolidation') renderWorkConsolidationView(main);
   else if (id === 'hayateditor') renderHayatEditorView(main);
   else if (id === 'bulkimport' && isAdmin()) renderBulkImportView(main);
+  else if (id === 'proposals') renderProposalsView(main);
   else if (id === 'inpageconverter') renderInPageConverterView(main);
   else if (id === 'announcements') renderAnnouncementsView(main);
   else if (id === 'chat') { canReviewApplications() ? renderAdminMessagesView(main) : renderChatView(main); }
@@ -223,6 +228,7 @@ boot(() => {
   initTaskNotifications(() => renderTab('tasks'));
   initDeptMessageNotifications(code => { State.myDeptSelected = code; renderTab('mydepartment'); });
   initShareNotifications(() => renderTab('sharewithus'));
+  initProposalNotifications(() => renderTab('proposals'));
 });
 registerServiceWorker();
 initInstallBanner();

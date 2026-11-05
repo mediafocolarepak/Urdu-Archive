@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, isAdmin, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20261105144540';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261105144540';
+import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe } from './core.js?v=20261105160714';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261105160714';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
@@ -46,6 +46,7 @@ export async function renderDashboardView(main) {
       <div class="searchbar">
         <input id="dash-search" placeholder="Search by title, tags, or Urdu text..." value="${esc(State.dashFilters.search)}">
         ${isAdmin() ? '<button class="btn" id="dash-new">+ New document</button>' : ''}
+        ${canWrite() ? '<button class="btn secondary" id="dash-propose">+ Propose content</button>' : ''}
       </div>
       <details class="dash-filters" id="dash-filters">
       <summary id="dash-filters-summary">Filters</summary>
@@ -101,6 +102,7 @@ export async function renderDashboardView(main) {
   window.addEventListener('popstate', closeDocDetailScreen);
   document.getElementById('dash-search').addEventListener('input', e => { State.dashFilters.search = e.target.value; refreshDashGrid(); });
   document.getElementById('dash-search-id').addEventListener('input', e => { State.dashFilters.idSearch = e.target.value; refreshDashGrid(); });
+  document.getElementById('dash-propose')?.addEventListener('click', () => window.__renderTab('proposals'));
   if (isAdmin()) document.getElementById('dash-new').addEventListener('click', () => createNewDocument(refreshDashGrid));
   document.getElementById('f-category').addEventListener('change', e => { State.dashFilters.category = e.target.value; refreshDashGrid(); });
   document.getElementById('f-author').addEventListener('change', e => { State.dashFilters.author = e.target.value; refreshDashGrid(); });
