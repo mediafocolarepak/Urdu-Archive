@@ -6,7 +6,7 @@
 import {
   sb, State, esc, withStatus, optionsHtml, labelOf, isAdmin, canManageReserved, canWrite, BUCKET, likeSafe,
   titleOverlapScore, ACCESS_LEVELS, readPdfPageCountFromBlob, getDriveAccessToken, uploadPdfToGDrive,
-} from './core.js?v=20261105160714';
+} from './core.js?v=20261105162447';
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // the Supabase Free plan's limit per file
 const HIDDEN_STATUSES = ['proposed', 'revision', 'pending_publish', 'removed'];
@@ -23,6 +23,12 @@ const EVENT_LABELS = {
   released: 'A reviewer released it', sent_back: 'Sent back to correct', published: 'Published', rejected: 'Rejected',
 };
 
+// Reads the text out of a Word file. Loaded only when someone uses it: it is 630 KB, too much to
+// make every phone download at sign-in. The version is pinned and its checksum verified.
+const MAMMOTH_URL = 'https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js';
+const MAMMOTH_INTEGRITY = 'sha384-/cXAMbzovUIKbBERjPmR3SnPTh8siWr5lsvFYj1Uq4XP0yaJUZJmsh0YXyGv5P0y';
+const MAX_WORD_BYTES = 20 * 1024 * 1024;
+
 let currentTab = 'mine';
 
 const dateOf = iso => (iso || '').slice(0, 10);
@@ -32,6 +38,41 @@ const scrollTop = () => { document.getElementById('main').scrollTop = 0; };
 async function act(fn) {
   try { await fn(); return true; }
   catch (e) { alert(e.message); return false; }
+}
+
+let mammothLoading = null;
+function loadMammoth() {
+  if (window.mammoth) return Promise.resolve(window.mammoth);
+  if (!mammothLoading) {
+    mammothLoading = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = MAMMOTH_URL;
+      script.integrity = MAMMOTH_INTEGRITY;
+      script.crossOrigin = 'anonymous';
+      script.onload = () => resolve(window.mammoth);
+      script.onerror = () => {
+        mammothLoading = null;
+        reject(new Error('Could not load the Word reader. Please check the connection and try again.'));
+      };
+      document.head.appendChild(script);
+    });
+  }
+  return mammothLoading;
+}
+
+// The text only: layout and images stay out, and the file itself is not kept.
+async function textFromWord(file) {
+  if (file.size > MAX_WORD_BYTES) throw new Error(`"${file.name}" is larger than 20 MB.`);
+  const reader = await loadMammoth();
+  let result;
+  try {
+    result = await reader.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+  } catch {
+    throw new Error('This file cannot be read. Only .docx files work: open an older .doc in Word and save it as .docx.');
+  }
+  const text = result.value.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  if (!text) throw new Error('No text found in this file. It may contain only images: if so, paste the text by hand.');
+  return text;
 }
 
 // ---------- The section ----------
@@ -151,7 +192,7 @@ async function renderForm(main, id) {
       </div>
       <div class="subpanel" style="margin-top:14px;">
         <h3>3. Versions</h3>
-        <p class="hint">One for each language. Pasting the text is what makes it searchable: a PDF alone can be found only by its title and tags.</p>
+        <p class="hint">One for each language. Adding the text, pasted or loaded from Word, is what makes it searchable: a PDF alone can be found only by its title and tags.</p>
         <div id="pf-versions"></div>
         <div class="btn-row"><button class="btn secondary" id="pf-add-version">+ Another language</button></div>
       </div>
@@ -220,6 +261,7 @@ function renderVersions() {
         <div class="field"><label>Access level</label><select class="pv-level">${optionsHtml(levels, v.access_level, false)}</select></div>
       </div>
       <div class="field"><label>Text</label><textarea class="pv-body" dir="auto" rows="6">${esc(v.body)}</textarea></div>
+      <div class="field"><label>Or load the text from Word <span class="hint">(.docx; the file itself is not kept)</span></label><input class="pv-word" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"><div class="hint pv-word-status"></div></div>
       <div class="field"><label>PDF file ${v.draft_path ? '<span class="hint">(already attached; choose another to replace it)</span>' : ''}</label><input class="pv-file" type="file" accept=".pdf"></div>
       ${form.versions.length > 1 ? '<div class="btn-row"><button class="btn danger pv-remove" style="padding:4px 10px;">Remove this version</button></div>' : ''}
     </div>`).join('');
@@ -231,6 +273,20 @@ function renderVersions() {
       renderVersions();
     });
     card.querySelector('.pv-file').addEventListener('change', e => { form.versions[i].file = e.target.files[0] || null; });
+    card.querySelector('.pv-word').addEventListener('change', async e => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      const body = card.querySelector('.pv-body');
+      if (body.value.trim() && !confirm('Replace the text already in this box with the text of the file?')) return;
+      const status = card.querySelector('.pv-word-status');
+      status.textContent = 'Reading the file...';
+      const ok = await act(async () => {
+        body.value = await textFromWord(file);
+        status.textContent = `Text loaded from "${file.name}". Please check it: layout and images are not carried over.`;
+      });
+      if (!ok) status.textContent = '';
+    });
   });
 }
 
