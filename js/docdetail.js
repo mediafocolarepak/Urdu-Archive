@@ -8,7 +8,8 @@ import {
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
-} from './core.js?v=20261105132836';
+  ACCESS_LEVELS, canManageReserved,
+} from './core.js?v=20261105144540';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -23,6 +24,7 @@ const TASK_STATUS_LABEL = { open: 'Open', claimed: 'Claimed', submitted: 'Submit
 function renderDocSummary(doc) {
   const line = (...parts) => parts.filter(Boolean).join(' · ');
   const lines = [
+    doc.access_level === 'reserved' ? '<span class="count-badge">Reserved</span>' : '',
     line(esc(labelOf(State.categories, doc.category)), esc(labelOf(State.authors, doc.author)), esc(labelOf(State.mainTopics, doc.main_topic))),
     line(doc.place ? 'Place: ' + esc(doc.place) : '', doc.ref_date ? 'Reference date: ' + esc(doc.ref_date) : ''),
     doc.secondary_tags ? 'Tags: ' + esc(doc.secondary_tags) : '',
@@ -659,6 +661,7 @@ async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
       ${selectField('Main topic', 'main_topic', doc.main_topic, State.mainTopics)}
       ${textField('Secondary tags', 'secondary_tags', doc.secondary_tags)}
       ${selectField('Language', 'language', doc.language, State.langs)}
+      ${selectField('Access level', 'access_level', doc.access_level, ACCESS_LEVELS.filter(([code]) => code !== 'reserved' || canManageReserved() || doc.access_level === 'reserved'))}
       ${textField('Reference period', 'ref_period', doc.ref_period)}
       ${selectField('Media type', 'media_type', doc.media_type, State.mediaTypes)}
       ${selectField('Source', 'source', doc.source, State.sources)}

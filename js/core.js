@@ -266,7 +266,7 @@ export const State = {
   appShown: false,
   selectedDocId: null,
   selectedCategoryId: null,
-  dashFilters: { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', collection: '', recipient: '', source: '', language: '', legacyOnly: false, pendingOnly: false },
+  dashFilters: { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', access_level: '', collection: '', recipient: '', source: '', language: '', legacyOnly: false, pendingOnly: false },
   dashUserDefaultsApplied: false,
   dashSort: { col: 'document_id', asc: false },
   reportFilters: { category: '', main_topic: '', author: '', recipient: '', workflow_status: '', from: '', to: '' },
@@ -439,6 +439,11 @@ export function canReviewApplications() { return State.currentRole === 'coordina
 export function isDeptMember(code) { return State.myDepartments.some(d => d.department_code === code); }
 export function isDeptLead(code) { return State.myDepartments.some(d => d.department_code === code && d.is_lead); }
 export function isAnyDeptLead() { return State.myDepartments.some(d => d.is_lead); }
+
+// Access levels (111_access_levels.sql). This only decides what the screens offer; the database
+// is the real gate, and a reserved document simply does not reach anyone who isn't enabled.
+export const ACCESS_LEVELS = [['public', 'Public'], ['private', 'Private (registered users)'], ['reserved', 'Reserved']];
+export function canManageReserved() { return isAdmin() || isDeptMember('FORM'); }
 
 // Team Applications tab visibility, moved from Coordinator to HR (GOVERNANCE.md phase 2a) -
 // Coordinators still keep RLS access for now (migration 80 §8) until migration 81 removes it,

@@ -5,11 +5,11 @@
 
 import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
-  nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt,
-} from './core.js?v=20261105132836';
-import { renderPolicySection } from './policy.js?v=20261105132836';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261105132836';
-import { renderApplicationsView } from './collaboration.js?v=20261105132836';
+  nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved,
+} from './core.js?v=20261105144540';
+import { renderPolicySection } from './policy.js?v=20261105144540';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261105144540';
+import { renderApplicationsView } from './collaboration.js?v=20261105144540';
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -49,6 +49,7 @@ export async function renderMyDepartmentView(main) {
     ${selected === 'RF' ? '<div id="mydept-anomalies-box"></div>' : ''}
     ${selected === 'COORD' ? '<div id="mydept-tasks-box"></div>' : ''}
     ${selected === 'FORM' ? '<div id="mydept-formation-box"></div>' : ''}
+    ${selected === 'FORM' && canManageReserved() ? '<div id="mydept-reserved-box"></div>' : ''}
     ${selected === 'COMM' ? '<div id="mydept-onboarding-box"></div>' : ''}
     ${selected === 'ARCHIVE' ? '<div id="mydept-archive-box"></div>' : ''}
     ${selected === 'ARCHIVE' && isAdmin() ? '<div id="mydept-translation-box"></div>' : ''}
@@ -93,6 +94,7 @@ export async function renderMyDepartmentView(main) {
   // (including drafts) and the formatori-only chat channel via existing RLS (is_any_formatore()
   // == FORM membership since migration 80), so no new migration is needed here, only the view.
   if (selected === 'FORM') await renderFormationPipeline(document.getElementById('mydept-formation-box'));
+  if (selected === 'FORM' && canManageReserved()) await renderReservedAccess(document.getElementById('mydept-reserved-box'));
   // Communication authors the "Start Here" cards (95_onboarding_and_share_with_us.sql) from here -
   // onboarding.js only ever reads onboarding_cards, this is the one place that writes it.
   if (selected === 'COMM') await renderOnboardingCardsManager(document.getElementById('mydept-onboarding-box'));
@@ -355,6 +357,47 @@ async function renderUsersStatsPanel(box) {
         </table></div>` : '<p class="hint" style="margin-top:8px;">No active enrollments yet.</p>'}
       <p class="hint" style="margin-top:10px;">Login/access history isn't tracked yet - ask if this would be useful and it can be added as its own piece (it touches privacy considerations worth a separate decision).</p>
     </div>`;
+}
+
+// ---------- Who can read reserved documents (111_access_levels.sql) ----------
+// Admin and Formation members can always read them; everyone else is enabled here, one by one.
+
+async function renderReservedAccess(box) {
+  box.innerHTML = `
+    <div class="panel">
+      <h2>Access to reserved documents</h2>
+      <p class="hint">Listed below: everyone who can read reserved documents. Search for a person to enable them. For anyone else, a reserved document does not appear anywhere in the app. PDFs stay on Drive, where anyone with the link can open them: keep only the text here if a document is very delicate.</p>
+      <div class="searchbar"><input id="reserved-search" placeholder="Search by name or email..."></div>
+      <div id="reserved-list"><div class="hint">Loading...</div></div>
+    </div>`;
+  const search = document.getElementById('reserved-search');
+  let timer = null;
+  search.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => refreshReservedAccess(search.value), 300); });
+  await refreshReservedAccess('');
+}
+
+async function refreshReservedAccess(query) {
+  const list = document.getElementById('reserved-list');
+  const rows = await withStatus(sb.rpc('list_reserved_access', { p_query: query || null }));
+  if (!rows.length) { list.innerHTML = '<div class="empty-msg">Nobody found.</div>'; return; }
+  list.innerHTML = `
+    <div class="grid-wrap"><table class="grid">
+      <thead><tr><th>Name</th><th>Email</th><th>Access</th><th>Enabled by</th><th></th></tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td>${esc(r.full_name) || '<span class="hint">(name not set)</span>'}</td>
+        <td>${esc(r.email)}</td>
+        <td>${r.automatic ? 'Always (Admin or Formation)' : (r.enabled ? 'Enabled' : 'Not enabled')}</td>
+        <td>${r.enabled && !r.automatic ? `${esc(r.granted_by_email)} &middot; ${esc((r.granted_at || '').slice(0, 10))}` : ''}</td>
+        <td>${r.automatic ? '' : `<button class="btn ${r.enabled ? 'danger' : ''}" data-reserved-user="${esc(r.user_id)}" data-reserved-enable="${!r.enabled}" style="padding:2px 8px;">${r.enabled ? 'Take away' : 'Enable'}</button>`}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  list.querySelectorAll('[data-reserved-user]').forEach(btn => btn.addEventListener('click', async () => {
+    const enable = btn.dataset.reservedEnable === 'true';
+    const reason = prompt(enable ? 'Enable this person for reserved documents? A short reason (optional):' : 'Take away access to reserved documents? A short reason (optional):');
+    if (reason === null) return;
+    await withStatus(sb.rpc('set_reserved_access', { p_user_id: btn.dataset.reservedUser, p_enabled: enable, p_reason: reason }), 'Saving...');
+    await refreshReservedAccess(document.getElementById('reserved-search').value);
+  }));
 }
 
 const ARCHIVE_TOOLS = [
