@@ -956,8 +956,8 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
 - **Languages:** English and Italian, one selector. Urdu is added as a language with the Owner's words.
 - **Role guides** set out a person's field, what isn't theirs, and a suggested daily and weekly rhythm. **The rhythm is
   a suggestion, not a rule of this document.** Where a guide and this document differ, this document holds.
-- **A "?" beside a screen's title** opens its guide. **The Read aloud guide stays hidden from plain Users** until it is
-  announced, by adding `user` to its audience.
+- **A "?" beside a screen's title** opens its guide. **The Read aloud guide is visible to plain Users too** (Owner's
+  decision, 2026-11-06, migration 117), since they can read aloud. Showing the guide isn't announcing the feature.
 - The old pages are kept in `_backup_help_pages_20261106`. Admins edit guides in place in the app.
 
 ---
