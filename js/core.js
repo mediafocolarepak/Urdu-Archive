@@ -459,6 +459,11 @@ export async function audioFileUrl(path) {
   if (error) throw error;
   return data.signedUrl;
 }
+// The small "?" beside a screen's title: opens that screen's guide in Help (userguide.js listens for it).
+export function helpLinkHtml(guideKey) {
+  return `<button type="button" class="help-q" data-help-guide="${esc(guideKey)}" title="How this works" aria-label="How this works">?</button>`;
+}
+
 export function videoLinkHtml(url, label, secondary) {
   return `<a class="btn${secondary ? ' secondary' : ''}" href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="flex:0 0 auto;white-space:nowrap;text-decoration:none;">&#9654; ${esc(label)}</a>`;
 }

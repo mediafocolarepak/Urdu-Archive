@@ -11,10 +11,11 @@ import {
   sb, State, esc, withStatus, canReviewApplications, getDisplayNameByEmail,
   openBoardPostPopup, likeSafe, DEFAULT_BOARD_FOR_MEMBERSHIP, BOARD_MEDIA_BUCKET, ackBoardPolicy,
   canWrite, isMediaLinkOk,
-} from './core.js?v=20261106135351';
+  helpLinkHtml,
+} from './core.js?v=20261106163624';
 
 // Shown once, before a person's first post (84_boards_moderation.sql) - keep this in sync with
-// the Help entries board_usage_policy_en/it, which say the same thing at more length.
+// the Help guide "boards" (116_help_redesign.sql), which says the same thing in its own section.
 const BOARD_POLICY_TEXT = `Boards are a shared space, separate from the archive: what you post here is not an archive document. If a post deserves the archive, it can be proposed, and it then goes through the usual review.
 
 Keep it relevant to the group and in the spirit of the programme. No commercial promotion, no political campaigning, no content that wouldn't be appropriate to read aloud to the group.
@@ -90,7 +91,7 @@ export async function renderBoardsView(main) {
 
   main.innerHTML = `
     <div class="panel">
-      <h2>Boards</h2>
+      <h2>Boards ${helpLinkHtml('boards')}</h2>
       <p class="hint" style="margin-top:0;">A shared space, separate from the archive: what is posted here is not an archive document.</p>
       <div id="board-archive-requests"></div>
       <div class="btn-row" id="board-pills" style="margin-bottom:10px;">
