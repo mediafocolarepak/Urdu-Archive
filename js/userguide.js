@@ -11,7 +11,7 @@
 //   qual:<CODE>                     holds that qualification
 //   board_editor                    looks after at least one board
 
-import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20261106192514';
+import { sb, State, esc, isAdmin, canWrite, withStatus } from './core.js?v=20261106193250';
 
 const SECTIONS = [
   ['use', { en: 'Use the archive', it: 'Usare l\'archivio', ur: 'آرکائیو کا استعمال' }],
@@ -70,8 +70,9 @@ async function loadGuides() {
   if (listCache) return listCache;
   const { data, error } = await sb.from('help_pages').select(LIST_FIELDS).not('guide_key', 'is', null).order('sort_order');
   if (error) throw error;
-  // A draft (the Urdu, until reviewed) is seen only by Admins; everyone else gets the guide in another language.
-  listCache = (data || []).filter(r => !r.draft || isAdmin());
+  // A draft (the Urdu, until reviewed) is seen by the team, Operators and up (Owner's request, 2026-11-06), who can
+  // say what is wrong. Plain Users get the guide in another language until it is opened to them.
+  listCache = (data || []).filter(r => !r.draft || canWrite());
   return listCache;
 }
 
@@ -183,7 +184,7 @@ async function renderGuide(main, rows) {
         <textarea id="help-editor" spellcheck="false" class="help-editor">${esc(body.html_content)}</textarea>
       ` : `
         <article class="help-guide" ${rtl}>
-          ${row.draft ? '<p class="note" dir="ltr">Draft: only Admins see this until it is reviewed.</p>' : ''}
+          ${row.draft ? '<p class="note" dir="ltr">Draft, not yet reviewed: only the team sees it. If something is wrong, please write in Report a Problem or Suggestion.</p>' : ''}
           <h1>${esc(row.title)}</h1>
           ${cleanGuideHtml(body.html_content)}
         </article>
