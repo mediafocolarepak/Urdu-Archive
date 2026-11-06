@@ -1,24 +1,24 @@
--- 123_reserve_six_texts.sql
+-- 123_reserve_seven_texts.sql
 -- Six Urdu texts say in their first lines that they are reserved, or meant for the more mature internal members, but were not
--- reserved in the archive. The Owner's decision (2026-11-06): they become reserved. Only Admin, Formation members and those they
--- have enabled will see them, with their tasks, favourites and posts. No other document changes.
+-- reserved in the archive. The seventh, 569, is a copy of 297 (same date, same talk, same opening) without those words.
+-- The Owner's decision (2026-11-06): all seven become reserved. Only Admin, Formation members and those they have enabled
+-- will see them, with their tasks, favourites and posts. No other document changes.
 -- Run it in the SQL Editor. It can be run twice. The earlier level is kept in the backup table, and restored like this:
 --   update public.documents d set access_level = b.access_level from public._backup_documents_access_20261106 b where d.document_id = b.document_id;
 
 create table if not exists public._backup_documents_access_20261106 as
 select document_id, access_level, now() as backed_up_at
 from public.documents
-where document_id in (297, 561, 562, 563, 571, 578);
+where document_id in (297, 561, 562, 563, 569, 571, 578);
 alter table public._backup_documents_access_20261106 enable row level security;
 
 update public.documents
 set access_level = 'reserved'
-where document_id in (297, 561, 562, 563, 571, 578)
+where document_id in (297, 561, 562, 563, 569, 571, 578)
   and access_level is distinct from 'reserved';
 
--- Verification (the SQL Editor shows only the last result). Seven rows: the six must say reserved = true.
+-- Verification (the SQL Editor shows only the last result). Seven rows: all must say reserved = true.
 -- other_visible: other documents of the same Work still not reserved, such as the Italian version. readings: recordings of the text.
--- The seventh, 569, has not been changed: it looks like a copy of 297 (same date, same talk) without the words on its first lines.
 select d.document_id,
        d.access_level = 'reserved' as reserved,
        (select b.access_level from public._backup_documents_access_20261106 b where b.document_id = d.document_id) as level_before,
@@ -27,5 +27,5 @@ select d.document_id,
        (select count(*) from public.audio_readings r where r.document_id = d.document_id) as readings,
        coalesce(d.en_title, d.title) as title
 from public.documents d
-where d.document_id in (297, 561, 562, 563, 571, 578, 569)
-order by d.document_id = 569, d.document_id;
+where d.document_id in (297, 561, 562, 563, 569, 571, 578)
+order by d.document_id;
