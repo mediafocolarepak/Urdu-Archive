@@ -11,7 +11,7 @@ import {
   sb, State, esc, withStatus, canReviewApplications, getDisplayNameByEmail,
   openBoardPostPopup, likeSafe, DEFAULT_BOARD_FOR_MEMBERSHIP, BOARD_MEDIA_BUCKET, ackBoardPolicy,
   canWrite, isMediaLinkOk,
-} from './core.js?v=20261106124138';
+} from './core.js?v=20261106135351';
 
 // Shown once, before a person's first post (84_boards_moderation.sql) - keep this in sync with
 // the Help entries board_usage_policy_en/it, which say the same thing at more length.

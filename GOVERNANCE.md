@@ -852,6 +852,9 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
   its text or a PDF. The text can be pasted or loaded from a Word `.docx`, of which only the text is
   kept; Urdu in InPage goes through the InPage Converter first. Numbers, file names, status and the
   preferred mark are set by the system. Adding the text is what makes a document searchable.
+- **Adding to a document already in the archive:** its panel has **+ Add a related version**. The form opens
+  filled in from that document and tied to its Work: the link can't be removed, even when the draft is reopened,
+  and the level follows the document. On a reserved document, only Admin and Formation get the button.
 - **States:** draft, awaiting review, to correct (with a note), published, rejected. Each version is a
   normal record in the hidden status `proposed`, visible only to the proposer and to those who can
   review it. Every version of a proposal is published at once.

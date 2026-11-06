@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES } from './core.js?v=20261106124138';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261106124138';
+import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES } from './core.js?v=20261106135351';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261106135351';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards

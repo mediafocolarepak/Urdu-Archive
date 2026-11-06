@@ -9,7 +9,7 @@ import {
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, videoLinkHtml, mountAudioPlayer, eraseMyAudioFiles,
-} from './core.js?v=20261106124138';
+} from './core.js?v=20261106135351';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -200,11 +200,41 @@ function openDocTextPopup(doc, text) {
   });
 }
 
+// Opens the proposal form already filled in from this document, and tied to its Work for good: this is
+// what makes the two versions of one another (GOVERNANCE.md §5.14). A document with no Work gets one first.
+async function addRelatedVersion(doc, siblings) {
+  const title = doc.en_title || doc.title || doc.original_title || '';
+  let workId = doc.work_id;
+  if (!workId) {
+    workId = await createWorkFor(title);
+    await withStatus(sb.from('documents').update({ work_id: workId }).eq('document_id', doc.document_id), 'Saving...');
+  }
+  const others = [doc, ...(siblings || []).filter(s => String(s.document_id) !== String(doc.document_id))]
+    .filter(v => !HIDDEN_DOC_STATUSES.includes(v.workflow_status));
+  const hasUrdu = others.some(v => v.language === 'URD' && (v.media_type || 'DOC') === 'DOC');
+  State.proposalPrefill = {
+    workId,
+    workLabel: title,
+    common: {
+      related_to_document_id: doc.document_id,
+      en_title: doc.en_title || doc.title || '', category: doc.category || '', author: doc.author || '',
+      original_author: doc.original_author || '', ref_date: doc.ref_date || '', ref_period: doc.ref_period || '',
+      recipient: (doc.recipient || [])[0] || '', main_topic: doc.main_topic || '', secondary_tags: doc.secondary_tags || '',
+      bible_verse: doc.bible_verse || '', place: doc.place || '',
+    },
+    versions: [{ language: hasUrdu ? '' : 'URD', access_level: doc.access_level === 'reserved' ? 'reserved' : (doc.access_level || 'private') }],
+    existing: others.map(v => ({ language: v.language, media_type: v.media_type || 'DOC' })),
+  };
+  window.__renderTab('proposals');
+}
+
 export function renderDocDetailConsultation(box, doc, workSiblings, docCollections, canEdit, text, originalText, media = []) {
   // A video with its link, or a reading, has no PDF to open.
   const noPdf = doc.media_type === 'AUD' || (doc.media_type === 'VID' && doc.external_url);
   const langOf = m => esc(labelOf(State.langs, m.language) || '?');
   const ownReading = media.find(m => m.media_type === 'AUD' && String(m.document_id) === String(doc.document_id));
+  // A version of a reserved document would have to be reserved too, and only Admin and Formation can add those.
+  const canAddRelated = canWrite() && !HIDDEN_DOC_STATUSES.includes(doc.workflow_status) && (doc.access_level !== 'reserved' || canManageReserved());
   box.innerHTML = `
     <div class="btn-row" style="justify-content:space-between;align-items:center;margin:0 0 8px;">
       <h3 style="margin:0;">Document #${esc(doc.document_id)}</h3>
@@ -224,6 +254,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
       ${text ? '<button class="btn secondary" id="doc-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Open editable text</button>' : ''}
       ${originalText ? '<button class="btn secondary" id="doc-original-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Original text (Italian)</button>' : ''}
       <span id="doc-read-aloud" style="display:contents;"></span>
+      ${canAddRelated ? '<button class="btn secondary" id="doc-add-related" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">+ Add a related version</button>' : ''}
       ${canWrite() ? '<button class="btn secondary" id="doc-translate" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Translate</button>' : ''}
       ${isAdmin() && ownReading ? '<button class="btn secondary" id="doc-reader-name" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Correct the name</button><button class="btn danger" id="doc-erase-reading" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Erase the recording</button>' : ''}
       <button class="btn secondary" id="doc-report-problem" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Report a problem</button>
@@ -284,6 +315,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
       });
     }, () => {});
   }
+  document.getElementById('doc-add-related')?.addEventListener('click', () => addRelatedVersion(doc, workSiblings).catch(e => alert(e.message)));
   document.getElementById('doc-reader-name')?.addEventListener('click', async () => {
     const name = prompt('The name to show next to this recording:', ownReading.reader_name || '');
     if (name === null) return;
