@@ -2,7 +2,7 @@
 // not by role, and each person sees only the guides for what they can do. Content lives in help_pages
 // (one row per guide and language, 116_help_redesign.sql). The list loads titles only; a guide's text is
 // fetched when it is opened. Users have no Help tab (Start Here stands in for it, GOVERNANCE 5.8): they
-// reach this view from the link at the bottom of Start Here. Admin can edit a guide in place.
+// reach this view from the Guides button of Start Here. Admin can edit a guide in place.
 //
 // audience tokens (help_pages.audience, any match shows the guide; Admin sees everything):
 //   user | operator | coordinator   the role or anything above it
@@ -11,7 +11,7 @@
 //   qual:<CODE>                     holds that qualification
 //   board_editor                    looks after at least one board
 
-import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20261106165033';
+import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20261106170255';
 
 const SECTIONS = [
   ['use', { en: 'Use the archive', it: 'Usare l\'archivio' }],
@@ -35,7 +35,7 @@ const LIST_FIELDS = 'slug,guide_key,language,title,summary,section,audience,sort
 let listCache = null;
 let myQualsCache = null;
 const bodyCache = new Map();
-const helpView = { key: null, editing: false, lang: readLang(), listScroll: 0, depth: 0, returnTab: null };
+const helpView = { key: null, editing: false, lang: readLang(), listScroll: 0, depth: 0, returnTab: null, fromStart: false };
 
 // Remembered per browser; the page works the same if storage is unavailable.
 function readLang() { try { return localStorage.getItem('helpLang') || 'en'; } catch { return 'en'; } }
@@ -125,10 +125,15 @@ function renderList(main, rows, quals) {
   }).join('');
   main.innerHTML = `
     <div class="panel help-panel">
+      ${State.currentRole === 'user' ? '<div class="btn-row start-back-row"><button type="button" class="btn secondary" id="help-to-start">&larr; Start Here</button></div>' : ''}
       <div class="help-head"><h2>${esc(ui().help)}</h2>${langSwitchHtml(languages)}</div>
       ${groups || `<div class="empty-msg">${esc(ui().empty)}</div>`}
     </div>`;
   wireLangSwitch(main);
+  document.getElementById('help-to-start')?.addEventListener('click', () => {
+    if (history.state && history.state.helpHome) { history.back(); return; }
+    window.__renderTab('onboarding');
+  });
   main.querySelectorAll('[data-help-open]').forEach(b => b.addEventListener('click', () => openGuide(b.dataset.helpOpen)));
   document.getElementById('main').scrollTop = helpView.listScroll;
 }
@@ -242,7 +247,14 @@ function closeGuide() {
   else renderUserGuideView(main);
 }
 window.addEventListener('popstate', e => {
-  if (!helpView.key) return;
+  if (!helpView.key) {
+    // Back from the list of guides returns to Start Here, for those who came from there.
+    if (helpView.fromStart && !(e.state && e.state.helpHome)) {
+      helpView.fromStart = false;
+      if (document.getElementById('main').dataset.section === 'help') window.__renderTab('onboarding');
+    }
+    return;
+  }
   const previous = e.state && e.state.helpGuide;
   if (!previous) { closeGuide(); return; }
   helpView.key = previous;
@@ -253,12 +265,20 @@ window.addEventListener('popstate', e => {
 });
 
 // Links work from anywhere: inside a guide (data-tab, data-help-guide), from the "?" beside a screen's
-// title (helpLinkHtml in core.js), and from the link at the bottom of Start Here (data-help-home).
+// title (helpLinkHtml in core.js), and from the Guides button of Start Here (data-help-home).
 document.addEventListener('click', e => {
   const guide = e.target.closest('[data-help-guide]');
   if (guide) { e.preventDefault(); openGuide(guide.dataset.helpGuide); return; }
   const home = e.target.closest('[data-help-home]');
-  if (home) { e.preventDefault(); helpView.key = null; helpView.listScroll = 0; window.__renderTab('help'); return; }
+  if (home) {
+    e.preventDefault();
+    helpView.key = null;
+    helpView.listScroll = 0;
+    helpView.fromStart = true;
+    history.pushState({ helpHome: true }, '');
+    window.__renderTab('help');
+    return;
+  }
   const tab = e.target.closest('.help-guide [data-tab]');
   if (tab) { e.preventDefault(); helpView.key = null; window.__renderTab(tab.dataset.tab); }
 });

@@ -1,11 +1,14 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.16 (2026-11-06) — decisions taken by the Owner; all of phases 1 through 3 are built and
+**Status: v1.17 (2026-11-06) — decisions taken by the Owner; all of phases 1 through 3 are built and
 merged (migrations 80–115). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.17:** Start Here is now a first screen of large buttons, so that nobody has to scroll past
+everything (§5.8, Owner's request): the Word of Life, the three sections of cards and the guides, each opening its own page.
 
 **What changed in v1.16:** Help redesigned with the Owner (§5.18, migration 116): guides by activity, and each
 person sees only those for what they can do. New guides present each role and department page. Users still have
-Start Here instead of a Help tab, with a link at its foot to the guides meant for them.
+Start Here instead of a Help tab, with a button to the guides meant for them.
 
 **What changed in v1.15:** the Word of Life of a month is one package, and a magazine issue is a record of
 its own (§5.17, migration 115). A board post reaches the archive only through the proposal form, and anyone
@@ -689,6 +692,11 @@ already published elsewhere (YouTube/Facebook/Instagram — no video hosting was
 
 Formation Paths (§5.4) got the same bilingual treatment: `title_en`/`description_en`, nullable,
 shown alongside the (already-Urdu) title/description on the catalog card and path detail page.
+
+**The first screen (2026-11-06, Owner's request):** no longer the sections one after another. It is a set of large buttons,
+Urdu above English, each opening its own page: the Word of Life, the three sections (a section with no published card has no
+button) and the guides. The Word of Life is reached by its button, then Read or Listen: two taps rather than the one of protocol §9,
+by this choice. Read aloud has no button here, since it isn't announced yet.
 
 **"Share with us"** is not the technical "Report a Problem or Suggestion" chat (`chat_messages`,
 unchanged) — it's for an experience, a feeling, an idea, framed by the Owner as reciprocal
