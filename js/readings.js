@@ -7,7 +7,7 @@ import {
   sb, State, esc, withStatus, labelOf, isAdmin, isCoordinator, isDeptMember, AUDIO_BUCKET, AUDIO_FORMATS,
   audioFileProblem, audioDurationOf, mountAudioPlayer, eraseMyAudioFiles,
   helpLinkHtml,
-} from './core.js?v=20261106190049';
+} from './core.js?v=20261106192514';
 
 // AAC in MP4 first, the likeliest to play on every phone; plain 'audio/mp4' can hold Opus, as in Chrome.
 const RECORD_FORMATS = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
@@ -111,6 +111,9 @@ export async function renderReadingsView(main) {
   refreshReadingsBadge();
 }
 
+// The number of the text, beside its title: with it, the ID # box in the Library finds it again.
+const docNumber = id => (id === null || id === undefined ? '' : `#${esc(id)} &middot; `);
+
 // ---------- My readings ----------
 async function renderMine(main, body) {
   await eraseMyAudioFiles();
@@ -120,7 +123,7 @@ async function renderMine(main, body) {
       ${d.readings.map(r => `
         <div class="subpanel" data-id="${esc(r.id)}" style="margin-top:12px;">
           <div style="font-weight:600;" dir="auto">${esc(r.title) || '<span class="hint">(no title)</span>'}</div>
-          <div class="hint">${esc(STATUS_LABELS[r.status] || r.status)}${r.status === 'submitted' ? ` ${r.days_waiting === 0 ? 'since today' : `for ${esc(r.days_waiting)} day${r.days_waiting === 1 ? '' : 's'}`}${r.in_review ? ' &middot; someone is listening to it' : ''}` : ''}${r.duration ? ` &middot; ${esc(r.duration)}` : ''}</div>
+          <div class="hint">${docNumber(r.source_document_id ?? r.document_id)}${esc(STATUS_LABELS[r.status] || r.status)}${r.status === 'submitted' ? ` ${r.days_waiting === 0 ? 'since today' : `for ${esc(r.days_waiting)} day${r.days_waiting === 1 ? '' : 's'}`}${r.in_review ? ' &middot; someone is listening to it' : ''}` : ''}${r.duration ? ` &middot; ${esc(r.duration)}` : ''}</div>
           ${r.decision_note ? `<p style="white-space:pre-wrap;margin:6px 0;" dir="auto"><b>From who listened:</b> ${esc(r.decision_note)}</p>` : ''}
           <div class="rd-player"></div>
           <div class="btn-row">
@@ -135,7 +138,7 @@ async function renderMine(main, body) {
       ${d.held.map(h => `
         <div class="subpanel" data-held="${esc(h.document_id)}" style="margin-top:12px;">
           <div style="font-weight:600;" dir="auto">${esc(h.title)}</div>
-          <div class="hint">${esc(labelOf(State.langs, h.language))} &middot; yours until ${esc(dateOf(h.expires_at))}</div>
+          <div class="hint">${docNumber(h.document_id)}${esc(labelOf(State.langs, h.language))} &middot; yours until ${esc(dateOf(h.expires_at))}</div>
           <div class="btn-row"><button class="btn rd-record">Record</button><button class="btn secondary rd-release">Let it go</button></div>
         </div>`).join('')}
     </div>` : ''}
@@ -145,7 +148,7 @@ async function renderMine(main, body) {
       ${d.waiting.length ? d.waiting.map(w => `
         <div class="btn-row" data-wait="${esc(w.document_id)}" style="justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding:6px 0;margin:0;">
           <div style="min-width:0;"><div dir="auto">${esc(w.title) || '<span class="hint">(no title)</span>'}</div>
-            <div class="hint">${esc(labelOf(State.langs, w.language))} &middot; about ${esc(Math.max(1, Math.round(w.chars / 900)))} min</div></div>
+            <div class="hint">${docNumber(w.document_id)}${esc(labelOf(State.langs, w.language))} &middot; about ${esc(Math.max(1, Math.round(w.chars / 900)))} min</div></div>
           <button class="btn secondary rd-take" style="padding:3px 10px;white-space:nowrap;">Read this</button>
         </div>`).join('') : '<div class="empty-msg">No texts are waiting right now.</div>'}
     </div>
@@ -276,6 +279,7 @@ async function renderRecorder(main, documentId, state) {
         <h2 style="margin:0;" dir="auto">${esc(doc.ur_title || doc.original_title || doc.en_title || doc.title)}</h2>
         <button class="btn secondary" id="rc-back">Back</button>
       </div>
+      <div class="hint">Document #${esc(documentId)}</div>
       ${state.note ? `<p style="white-space:pre-wrap;" dir="auto"><b>From who listened:</b> ${esc(state.note)}</p>` : ''}
       <div id="rc-recovered"></div>
       <div id="rc-trial" class="subpanel" ${format ? '' : 'hidden'}>
@@ -513,7 +517,7 @@ async function renderQueue(main, body) {
       ${rows.length ? rows.map(r => `
         <div class="subpanel" data-id="${esc(r.id)}" style="margin-top:12px;">
           <div style="font-weight:600;" dir="auto">${esc(r.title)}</div>
-          <div class="hint">${esc(labelOf(State.langs, r.language))}${r.duration ? ` &middot; ${esc(r.duration)}` : ''} &middot; waiting ${r.days_waiting === 0 ? 'since today' : `${esc(r.days_waiting)} day${r.days_waiting === 1 ? '' : 's'}`}</div>
+          <div class="hint">${docNumber(r.source_document_id)}${esc(labelOf(State.langs, r.language))}${r.duration ? ` &middot; ${esc(r.duration)}` : ''} &middot; waiting ${r.days_waiting === 0 ? 'since today' : `${esc(r.days_waiting)} day${r.days_waiting === 1 ? '' : 's'}`}</div>
           <div>
             ${r.overdue ? '<span class="count-badge" style="padding:1px 6px;background:var(--danger);color:#fff;">Over 7 days</span>' : ''}
             ${r.reminder_count ? '<span class="count-badge" style="padding:1px 6px;">Reminder sent</span>' : ''}
@@ -538,7 +542,7 @@ async function renderListen(main, id) {
         <h2 style="margin:0;" dir="auto">${esc(d.title)}</h2>
         <button class="btn secondary" id="rl-back">Back</button>
       </div>
-      <div class="hint">${esc(labelOf(State.langs, d.language))}${d.duration ? ` &middot; ${esc(d.duration)}` : ''}${d.reader_name ? ` &middot; read by <span dir="auto">${esc(d.reader_name)}</span>` : ''}</div>
+      <div class="hint">${docNumber(d.source_document_id ?? d.document_id)}${esc(labelOf(State.langs, d.language))}${d.duration ? ` &middot; ${esc(d.duration)}` : ''}${d.reader_name ? ` &middot; read by <span dir="auto">${esc(d.reader_name)}</span>` : ''}</div>
       ${d.text_changed ? '<p class="hint"><b>The text has been corrected since this was recorded.</b></p>' : ''}
       <div id="rl-player"></div>
       ${canDecide ? `

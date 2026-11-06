@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES } from './core.js?v=20261106190049';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261106190049';
+import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES } from './core.js?v=20261106192514';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261106192514';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
@@ -94,6 +94,7 @@ export async function renderDashboardView(main) {
         <div>
           <div class="grid-wrap dash-grid-wrap" style="max-height:70vh;"><table class="grid" id="dash-grid"></table></div>
           <p class="hint dash-scroll-hint" style="margin:4px 0 0;">&larr; Scroll sideways to see more columns &rarr;</p>
+          <div class="dash-sort"><label for="dash-sort">Order</label><select id="dash-sort">${DASH_SORT_OPTIONS.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select></div>
           <div class="dash-cards" id="dash-cards"></div>
         </div>
         <div class="dash-detail-col">
@@ -121,6 +122,13 @@ export async function renderDashboardView(main) {
   document.getElementById('dash-search').addEventListener('input', e => { State.dashFilters.search = e.target.value; refreshDashGrid(); });
   document.getElementById('dash-search-id').addEventListener('input', e => { State.dashFilters.idSearch = e.target.value; refreshDashGrid(); });
   document.getElementById('dash-propose')?.addEventListener('click', () => window.__renderTab('proposals'));
+  const sortSelect = document.getElementById('dash-sort');
+  sortSelect.value = dashSortValue();
+  sortSelect.addEventListener('change', () => {
+    const [col, dir] = sortSelect.value.split(':');
+    State.dashSort = { col, asc: dir === 'asc' };
+    refreshDashGrid();
+  });
   document.getElementById('dash-media').addEventListener('click', e => {
     State.dashFilters.withMedia = !State.dashFilters.withMedia;
     e.currentTarget.className = `btn ${State.dashFilters.withMedia ? '' : 'secondary'}`;
@@ -222,6 +230,16 @@ const DASH_COL_WIDTHS = { document_id: 6, title: 24, original_title: 22, author:
 let listScrollY = 0;
 // The page itself never scrolls (#app is a fixed-height column); #main is the scroller.
 const scrollMainTo = y => { const m = document.getElementById('main'); if (m) m.scrollTop = y; };
+// On a phone the list is made of cards, with no column headers to tap: this list chooses the order instead.
+// Same State.dashSort as the headers of the table on a wide screen.
+const DASH_SORT_OPTIONS = [
+  ['document_id:desc', 'Number: highest first'],
+  ['document_id:asc', 'Number: lowest first'],
+  ['title:asc', 'Title: A to Z'],
+  ['title:desc', 'Title: Z to A'],
+];
+function dashSortValue() { return `${State.dashSort.col}:${State.dashSort.asc ? 'asc' : 'desc'}`; }
+
 function openDocDetailScreen() {
   const split = document.querySelector('.split.split-wide-left');
   if (!split || split.classList.contains('detail-open')) { scrollMainTo(0); return; }

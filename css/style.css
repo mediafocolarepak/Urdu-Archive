@@ -463,3 +463,11 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
 .dob-fields select { min-height: 44px; min-width: 0; width: 100%; }
 .dob-error { color: var(--danger); font-size: 13.5px; min-height: 1em; margin-top: 4px; }
 .dob-ur { font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-size: 17px; line-height: 2.2; }
+
+/* The order of the Library's cards, on a phone (dashboard.js). */
+.dash-sort { display: none; }
+@media (max-width: 700px) {
+  .dash-sort { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
+  .dash-sort label { margin: 0; flex: none; }
+  .dash-sort select { flex: 1; min-height: 44px; min-width: 0; }
+}
