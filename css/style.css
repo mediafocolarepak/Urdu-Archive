@@ -266,6 +266,7 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
 /* A document's titles one under the other: the first stands out, Urdu in Nastaliq, which needs more height between lines. */
 .doc-title { font-weight: 600; overflow-wrap: anywhere; }
 .doc-title-more { font-weight: 400; color: var(--ink-soft); }
+.doc-title-mark { font-style: italic; }
 .doc-title-ur { font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-size: 1.1em; line-height: 2.1; }
 .dash-card-meta { font-size: 12px; color: var(--ink-soft); }
 

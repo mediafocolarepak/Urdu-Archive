@@ -337,12 +337,12 @@ export function docTitles(d) {
   const t = s => (s ?? '').trim();
   const orig = t(d.original_title);
   const out = [];
-  const add = text => {
-    if (text && !out.some(x => x.text.toLowerCase() === text.toLowerCase())) out.push({ text, isUrdu: URDU_SCRIPT.test(text) });
+  const add = (text, translated = false) => {
+    if (text && !out.some(x => x.text.toLowerCase() === text.toLowerCase())) out.push({ text, isUrdu: URDU_SCRIPT.test(text), translated });
   };
   add(t(d.ur_title) || (URDU_SCRIPT.test(orig) ? orig : ''));
   add(t(d.en_title) || t(d.title));
-  add(t(d.it_title));
+  add(t(d.it_title), !!d.it_title_translated);
   add(orig);
   return out;
 }
@@ -350,7 +350,7 @@ export function docTitles(d) {
 export function docTitlesHtml(d, marks = '') {
   const titles = docTitles(d);
   if (!titles.length) return `<div class="doc-title">${marks}<span class="hint">(no title)</span></div>`;
-  return titles.map((x, i) => `<div class="doc-title${i ? ' doc-title-more' : ''}${x.isUrdu ? ' doc-title-ur' : ''}" ${x.isUrdu ? 'dir="rtl" lang="ur"' : 'dir="auto"'}>${i ? '' : marks}${esc(x.text)}</div>`).join('');
+  return titles.map((x, i) => `<div class="doc-title${i ? ' doc-title-more' : ''}${x.isUrdu ? ' doc-title-ur' : ''}" ${x.isUrdu ? 'dir="rtl" lang="ur"' : 'dir="auto"'}>${i ? '' : marks}${esc(x.text)}${x.translated ? ' <span class="doc-title-mark">(translated)</span>' : ''}</div>`).join('');
 }
 
 // hayat_author / hayat_argomento are deliberately separate from author / main_topic: those
