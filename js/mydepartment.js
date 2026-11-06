@@ -7,10 +7,10 @@ import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
   nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved,
   helpLinkHtml,
-} from './core.js?v=20261106172224';
-import { renderPolicySection } from './policy.js?v=20261106172224';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261106172224';
-import { renderApplicationsView } from './collaboration.js?v=20261106172224';
+} from './core.js?v=20261106190049';
+import { renderPolicySection } from './policy.js?v=20261106190049';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261106190049';
+import { renderApplicationsView } from './collaboration.js?v=20261106190049';
 
 // Each department's page opens its own guide from the "?" beside the title.
 const DEPT_GUIDES = { HR: 'dept-hr', COORD: 'dept-coordination', FORM: 'dept-formation', RF: 'dept-reward', COMM: 'dept-communication', ARCHIVE: 'dept-archive' };
@@ -306,11 +306,13 @@ export async function renderDepartmentsOverviewView(main) {
 async function renderUsersStatsPanel(box) {
   if (!box) return;
   box.innerHTML = '<div class="panel"><h2>Users</h2><div class="empty-msg">Loading...</div></div>';
-  const [roleRows, profileRows, statsRows] = await Promise.all([
+  const [roleRows, profileRows, statsRows, bracketRows] = await Promise.all([
     withStatus(sb.from('user_roles').select('role,standing,created_at')),
-    withStatus(sb.from('user_profiles').select('age_bracket,gender')),
+    withStatus(sb.from('user_profiles').select('gender')),
     withStatus(sb.rpc('admin_project_stats')),
+    withStatus(sb.rpc('people_age_brackets')),
   ]);
+  const fromDate = bracketRows.filter(r => r.from_date).length;
   const stats = statsRows[0] || { total_active_enrollments: 0, distinct_enrolled_users: 0, enrollments_by_path: [] };
 
   const countBy = (rows, key) => {
@@ -321,7 +323,7 @@ async function renderUsersStatsPanel(box) {
   const byRole = countBy(roleRows, 'role');
   const byStanding = countBy(roleRows, 'standing');
   const byGender = countBy(profileRows, 'gender');
-  const byAgeBracket = countBy(profileRows, 'age_bracket');
+  const byAgeBracket = countBy(bracketRows, 'age_bracket');
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
   const newLast30 = roleRows.filter(r => (r.created_at || '') >= thirtyDaysAgo).length;
 
@@ -347,7 +349,7 @@ async function renderUsersStatsPanel(box) {
       <div class="field-grid" style="margin-top:10px;">
         <div class="field"><label>Standing</label>${breakdownList(byStanding, k => k === 'not_set' ? 'Not set' : k)}</div>
         <div class="field"><label>Gender</label>${breakdownList(byGender, k => GENDER_LABELS[k] || k)}</div>
-        <div class="field" style="grid-column:span 2;"><label>Age bracket</label>${breakdownList(byAgeBracket, ageBracketLabel)}</div>
+        <div class="field" style="grid-column:span 2;"><label>Age bracket</label>${breakdownList(byAgeBracket, ageBracketLabel)}<div class="hint">${fromDate} of ${bracketRows.length} from a date of birth; the others as declared, or not set.</div></div>
       </div>
       <h3 style="margin:16px 0 4px;">Formation Paths enrollment</h3>
       <div class="field-grid">

@@ -1,5 +1,5 @@
-import { sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange } from './core.js?v=20261106172224';
-import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261106172224';
+import { dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange } from './core.js?v=20261106190049';
+import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261106190049';
 
 // ---------- Users ----------
 
@@ -10,6 +10,12 @@ export async function renderUsersView(main) {
   const rows = await withStatus(sb.from('user_roles').select('*').order('email'));
   const profileRows = await withStatus(sb.from('user_profiles').select('*'));
   const profileByUid = {}; for (const p of profileRows) profileByUid[p.user_id] = p;
+  // Date of birth (120_date_of_birth.sql): the list shows the age; the date is only in the Edit window.
+  const birthRows = await withStatus(sb.from('user_birth_dates').select('user_id,date_of_birth'));
+  const birthByUid = {}; for (const b of birthRows) birthByUid[b.user_id] = b.date_of_birth;
+  const ageCell = (uid, p) => birthByUid[uid] ? esc(ageFromDate(birthByUid[uid]))
+    : p.age_bracket ? `<span class="hint" title="Declared bracket, no date of birth yet">${esc(labelOf(State.optionListsByName.age_bracket || [], p.age_bracket) || p.age_bracket)}</span>`
+    : '<span class="hint">—</span>';
   const qualList = State.optionListsByName.operator_qualification || [];
   const qualRows = qualList.length ? await withStatus(sb.from('user_qualifications').select('*')) : [];
   const qualByUid = {};
@@ -37,12 +43,12 @@ export async function renderUsersView(main) {
       <p class="hint">Qualifications are tags on top of the Operator role, not extra roles - a person can hold more than one (e.g. Translator + Revisor). They control which task categories someone can see and claim (Translation -> Translator, Revision -> Revisor); manage the list itself from Options -> Operator qualifications.</p>
       <p class="hint">An Admin's role can't be changed from this dropdown - remove their access and re-add them at the new role instead. There must always be at least one Admin, so the last one can't be removed either.</p>
       <div class="grid-wrap"><table class="grid" id="users-grid">
-        <thead><tr><th data-sort="full_name">Full name${arrow('full_name')}</th><th>Age group</th><th>Email</th><th>Role</th><th>Departments</th><th>Standing</th><th>Qualifications</th><th>Credits</th><th>Reputation</th><th>City</th><th>Membership</th><th>Phone</th><th data-sort="created_at">Since${arrow('created_at')}</th><th></th></tr></thead>
+        <thead><tr><th data-sort="full_name">Full name${arrow('full_name')}</th><th>Age</th><th>Email</th><th>Role</th><th>Departments</th><th>Standing</th><th>Qualifications</th><th>Credits</th><th>Reputation</th><th>City</th><th>Membership</th><th>Phone</th><th data-sort="created_at">Since${arrow('created_at')}</th><th></th></tr></thead>
         <tbody>${rows.map(r => { const p = profileByUid[r.user_id] || {}; const uidQuals = qualByUid[r.user_id] || new Set(); const lowRep = r.role === 'operator' && r.reputation != null && r.reputation < 20;
           const deptLabel = (deptByUid[r.user_id] || []).map(d => `${labelOf(State.optionListsByName.department || [], d.department_code)}${d.is_lead ? ' (lead)' : ''}`).join(', ');
           return `<tr data-uid="${esc(r.user_id)}">
           <td>${esc(p.full_name)}</td>
-          <td><select class="age-group-select" data-uid="${esc(r.user_id)}" style="width:12ch;">${optionsHtml(State.optionListsByName.age_bracket || [], p.age_bracket, true)}</select></td>
+          <td>${ageCell(r.user_id, p)}</td>
           <td>${esc(r.email)}</td>
           <td><select class="role-select" data-uid="${esc(r.user_id)}" style="width:10ch;" ${r.role === 'admin' ? 'disabled title="Admin role can\'t be changed here - remove access and re-add at the new role instead."' : ''}>${optionsHtml([['user', 'User'], ['operator', 'Operator'], ['coordinator', 'Coordinator'], ['admin', 'Admin']], r.role, false)}</select></td>
           <td style="white-space:normal;">${esc(deptLabel) || '<span class="hint">—</span>'}</td>
@@ -73,9 +79,6 @@ export async function renderUsersView(main) {
     await withStatus(sb.from('user_roles').update({ role: sel.value }).eq('user_id', sel.dataset.uid), 'Updating role...');
     await renderUsersView(main); // re-render so the qualifications column shows/hides for the new role
   }));
-  main.querySelectorAll('.age-group-select').forEach(sel => sel.addEventListener('change', async () => {
-    await withStatus(sb.from('user_profiles').upsert({ user_id: sel.dataset.uid, age_bracket: sel.value || null }), 'Saving...');
-  }));
   main.querySelectorAll('.qual-check').forEach(cb => cb.addEventListener('change', async () => {
     const { uid, code } = cb.dataset;
     if (cb.checked) await withStatus(sb.from('user_qualifications').insert({ user_id: uid, qualification_code: code }), 'Saving...');
@@ -93,11 +96,11 @@ export async function renderUsersView(main) {
     await renderUsersView(main);
   }));
   main.querySelectorAll('.edit-profile-btn').forEach(btn => btn.addEventListener('click', () => {
-    showEditProfileModal(btn.dataset.uid, btn.dataset.email, profileByUid[btn.dataset.uid] || {}, main);
+    showEditProfileModal(btn.dataset.uid, btn.dataset.email, profileByUid[btn.dataset.uid] || {}, main, birthByUid[btn.dataset.uid] || '');
   }));
 }
 
-function showEditProfileModal(uid, email, profile, main) {
+function showEditProfileModal(uid, email, profile, main, dateOfBirth) {
   const backdrop = document.createElement('div');
   backdrop.className = 'overlay-backdrop';
   backdrop.innerHTML = `
@@ -109,9 +112,7 @@ function showEditProfileModal(uid, email, profile, main) {
         <select id="edit-profile-membership">${optionsHtml(State.optionListsByName.membership_type || [], profile.membership_type, true)}</select>
       </div>
       <div class="field"><label>Mobile phone</label><input id="edit-profile-phone" value="${esc(profile.phone)}"></div>
-      <div class="field"><label>Age bracket <span class="hint">(statistics only)</span></label>
-        <select id="edit-profile-age-bracket">${optionsHtml(State.optionListsByName.age_bracket || [], profile.age_bracket, true)}</select>
-      </div>
+      <div class="field"><label>Date of birth</label>${dateOfBirthFieldsHtml('edit-profile-dob', dateOfBirth)}<div id="edit-profile-dob-error" class="dob-error"></div></div>
       <div class="field"><label>Gender <span class="hint">(statistics only)</span></label>
         <select id="edit-profile-gender">${optionsHtml([['M', 'Male'], ['F', 'Female']], profile.gender, true)}</select>
       </div>
@@ -127,9 +128,12 @@ function showEditProfileModal(uid, email, profile, main) {
     const city = document.getElementById('edit-profile-city').value.trim();
     const membership_type = document.getElementById('edit-profile-membership').value;
     const phone = document.getElementById('edit-profile-phone').value.trim();
-    const age_bracket = document.getElementById('edit-profile-age-bracket').value || null;
+    const dob = readDateOfBirth('edit-profile-dob');
+    document.getElementById('edit-profile-dob-error').textContent = dob.error || '';
+    if (dob.error) return;
     const gender = document.getElementById('edit-profile-gender').value || null;
-    await withStatus(sb.from('user_profiles').upsert({ user_id: uid, email, full_name, city, membership_type, phone, age_bracket, gender }), 'Saving...');
+    await withStatus(sb.from('user_profiles').upsert({ user_id: uid, email, full_name, city, membership_type, phone, gender }), 'Saving...');
+    if ((dob.value || '') !== dateOfBirth) await withStatus(sb.rpc('set_date_of_birth', { p_date: dob.value, p_user_id: uid }), 'Saving...');
     backdrop.remove();
     await renderUsersView(main);
   });

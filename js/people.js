@@ -8,7 +8,7 @@
 
 import {
   sb, State, esc, withStatus, isAdmin, isDeptMember, isDeptLead, labelOf, optionsHtml, logEntriesHtml,
-} from './core.js?v=20261106172224';
+} from './core.js?v=20261106190049';
 
 const STANDING_BADGE = {
   active: '',
@@ -42,6 +42,7 @@ function canApproveTypeClientSide(type) {
 // it's always the standalone People tab.
 let currentRosterContainer = null;
 
+let ageByUid = {}; // { user_id: { bracket, date } }: the date only comes back for the HR lead and Admins (120_date_of_birth.sql)
 let decisionTypes = null; // [[code,label]] from option_lists, loaded once per People tab visit
 async function loadDecisionTypes() {
   if (decisionTypes) return decisionTypes;
@@ -58,7 +59,14 @@ export async function renderPeopleSection(container) {
   currentRosterContainer = container; // see openProposePopup's refresh-after-save below
   container.innerHTML = '<div class="panel"><h2>People</h2><div class="empty-msg">Loading...</div></div>';
   await loadDecisionTypes();
-  const rows = await withStatus(sb.rpc('hr_people_overview'));
+  const [rows, bracketRows, birthRows] = await Promise.all([
+    withStatus(sb.rpc('hr_people_overview')),
+    withStatus(sb.rpc('people_age_brackets')),
+    withStatus(sb.from('user_birth_dates').select('user_id,date_of_birth')),
+  ]);
+  ageByUid = {};
+  for (const b of bracketRows) ageByUid[b.user_id] = { bracket: b.age_bracket };
+  for (const b of birthRows) ageByUid[b.user_id] = { ...ageByUid[b.user_id], date: b.date_of_birth };
   const deptOptions = State.optionListsByName.department || [];
   const qualOptions = State.optionListsByName.operator_qualification || [];
 
@@ -110,6 +118,13 @@ function hasToken(joined, code) {
   return (joined || '').split(',').some(seg => seg.trim().replace(/\s*\(lead\)$/, '') === code);
 }
 
+function ageCellHtml(uid) {
+  const a = ageByUid[uid] || {};
+  const label = a.bracket ? labelOf(State.optionListsByName.age_bracket || [], a.bracket) || a.bracket : '';
+  if (!label && !a.date) return '<span class="hint">—</span>';
+  return `${esc(label)}${a.date ? `<div class="hint">${esc(a.date)}</div>` : ''}`;
+}
+
 function renderPeopleGrid(allRows) {
   const box = document.getElementById('people-grid-box');
   if (!box) return;
@@ -136,7 +151,7 @@ function renderPeopleGrid(allRows) {
   box.innerHTML = `
     <div class="grid-wrap"><table class="grid" id="people-grid">
       <thead><tr>
-        ${sortHeader('full_name', 'Name')}<th>Email</th><th>Role</th><th>Departments</th><th>Standing</th>
+        ${sortHeader('full_name', 'Name')}<th>Email</th><th>Role</th><th>Departments</th><th>Age group</th><th>Standing</th>
         ${sortHeader('credits', 'Credits')}${sortHeader('reputation', 'Reputation')}<th>Qualifications</th>
         ${sortHeader('since', 'Since')}<th>Last event</th><th>Negative events</th><th>Open tasks</th><th>Pending</th><th>At risk</th><th></th>
       </tr></thead>
@@ -145,6 +160,7 @@ function renderPeopleGrid(allRows) {
         <td>${esc(r.email)}</td>
         <td>${esc(r.role)}</td>
         <td style="white-space:normal;">${esc(r.departments) || '<span class="hint">—</span>'}</td>
+        <td>${ageCellHtml(r.user_id)}</td>
         <td>${STANDING_BADGE[r.standing] ?? esc(r.standing)}</td>
         <td>${esc(r.credits ?? '—')}</td>
         <td>${esc(r.reputation ?? '—')}</td>
@@ -160,7 +176,7 @@ function renderPeopleGrid(allRows) {
           <button class="btn secondary people-history-btn" style="padding:4px 10px;">History</button>
         </td>
       </tr>
-      <tr class="people-history-row" data-history-for="${esc(r.user_id)}" style="display:none;"><td colspan="15"></td></tr>`).join('') || ''}</tbody>
+      <tr class="people-history-row" data-history-for="${esc(r.user_id)}" style="display:none;"><td colspan="16"></td></tr>`).join('') || ''}</tbody>
     </table></div>
     ${!rows.length ? '<div class="empty-msg">No one matches this filter.</div>' : ''}`;
 

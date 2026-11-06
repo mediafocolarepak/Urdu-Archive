@@ -457,3 +457,9 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
 .help-guide[dir="rtl"] details[open] summary::before { content: "\25BE"; }
 .help-row[dir="rtl"] .help-row-title { font-size: 17px; line-height: 2; }
 .help-row[dir="rtl"] .help-row-summary { font-size: 14px; line-height: 2; }
+
+/* Date of birth (core.js): three lists side by side, wide enough to tap on a phone. */
+.dob-fields { display: grid; grid-template-columns: 1fr 1.6fr 1.2fr; gap: 6px; }
+.dob-fields select { min-height: 44px; min-width: 0; width: 100%; }
+.dob-error { color: var(--danger); font-size: 13.5px; min-height: 1em; margin-top: 4px; }
+.dob-ur { font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-size: 17px; line-height: 2.2; }
