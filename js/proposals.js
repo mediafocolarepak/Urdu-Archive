@@ -7,7 +7,7 @@ import {
   sb, State, esc, withStatus, optionsHtml, labelOf, isAdmin, isCoordinator, canManageReserved, canWrite, BUCKET, likeSafe,
   titleOverlapScore, ACCESS_LEVELS, readPdfPageCountFromBlob, getDriveAccessToken, uploadPdfToGDrive,
   AUDIO_BUCKET, AUDIO_FORMATS, audioFileProblem, audioDurationOf, HIDDEN_DOC_STATUSES, isMediaLinkOk, videoLinkHtml, mountAudioPlayer,
-} from './core.js?v=20261106124138';
+} from './core.js?v=20261106135351';
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // the Supabase Free plan's limit per file
 const FORMATS = [['DOC', 'Text or PDF'], ['AUD', 'Audio'], ['VID', 'Video']];
@@ -273,8 +273,15 @@ function emptyVersion(language) {
   };
 }
 
-// prefill: what another screen already knows (a month's package, a board post). Nothing is saved until
-// the person saves.
+const FORMAT_WORDS = { VID: 'video', AUD: 'audio' };
+function versionsSummary(existing) {
+  if (!existing || !existing.length) return '';
+  const words = existing.map(v => labelOf(State.langs, v.language) + (FORMAT_WORDS[v.media_type] ? ` ${FORMAT_WORDS[v.media_type]}` : ''));
+  return ` Already in the archive: ${esc([...new Set(words)].join(', '))}.`;
+}
+
+// prefill: what another screen already knows (a month's package, a board post, a related document). Nothing
+// is saved until the person saves.
 async function renderForm(main, id, prefill) {
   form = { id, work_id: null, newWork: false, workLabel: '', common: {}, versions: [emptyVersion('URD')], decisionNote: null, status: 'draft' };
   if (prefill) {
@@ -283,6 +290,7 @@ async function renderForm(main, id, prefill) {
     form.common = { ...prefill.common };
     form.versions = prefill.versions.map(v => ({ ...emptyVersion(v.language), ...v }));
     form.requestId = prefill.requestId || null;
+    form.existing = prefill.existing || null;
   }
   if (id) {
     const d = await withStatus(sb.rpc('get_submission_detail', { p_id: id }));
@@ -292,6 +300,7 @@ async function renderForm(main, id, prefill) {
     form.status = d.status;
     form.versions = d.versions.length ? d.versions.map(v => ({ ...v, body: v.body || '', file: null, audioFile: null })) : [emptyVersion('URD')];
     if (d.work_documents.length) form.workLabel = d.work_documents.map(w => w.title).filter(Boolean)[0] || `Work #${d.work_id}`;
+    form.existing = d.work_documents.map(w => ({ language: w.language, media_type: 'DOC' }));
   }
   scrollTop();
   main.innerHTML = `
@@ -304,11 +313,15 @@ async function renderForm(main, id, prefill) {
       ${prefill?.note ? `<p class="hint">${esc(prefill.note)}${(prefill.links || []).map(([label, url]) => ` <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>.`).join('')}</p>` : ''}
       ${form.decisionNote ? `<p style="white-space:pre-wrap;" dir="auto"><b>Reviewer's note:</b> ${esc(form.decisionNote)}</p>` : ''}
       <div class="subpanel">
+        ${form.common.related_to_document_id ? `
+        <h3>1. A new version of a document in the archive</h3>
+        <p style="margin-bottom:4px;">Related to <b dir="auto">${esc(form.workLabel)}</b> <span class="hint">#${esc(form.common.related_to_document_id)}</span></p>
+        <p class="hint" style="margin-top:0;">What you add here stays linked to it, and each will show the other among its versions.${versionsSummary(form.existing)}</p>` : `
         <h3>1. Is it new, or does it already exist?</h3>
         <p class="hint">Look for it first. If the same text exists in another language or version, link this proposal to it. You decide: nothing is linked by itself.</p>
         <div class="searchbar"><input id="pf-search" dir="auto" placeholder="Search by title or by a phrase of the text..."></div>
         <div id="pf-search-results"></div>
-        <div id="pf-work-choice" style="margin-top:8px;"></div>
+        <div id="pf-work-choice" style="margin-top:8px;"></div>`}
       </div>
       <div class="subpanel" style="margin-top:14px;">
         <h3>2. What the versions share</h3>
@@ -329,9 +342,11 @@ async function renderForm(main, id, prefill) {
     </div>`;
   renderCommon();
   renderVersions();
-  renderWorkChoice();
+  if (!form.common.related_to_document_id) {
+    renderWorkChoice();
+    wireSearch();
+  }
   document.getElementById('pf-back').addEventListener('click', () => renderProposalsView(main));
-  wireSearch();
   document.getElementById('pf-add-version').addEventListener('click', () => {
     collectForm();
     form.versions.push(emptyVersion(''));
@@ -447,6 +462,8 @@ function collectForm() {
     ref_date: val('pf-ref_date'), ref_period: val('pf-ref_period'), recipient: val('pf-recipient'),
     main_topic: val('pf-main_topic'), secondary_tags: val('pf-secondary_tags'), bible_verse: val('pf-bible_verse'),
     contained_in_document_id: val('pf-contained'), contained_page: val('pf-contained-page'),
+    // Not fields of the form: they come with the document this one is related to, and must stay.
+    related_to_document_id: form.common.related_to_document_id, place: form.common.place, original_author: form.common.original_author,
   };
   document.querySelectorAll('#pf-versions [data-version]').forEach(card => {
     const v = form.versions[parseInt(card.dataset.version, 10)];
