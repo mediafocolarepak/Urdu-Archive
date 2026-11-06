@@ -1,7 +1,9 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.17 (2026-11-06) — decisions taken by the Owner; all of phases 1 through 3 are built and
+**Status: v1.18 (2026-11-06) — decisions taken by the Owner; all of phases 1 through 3 are built and
 merged (migrations 80–115). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.18:** the guides in Urdu, as drafts (§5.18, Owner's request): only Admins see them until they are reviewed.
 
 **What changed in v1.17:** Start Here is now a first screen of large buttons, so that nobody has to scroll past
 everything (§5.8, Owner's request): the Word of Life, the three sections of cards and the guides, each opening its own page.
@@ -961,7 +963,9 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
   work, your role, department pages, run the project, reference). A person sees only what applies to their role,
   qualifications, departments and boards (`help_pages.audience`). This is for clarity, not protection: any signed-in
   person can read any guide through the API, so guides must hold nothing confidential.
-- **Languages:** English and Italian, one selector. Urdu is added as a language with the Owner's words.
+- **Languages:** English, Italian and Urdu, one selector. **The Urdu was drafted with the translation skill at the Owner's request
+  (2026-11-06, migration 119), and stays a draft, seen only by Admins, until those who know Urdu well have reviewed it** (§1
+  principle 7). It is opened guide by guide with `help_pages.draft`. Plain Users then read Urdu first, unless they choose otherwise.
 - **Role guides** set out a person's field, what isn't theirs, and a suggested daily and weekly rhythm. **The rhythm is
   a suggestion, not a rule of this document.** Where a guide and this document differ, this document holds.
 - **A "?" beside a screen's title** opens its guide. **The Read aloud guide is visible to plain Users too** (Owner's

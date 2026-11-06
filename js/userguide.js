@@ -11,34 +11,35 @@
 //   qual:<CODE>                     holds that qualification
 //   board_editor                    looks after at least one board
 
-import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20261106170255';
+import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20261106172224';
 
 const SECTIONS = [
-  ['use', { en: 'Use the archive', it: 'Usare l\'archivio' }],
-  ['add', { en: 'Add to the archive', it: 'Aggiungere all\'archivio' }],
-  ['work', { en: 'Work with the team', it: 'Lavorare con il team' }],
-  ['check', { en: 'Check others\' work', it: 'Controllare il lavoro altrui' }],
-  ['role', { en: 'Your role', it: 'Il tuo ruolo' }],
-  ['dept', { en: 'Department pages', it: 'Le pagine dei reparti' }],
-  ['run', { en: 'Run the project', it: 'Gestire il progetto' }],
-  ['ref', { en: 'Reference', it: 'Riferimento' }],
+  ['use', { en: 'Use the archive', it: 'Usare l\'archivio', ur: 'آرکائیو کا استعمال' }],
+  ['add', { en: 'Add to the archive', it: 'Aggiungere all\'archivio', ur: 'آرکائیو میں اضافہ' }],
+  ['work', { en: 'Work with the team', it: 'Lavorare con il team', ur: 'ٹیم کے ساتھ کام' }],
+  ['check', { en: 'Check others\' work', it: 'Controllare il lavoro altrui', ur: 'دوسروں کے کام کا جائزہ' }],
+  ['role', { en: 'Your role', it: 'Il tuo ruolo', ur: 'آپ کا کردار' }],
+  ['dept', { en: 'Department pages', it: 'Le pagine dei reparti', ur: 'شعبوں کے صفحات' }],
+  ['run', { en: 'Run the project', it: 'Gestire il progetto', ur: 'منصوبے کا انتظام' }],
+  ['ref', { en: 'Reference', it: 'Riferimento', ur: 'حوالہ' }],
 ];
-const LANG_LABELS = { en: 'EN', it: 'IT', ur: 'UR' };
+const LANG_LABELS = { en: 'EN', it: 'IT', ur: 'اردو' };
 const byLangOrder = (a, b) => Object.keys(LANG_LABELS).indexOf(a) - Object.keys(LANG_LABELS).indexOf(b);
 const UI = {
   en: { help: 'Help', guides: 'Guides', edit: 'Edit', cancel: 'Cancel', save: 'Save', title: 'Title', summary: 'One line for the list', updated: 'Last updated', by: 'by', empty: 'No guides here yet.', failed: 'The guides could not be loaded. Check your connection and try again.', missing: 'This guide is not available.' },
+  ur: { help: 'مدد', guides: 'رہنمائی', edit: 'Edit', cancel: 'Cancel', save: 'Save', title: 'Title', summary: 'One line for the list', updated: 'Last updated', by: 'by', empty: 'ابھی کوئی رہنمائی نہیں۔', failed: 'رہنمائی لوڈ نہیں ہو سکی۔ کنکشن دیکھ کر دوبارہ کوشش کریں۔', missing: 'یہ رہنمائی دستیاب نہیں۔' },
   it: { help: 'Help', guides: 'Guide', edit: 'Modifica', cancel: 'Annulla', save: 'Salva', title: 'Titolo', summary: 'Una riga per l\'elenco', updated: 'Ultimo aggiornamento', by: 'di', empty: 'Ancora nessuna guida.', failed: 'Non è stato possibile caricare le guide. Controlla la connessione e riprova.', missing: 'Questa guida non è disponibile.' },
 };
 const ui = () => UI[helpView.lang] || UI.en;
 
-const LIST_FIELDS = 'slug,guide_key,language,title,summary,section,audience,sort_order';
+const LIST_FIELDS = 'slug,guide_key,language,title,summary,section,audience,sort_order,draft';
 let listCache = null;
 let myQualsCache = null;
 const bodyCache = new Map();
 const helpView = { key: null, editing: false, lang: readLang(), listScroll: 0, depth: 0, returnTab: null, fromStart: false };
 
 // Remembered per browser; the page works the same if storage is unavailable.
-function readLang() { try { return localStorage.getItem('helpLang') || 'en'; } catch { return 'en'; } }
+function readLang() { try { return localStorage.getItem('helpLang'); } catch { return null; } }
 function saveLang(lang) { try { localStorage.setItem('helpLang', lang); } catch { /* not needed to work */ } }
 
 async function myQualifications() {
@@ -69,7 +70,8 @@ async function loadGuides() {
   if (listCache) return listCache;
   const { data, error } = await sb.from('help_pages').select(LIST_FIELDS).not('guide_key', 'is', null).order('sort_order');
   if (error) throw error;
-  listCache = data || [];
+  // A draft (the Urdu, until reviewed) is seen only by Admins; everyone else gets the guide in another language.
+  listCache = (data || []).filter(r => !r.draft || isAdmin());
   return listCache;
 }
 
@@ -103,6 +105,7 @@ export async function renderUserGuideView(main) {
     main.innerHTML = `<div class="panel"><h2>${esc(ui().help)}</h2><div class="empty-msg">${esc(ui().failed)}</div></div>`;
     return;
   }
+  if (!helpView.lang) helpView.lang = State.currentRole === 'user' && rows.some(r => r.language === 'ur') ? 'ur' : 'en';
   if (helpView.key) await renderGuide(main, rows);
   else renderList(main, rows, quals);
 }
@@ -119,7 +122,7 @@ function renderList(main, rows, quals) {
       <h3 class="help-section">${esc(names[helpView.lang] || names.en)}</h3>
       <div class="help-list">${inSection.map(r => `
         <button type="button" class="help-row" data-help-open="${esc(r.guide_key)}" ${r.language === 'ur' ? 'dir="rtl"' : ''}>
-          <span class="help-row-title">${esc(r.title)}</span>
+          <span class="help-row-title">${esc(r.title)}${r.draft ? ' <span class="count-badge">draft</span>' : ''}</span>
           ${r.summary ? `<span class="help-row-summary">${esc(r.summary)}</span>` : ''}
         </button>`).join('')}</div>`;
   }).join('');
@@ -180,6 +183,7 @@ async function renderGuide(main, rows) {
         <textarea id="help-editor" spellcheck="false" class="help-editor">${esc(body.html_content)}</textarea>
       ` : `
         <article class="help-guide" ${rtl}>
+          ${row.draft ? '<p class="note" dir="ltr">Draft: only Admins see this until it is reviewed.</p>' : ''}
           <h1>${esc(row.title)}</h1>
           ${cleanGuideHtml(body.html_content)}
         </article>
