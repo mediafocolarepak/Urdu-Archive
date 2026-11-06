@@ -7,7 +7,7 @@ import {
   sb, State, esc, withStatus, labelOf, isAdmin, isCoordinator, isDeptMember, AUDIO_BUCKET, AUDIO_FORMATS,
   audioFileProblem, audioDurationOf, mountAudioPlayer, eraseMyAudioFiles,
   helpLinkHtml,
-} from './core.js?v=20261106163624';
+} from './core.js?v=20261106165033';
 
 // AAC in MP4 first, the likeliest to play on every phone; plain 'audio/mp4' can hold Opus, as in Chrome.
 const RECORD_FORMATS = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
@@ -95,7 +95,7 @@ export async function renderReadingsView(main) {
   if (!tabs.some(([id]) => id === currentTab)) currentTab = 'mine';
   main.innerHTML = `
     <div class="panel">
-      <h2>Read aloud ${State.currentRole === 'user' ? '' : helpLinkHtml('read-aloud')}</h2>
+      <h2>Read aloud ${helpLinkHtml('read-aloud')}</h2>
       <p class="hint">Your voice can bring a text to those who find reading difficult. Someone listens first; then your reading is in the archive with your name.</p>
       ${tabs.length > 1 ? `<div class="btn-row">${tabs.map(([id, label]) => `<button class="btn ${id === currentTab ? '' : 'secondary'}" data-rd-tab="${id}">${esc(label)}</button>`).join('')}</div>` : ''}
     </div>
