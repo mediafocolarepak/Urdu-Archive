@@ -213,8 +213,7 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
    enough room to actually be readable instead of ellipsis-truncated. */
 #dash-grid { width: auto; min-width: 100%; }
 #dash-grid th, #dash-grid td { max-width: none; }
-#dash-grid td:nth-child(2), #dash-grid th:nth-child(2),
-#dash-grid td:nth-child(3), #dash-grid th:nth-child(3) {
+#dash-grid td:nth-child(2), #dash-grid th:nth-child(2) {
   min-width: 300px; max-width: 440px; white-space: normal; word-break: break-word;
 }
 
@@ -264,6 +263,10 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
 .dash-card { padding: 10px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
 .dash-card:hover { background: var(--accent-soft); }
 .dash-card-title { font-weight: 600; font-size: 13.5px; margin-bottom: 3px; }
+/* A document's titles one under the other: the first stands out, Urdu in Nastaliq, which needs more height between lines. */
+.doc-title { font-weight: 600; overflow-wrap: anywhere; }
+.doc-title-more { font-weight: 400; color: var(--ink-soft); }
+.doc-title-ur { font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-size: 1.1em; line-height: 2.1; }
 .dash-card-meta { font-size: 12px; color: var(--ink-soft); }
 
 /* ---------- Boards ---------- */

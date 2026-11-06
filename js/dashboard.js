@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES } from './core.js?v=20261106193250';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261106193250';
+import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml } from './core.js?v=20261106210727';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261106210727';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
@@ -173,7 +173,7 @@ export async function renderDashboardView(main) {
 // .or() as the title/tag ilike below because it reads a different table, so it runs first as a
 // separate query and its document_ids are added as one more branch of that same .or().
 async function buildDashQuery(selectAll) {
-  let q = sb.from('documents').select(selectAll ? '*' : 'document_id,category,author,main_topic,recipient,title,original_title,en_title,place,ref_date,pending_deletion,is_preferred,access_level,work_id,media_type');
+  let q = sb.from('documents').select(selectAll ? '*' : 'document_id,category,author,main_topic,recipient,title,original_title,en_title,ur_title,it_title,place,ref_date,pending_deletion,is_preferred,access_level,work_id,media_type');
   const f = State.dashFilters;
   if (f.search && f.search.trim()) {
     const term = f.search.trim();
@@ -181,7 +181,7 @@ async function buildDashQuery(selectAll) {
     const textMatches = await withStatus(sb.rpc('search_document_texts', { q: term, lim: 2000 }), 'Searching text...');
     const textIds = [...new Set(textMatches.map(m => m.document_id))];
     const idsClause = textIds.length ? `,document_id.in.(${textIds.join(',')})` : '';
-    q = q.or(`title.ilike.${like},original_title.ilike.${like},ur_title.ilike.${like},en_title.ilike.${like},secondary_tags.ilike.${like}${idsClause}`);
+    q = q.or(`title.ilike.${like},original_title.ilike.${like},ur_title.ilike.${like},en_title.ilike.${like},it_title.ilike.${like},secondary_tags.ilike.${like}${idsClause}`);
   }
   if (f.idSearch && f.idSearch.trim()) {
     const idNum = parseInt(f.idSearch.trim(), 10);
@@ -219,13 +219,13 @@ async function filterByCollection(rows) {
 }
 
 // The document grid (left window) is now the same for every role (owner's request 2026-09-20) -
-// Title(EN)/Original title as two columns (DASH_SORTABLE, core.js), no Recipient(s)/Ref. date.
+// One Title column with the three titles one under the other (DASH_SORTABLE, docTitlesHtml, core.js), no Recipient(s)/Ref. date.
 
 // Column widths (% of table width, sums to 100) - #dash-grid uses table-layout:fixed (style.css)
 // so these are enforced, not just hints; overflow/ellipsis (also style.css) truncates whatever
-// doesn't fit, and the horizontal scrollbar on .grid-wrap (style.css) takes over once Title/
-// Original title's 300px minimum (also style.css) no longer fits.
-const DASH_COL_WIDTHS = { document_id: 6, title: 24, original_title: 22, author: 8, place: 16, category: 24 };
+// doesn't fit, and the horizontal scrollbar on .grid-wrap (style.css) takes over once Title's
+// 300px minimum (also style.css) no longer fits.
+const DASH_COL_WIDTHS = { document_id: 6, en_title: 46, author: 10, place: 16, category: 22 };
 
 let listScrollY = 0;
 // The page itself never scrolls (#app is a fixed-height column); #main is the scroller.
@@ -235,8 +235,8 @@ const scrollMainTo = y => { const m = document.getElementById('main'); if (m) m.
 const DASH_SORT_OPTIONS = [
   ['document_id:desc', 'Number: highest first'],
   ['document_id:asc', 'Number: lowest first'],
-  ['title:asc', 'Title: A to Z'],
-  ['title:desc', 'Title: Z to A'],
+  ['en_title:asc', 'English title: A to Z'],
+  ['en_title:desc', 'English title: Z to A'],
 ];
 function dashSortValue() { return `${State.dashSort.col}:${State.dashSort.asc ? 'asc' : 'desc'}`; }
 
@@ -260,7 +260,7 @@ export async function refreshDashGrid() {
   if (!grid) return;
   const cols = DASH_SORTABLE;
   const colWidths = DASH_COL_WIDTHS;
-  let rows = await withStatus((await buildDashQuery(false)).q.order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Searching...');
+  let rows = await withStatus((await buildDashQuery(false)).q.order(State.dashSort.col, { ascending: State.dashSort.asc, nullsFirst: false }).limit(DASH_ROW_LIMIT), 'Searching...');
   rows = await filterByCollection(rows);
   document.getElementById('dash-count').textContent = rows.length;
   const f = State.dashFilters;
@@ -275,7 +275,7 @@ export async function refreshDashGrid() {
       const star = r.is_preferred ? '&#9733; ' : '';
       return `<tr data-id="${esc(r.document_id)}" class="${String(r.document_id) === String(State.selectedDocId) ? 'selected' : ''}">
       <td>${esc(r.document_id)}${r.pending_deletion ? ' <span class="count-badge" style="padding:1px 6px;background:var(--danger);color:#fff;">pending deletion</span>' : ''}${r.access_level === 'reserved' ? ' <span class="count-badge" style="padding:1px 6px;">Reserved</span>' : ''}</td>
-      <td>${star}${mediaIcons(r)}${esc(r.title)}</td><td>${esc(r.original_title)}</td>
+      <td>${docTitlesHtml(r, star + mediaIcons(r))}</td>
       <td>${esc(labelOf(State.authors, r.author))}</td>
       <td>${esc(r.place)}</td>
       <td>${esc(labelOf(State.categories, r.category))}</td>
@@ -306,9 +306,8 @@ export async function refreshDashGrid() {
   if (cardsBox) {
     cardsBox.innerHTML = rows.map(r => {
       const star = r.is_preferred ? '&#9733; ' : '';
-      const title = esc(r.title);
       return `<div class="dash-card ${String(r.document_id) === String(State.selectedDocId) ? 'selected' : ''}" data-id="${esc(r.document_id)}">
-        <div class="dash-card-title dash-card-open">${star}${title}</div>
+        <div class="dash-card-title dash-card-open">${docTitlesHtml(r, star)}</div>
         <div class="dash-card-meta">#${esc(r.document_id)} &middot; ${esc(labelOf(State.authors, r.author))} &middot; ${esc(r.place)} &middot; ${esc(labelOf(State.categories, r.category))}</div>
         ${r.pending_deletion ? '<span class="count-badge" style="padding:1px 6px;background:var(--danger);color:#fff;">pending deletion</span>' : ''}
         ${r.access_level === 'reserved' ? '<span class="count-badge" style="padding:1px 6px;">Reserved</span>' : ''}
@@ -326,7 +325,7 @@ function csvEscape(v) {
 }
 
 async function exportDashboardCsv() {
-  let rows = await withStatus((await buildDashQuery(true)).q.order(State.dashSort.col, { ascending: State.dashSort.asc }).limit(DASH_ROW_LIMIT), 'Exporting...');
+  let rows = await withStatus((await buildDashQuery(true)).q.order(State.dashSort.col, { ascending: State.dashSort.asc, nullsFirst: false }).limit(DASH_ROW_LIMIT), 'Exporting...');
   rows = await filterByCollection(rows);
   if (!rows.length) { alert('No documents match the current filters.'); return; }
   const columns = Object.keys(rows[0]);

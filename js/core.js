@@ -327,7 +327,31 @@ export async function ackBoardPolicy() {
 }
 
 export const DASH_ROW_LIMIT = 5000;
-export const DASH_SORTABLE = { document_id: 'ID', title: 'Title (EN)', original_title: 'Original title', author: 'Author', place: 'Place', category: 'Category' };
+export const DASH_SORTABLE = { document_id: 'ID', en_title: 'Title', author: 'Author', place: 'Place', category: 'Category' };
+
+// The titles of a document in the order they are shown: Urdu at the top (Owner's choice, 2026-11-06), English, Italian.
+// original_title holds different things in different records (the Italian in the old ones, the title in the version's
+// own language in the new ones), so it is shown only when it adds something.
+const URDU_SCRIPT = /[\u0600-\u06FF]/;
+export function docTitles(d) {
+  const t = s => (s ?? '').trim();
+  const orig = t(d.original_title);
+  const out = [];
+  const add = text => {
+    if (text && !out.some(x => x.text.toLowerCase() === text.toLowerCase())) out.push({ text, isUrdu: URDU_SCRIPT.test(text) });
+  };
+  add(t(d.ur_title) || (URDU_SCRIPT.test(orig) ? orig : ''));
+  add(t(d.en_title) || t(d.title));
+  add(t(d.it_title));
+  add(orig);
+  return out;
+}
+// marks: what goes before the first title, such as the star.
+export function docTitlesHtml(d, marks = '') {
+  const titles = docTitles(d);
+  if (!titles.length) return `<div class="doc-title">${marks}<span class="hint">(no title)</span></div>`;
+  return titles.map((x, i) => `<div class="doc-title${i ? ' doc-title-more' : ''}${x.isUrdu ? ' doc-title-ur' : ''}" ${x.isUrdu ? 'dir="rtl" lang="ur"' : 'dir="auto"'}>${i ? '' : marks}${esc(x.text)}</div>`).join('');
+}
 
 // hayat_author / hayat_argomento are deliberately separate from author / main_topic: those
 // two keep their fixed, CHECK-constrained vocabularies (see 15_versions_editors_schema.sql),
@@ -734,7 +758,7 @@ export async function extractHayatRowToDocument(row) {
   const newId = await nextDocumentId();
   const workId = await createWorkFor(row.titolo || row.title);
   const draft = {
-    document_id: newId, title: row.title || row.titolo, original_title: row.titolo || row.title,
+    document_id: newId, title: row.title || row.titolo, original_title: row.titolo || row.title, it_title: row.titolo || null,
     ur_title: row.ur_title || null,
     original_author: row.autore,
     hayat_index_ref: row.id, to_whom: row.branca,

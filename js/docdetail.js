@@ -3,13 +3,13 @@
 // `documents` table's full field set.
 
 import {
-  sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete, isCoordinator, isAdmin,
+  sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete, isCoordinator, isAdmin, docTitlesHtml,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, videoLinkHtml, mountAudioPlayer, eraseMyAudioFiles,
-} from './core.js?v=20261106193250';
+} from './core.js?v=20261106210727';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -262,8 +262,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     <div id="doc-media-player"></div>
     ${media.some(m => m.media_type === 'AUD' && String(m.source_document_id) === String(doc.document_id) && m.source_text_at && text?.updated_at > m.source_text_at) ? '<div class="hint">The text has been corrected since it was read aloud, so the two may differ.</div>' : ''}
     <div class="field" style="font-size:13px;line-height:1.7;">
-      <div style="font-weight:600;font-size:14px;margin-bottom:2px;">${esc(doc.en_title) || '<span class="hint">(no title)</span>'}</div>
-      ${doc.ur_title ? `<div dir="auto" style="font-size:14px;margin-bottom:6px;">${esc(doc.ur_title)}</div>` : ''}
+      <div style="font-size:14px;margin-bottom:6px;">${docTitlesHtml(doc)}</div>
       ${renderDocSummary(doc)}
       ${doc.contained_in_document_id ? `<div>In the magazine issue <a href="#" id="doc-contained-in">#${esc(doc.contained_in_document_id)}</a>${doc.contained_page ? `, page ${esc(doc.contained_page)}` : ''}</div>` : ''}
       <div id="doc-contains"></div>
@@ -758,9 +757,10 @@ export async function openFullScreenEditor(id) {
 async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
   const readOnly = !canWrite();
 
-  function textField(label, name, value, type) {
-    if (readOnly) return `<div class="field"><label>${esc(label)}</label><input value="${esc(value)}" disabled></div>`;
-    return `<div class="field"><label>${esc(label)}</label><input data-f="${name}" type="${type || 'text'}" value="${esc(value)}"></div>`;
+  function textField(label, name, value, type, dir) {
+    const dirAttr = dir ? ` dir="${dir}"` : '';
+    if (readOnly) return `<div class="field"><label>${esc(label)}</label><input value="${esc(value)}"${dirAttr} disabled></div>`;
+    return `<div class="field"><label>${esc(label)}</label><input data-f="${name}" type="${type || 'text'}" value="${esc(value)}"${dirAttr}></div>`;
   }
   function selectField(label, name, value, list, allowEmpty) {
     if (readOnly) return `<div class="field"><label>${esc(label)}</label><input value="${esc(labelOf(list, value))}" disabled></div>`;
@@ -774,9 +774,10 @@ async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
     <h3>Document #${esc(doc.document_id)}${doc.pending_deletion ? ' <span class="count-badge" style="background:var(--danger);color:#fff;">pending deletion</span>' : ''}</h3>
     ${renderAllVersionsBar(doc, siblings)}
     <div class="field-grid wide">
-      ${textField('Title (EN)', 'title', doc.title)}
-      ${textField('Original title', 'original_title', doc.original_title)}
-      ${textField('Ur-Title', 'ur_title', doc.ur_title)}
+      ${textField('Title in Urdu', 'ur_title', doc.ur_title, 'text', 'auto')}
+      ${textField('Title in English', 'title', doc.en_title || doc.title)}
+      ${textField('Title in Italian', 'it_title', doc.it_title)}
+      ${textField('Original title', 'original_title', doc.original_title, 'text', 'auto')}
       ${textField('Place', 'place', doc.place)}
       ${textField('Reference date', 'ref_date', doc.ref_date, 'date')}
       ${selectField('Category', 'category', doc.category, State.categories)}
@@ -880,6 +881,8 @@ async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
     const out = {};
     box.querySelectorAll('[data-f]').forEach(el => out[el.dataset.f] = el.value === '' ? null : el.value);
     if ('pages' in out) out.pages = out.pages === null ? null : parseInt(out.pages, 10);
+    // The English title lives in two fields, and different screens read different ones: keep them the same.
+    if ('title' in out) out.en_title = out.title;
     const recipientVal = document.getElementById('f-doc-recipient').value;
     out.recipient = recipientVal ? [recipientVal] : null;
     out.pending_deletion = document.getElementById('f-pending-deletion').checked;
