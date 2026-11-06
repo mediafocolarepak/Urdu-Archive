@@ -1,7 +1,10 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.19 (2026-11-06) — decisions taken by the Owner; all of phases 1 through 3 are built and
+**Status: v1.20 (2026-11-06) — decisions taken by the Owner; all of phases 1 through 3 are built and
 merged (migrations 80–115). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.20:** titles in three languages (§5.20, migration 122, Owner's decision): the Library shows the Urdu, English and Italian
+titles one under the other, Urdu at the top, and Italian gets a field of its own. Filling the missing titles is still to come.
 
 **What changed in v1.19:** date of birth instead of age bracket (§5.19, migration 120, Owner's decision): the date is readable only by
 the person, the HR lead and Admins; the age group is computed from it, for those who need it.
@@ -999,6 +1002,20 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
 - **Asking those already registered:** a pop-up after sign-in, once per session, only for those with no date. It never blocks the app:
   Later asks again after 7 days. English until the Urdu has been reviewed.
 - **Not built:** choosing a formation audience by age. Formation is to say first which brackets it needs: 18-30 and 31-65 may be too wide.
+
+### 5.20 Titles in three languages (migration 122)
+
+- **The rule (Owner's decision, 2026-11-06):** every text has its title in Urdu, English and Italian.
+- **Fields:** `ur_title`, `en_title` and `it_title` on each document, since two versions of a Work can have different titles.
+  `original_title` stays as it was and is shown only when it adds something, because it holds different things in different
+  records: the Italian in the old ones, the title in the version's own language in the new ones.
+- **Shown:** one under the other, Urdu at the top (Owner's choice), then English and Italian, on the phone and in a single Title
+  column on a computer, and in the document's detail. A missing title leaves no empty line.
+- **The English title lives in two fields,** `title` and `en_title`, and different screens read different ones. The edit form now saves
+  both, and shows `en_title` first.
+- **A new Italian version** gets its own title in `it_title` when it is created. Search covers `it_title`.
+- **Not yet done:** filling the missing titles, and what happens when a new text arrives without all three. As of 2026-11-06 only 1 of
+  1470 Works has a title in Urdu script. Titles translated by machine are drafts until someone has reviewed them, kept out of `ur_title`.
 
 ---
 

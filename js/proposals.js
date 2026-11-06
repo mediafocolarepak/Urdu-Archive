@@ -8,7 +8,7 @@ import {
   titleOverlapScore, ACCESS_LEVELS, readPdfPageCountFromBlob, getDriveAccessToken, uploadPdfToGDrive,
   AUDIO_BUCKET, AUDIO_FORMATS, audioFileProblem, audioDurationOf, HIDDEN_DOC_STATUSES, isMediaLinkOk, videoLinkHtml, mountAudioPlayer,
   helpLinkHtml,
-} from './core.js?v=20261106193250';
+} from './core.js?v=20261106210727';
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // the Supabase Free plan's limit per file
 const FORMATS = [['DOC', 'Text or PDF'], ['AUD', 'Audio'], ['VID', 'Video']];
@@ -558,20 +558,20 @@ function wireSearch() {
   });
 }
 
-const SEARCH_FIELDS = 'document_id,title,en_title,original_title,ur_title,language,work_id,workflow_status,category,author,ref_date,ref_period,recipient,main_topic,secondary_tags';
+const SEARCH_FIELDS = 'document_id,title,en_title,original_title,ur_title,it_title,language,work_id,workflow_status,category,author,ref_date,ref_period,recipient,main_topic,secondary_tags';
 
 async function runSearch(q) {
   const box = document.getElementById('pf-search-results');
   if (q.length < 3) { box.innerHTML = ''; return; }
   const like = likeSafe(q);
   const [byTitle, byText] = await Promise.all([
-    withStatus(sb.from('documents').select(SEARCH_FIELDS).or(`title.ilike.${like},original_title.ilike.${like},ur_title.ilike.${like},en_title.ilike.${like}`).limit(30)),
+    withStatus(sb.from('documents').select(SEARCH_FIELDS).or(`title.ilike.${like},original_title.ilike.${like},ur_title.ilike.${like},en_title.ilike.${like},it_title.ilike.${like}`).limit(30)),
     withStatus(sb.rpc('search_document_texts', { q, lim: 10 })),
   ]);
   const seen = new Set(byTitle.map(d => d.document_id));
   const textIds = byText.map(t => t.document_id).filter(id => !seen.has(id));
   const fromText = textIds.length ? await withStatus(sb.from('documents').select(SEARCH_FIELDS).in('document_id', textIds)) : [];
-  const score = d => Math.max(titleOverlapScore(q, d.en_title), titleOverlapScore(q, d.title), titleOverlapScore(q, d.original_title));
+  const score = d => Math.max(titleOverlapScore(q, d.en_title), titleOverlapScore(q, d.title), titleOverlapScore(q, d.original_title), titleOverlapScore(q, d.it_title));
   const rows = [...byTitle, ...fromText]
     .filter(d => d.work_id && !HIDDEN_DOC_STATUSES.includes(d.workflow_status))
     .sort((a, b) => score(b) - score(a))
