@@ -1,13 +1,26 @@
-// "Start Here" (95_onboarding_and_share_with_us.sql, PROJECT_HANDOFF for this session): replaces
-// the technical Help tab for Users only - a first-run orientation hub, not a reference manual.
-// Three sections (what this is / how to use it / how to collaborate), filled with bilingual cards
-// (Urdu title/body + an optional English gloss) authored by the Communication department through
-// its own editor in My Department -> Communication (see renderOnboardingCardsManager in
-// mydepartment.js) - this module only ever reads onboarding_cards, never writes it.
+// "Start Here" (95_onboarding_and_share_with_us.sql, redesigned 2026-11-06 with the Owner): stands in for
+// the technical Help tab for Users only - a first-run hub, not a reference manual. The first screen is a
+// short set of large buttons, so nobody has to scroll past everything to find how to collaborate: the Word
+// of Life, the three sections of cards (what this is / how to use it / how to collaborate) and the guides.
+// Each opens its own page. Cards are bilingual (Urdu title/body + an optional English gloss) and authored
+// by the Communication department through its own editor in My Department -> Communication (see
+// renderOnboardingCardsManager in mydepartment.js) - this module only ever reads onboarding_cards.
 
-import { sb, State, esc, withStatus, ONBOARDING_MEDIA_BUCKET, HIDDEN_DOC_STATUSES, videoLinkHtml, mountAudioPlayer } from './core.js?v=20261106165033';
+import { sb, State, esc, withStatus, ONBOARDING_MEDIA_BUCKET, HIDDEN_DOC_STATUSES, videoLinkHtml, mountAudioPlayer } from './core.js?v=20261106170255';
 
 const thumbnailUrl = path => path ? sb.storage.from(ONBOARDING_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl : null;
+
+// The Urdu of these two buttons is the Owner's wording: until it is here, the English stands alone.
+const GUIDES_HEADING_UR = '';
+const NAV_PATHS = {
+  word: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+  about: 'M3 11l9-8 9 8M5 10v10h14V10',
+  how_to_use: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM15.5 8.5l-2 5-5 2 2-5z',
+  how_to_collaborate: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20a6 6 0 0 1 12 0M17 11a3 3 0 1 0 0-6M17 14a6 6 0 0 1 4 6',
+  guides: 'M12 6C10 4.5 7 4 4 4v15c3 0 6 .5 8 2 2-1.5 5-2 8-2V4c-3 0-6 .5-8 2zM12 6v15',
+};
+const navIcon = name => `<span class="start-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${NAV_PATHS[name]}"/></svg></span>`;
+const CHEVRON = '<span class="start-chevron" aria-hidden="true">&rsaquo;</span>';
 
 const SECTIONS = [
   ['about', 'یہ آپ کا گھر ہے', 'This is your home'],
@@ -90,12 +103,100 @@ function wordOfMonthHtml(w) {
     </div>`;
 }
 
-// Start Here stays usable if this cannot be found: it simply has no such card.
-async function renderWordOfMonth(box) {
-  let w = null;
-  try { w = await findWordOfMonth(); } catch (e) { console.error('Word of the month:', e); }
-  if (!w || !box.isConnected) return;
-  box.innerHTML = wordOfMonthHtml(w);
+// ---------- The first screen: large buttons ----------
+const startView = { page: null, cards: [], word: null, homeScroll: 0 };
+
+function tileHtml(page, icon, urdu, english) {
+  return `
+    <button type="button" class="start-tile" data-start-page="${esc(page)}">
+      ${navIcon(icon)}
+      <span class="start-tile-text">
+        ${urdu ? `<span class="start-ur" dir="auto">${esc(urdu)}</span>` : ''}
+        <span class="start-en">${esc(english)}</span>
+      </span>
+      ${CHEVRON}
+    </button>`;
+}
+
+function wordTileHtml(w) {
+  const [year, mon] = w.month.split('-').map(Number);
+  const monthName = new Date(year, mon - 1, 1).toLocaleDateString('en', { month: 'long', year: 'numeric' });
+  const title = w.doc.ur_title || w.doc.original_title || w.doc.en_title || w.doc.title;
+  return `
+    <button type="button" class="start-tile start-word" data-start-page="word">
+      ${navIcon('word')}
+      <span class="start-tile-text">
+        ${WORD_OF_MONTH_HEADING_UR ? `<span class="start-ur" dir="auto">${esc(WORD_OF_MONTH_HEADING_UR)}</span>` : ''}
+        <span class="start-en start-word-heading">${w.isCurrent ? 'Word of Life of this month' : 'Latest Word of Life'}</span>
+        <span class="start-word-title" dir="auto">${esc(title)}</span>
+        <span class="hint">${esc(monthName)}</span>
+      </span>
+      ${CHEVRON}
+    </button>`;
+}
+
+function renderHome(main) {
+  const sections = SECTIONS.filter(([code]) => startView.cards.some(c => c.section === code));
+  main.innerHTML = `
+    <div class="start-home">
+      <div id="wom-box">${startView.word ? wordTileHtml(startView.word) : ''}</div>
+      <div class="start-tiles">
+        ${sections.map(([code, headingUr, headingEn]) => tileHtml(code, code, headingUr, headingEn)).join('')}
+        <button type="button" class="start-tile" data-help-home>
+          ${navIcon('guides')}
+          <span class="start-tile-text">
+            ${GUIDES_HEADING_UR ? `<span class="start-ur" dir="auto">${esc(GUIDES_HEADING_UR)}</span>` : ''}
+            <span class="start-en">Guides</span>
+          </span>
+          ${CHEVRON}
+        </button>
+      </div>
+    </div>`;
+  main.querySelectorAll('[data-start-page]').forEach(b => b.addEventListener('click', () => openPage(main, b.dataset.startPage)));
+  main.scrollTop = startView.homeScroll;
+}
+
+// ---------- The pages behind the buttons ----------
+function openPage(main, page) {
+  startView.homeScroll = main.scrollTop;
+  startView.page = page;
+  history.pushState({ startPage: page }, '');
+  renderPage(main);
+}
+
+function backHtml() {
+  return '<div class="btn-row start-back-row"><button type="button" class="btn secondary" id="start-back">&larr; Start Here</button></div>';
+}
+
+function renderPage(main) {
+  const page = startView.page;
+  const section = SECTIONS.find(([code]) => code === page);
+  if (page === 'word' && startView.word) {
+    main.innerHTML = backHtml() + wordOfMonthHtml(startView.word);
+    wireWordOfMonth(startView.word);
+  } else if (section) {
+    const [code, headingUr, headingEn] = section;
+    main.innerHTML = backHtml() + `
+      <div class="panel">
+        <h2 class="start-page-ur" dir="auto">${esc(headingUr)}</h2>
+        <h2 class="start-page-en">${esc(headingEn)}</h2>
+        <div class="field-grid wide">${startView.cards.filter(c => c.section === code).map(renderCard).join('')}</div>
+      </div>`;
+    main.querySelectorAll('[data-open-tab]').forEach(el => el.addEventListener('click', () => window.__renderTab(el.dataset.openTab)));
+  } else {
+    startView.page = null;
+    renderHome(main);
+    return;
+  }
+  document.getElementById('start-back').addEventListener('click', () => {
+    if (history.state && history.state.startPage) { history.back(); return; }
+    startView.page = null;
+    renderHome(main);
+  });
+  main.scrollTop = 0;
+}
+
+function wireWordOfMonth(w) {
   document.getElementById('wom-read').addEventListener('click', () => {
     State.selectedDocId = w.doc.document_id;
     State.dashOpenDetail = true;
@@ -104,23 +205,26 @@ async function renderWordOfMonth(box) {
   document.getElementById('wom-listen')?.addEventListener('click', () => mountAudioPlayer(document.getElementById('wom-player'), w.reading, true));
 }
 
+// The phone's Back goes from a page to the first screen, as it closes a document in the Library.
+window.addEventListener('popstate', e => {
+  if (!startView.page) return;
+  const main = document.getElementById('main');
+  if (main.dataset.section !== 'onboarding') { startView.page = null; return; }
+  startView.page = (e.state && e.state.startPage) || null;
+  if (startView.page) renderPage(main);
+  else renderHome(main);
+});
+
 export async function renderOnboardingView(main) {
   main.innerHTML = '<div class="empty-msg">Loading...</div>';
-  const cards = await withStatus(sb.from('onboarding_cards').select('*').eq('published', true).order('sort_order').order('created_at'));
-
-  main.innerHTML = '<div id="wom-box"></div>' + SECTIONS.map(([code, headingUr, headingEn]) => {
-    const inSection = cards.filter(c => c.section === code);
-    if (!inSection.length) return '';
-    return `
-      <div class="panel">
-        <h2 style="margin:0 0 4px;font-size:24px;line-height:1.3;text-align:left;" dir="auto">${esc(headingUr)}</h2>
-        <h2 style="margin:0 0 12px;font-size:24px;line-height:1.3;">${esc(headingEn)}</h2>
-        <div class="field-grid wide">${inSection.map(renderCard).join('')}</div>
-      </div>`;
-  }).join('') || '<div class="empty-msg">Nothing here yet - check back soon.</div>';
-
-  // Users have no Help tab: this is their way to the guides meant for them (userguide.js). English until the Owner gives the Urdu.
-  main.insertAdjacentHTML('beforeend', '<div class="btn-row" style="justify-content:center;"><button type="button" class="btn secondary" data-help-home>Guides</button></div>');
-  main.querySelectorAll('[data-open-tab]').forEach(el => el.addEventListener('click', () => window.__renderTab(el.dataset.openTab)));
-  renderWordOfMonth(document.getElementById('wom-box'));
+  startView.page = null;
+  startView.homeScroll = 0;
+  startView.cards = await withStatus(sb.from('onboarding_cards').select('*').eq('published', true).order('sort_order').order('created_at'));
+  renderHome(main);
+  // Start Here stays usable if this cannot be found: it simply has no such button. The other buttons don't wait for it.
+  try { startView.word = await findWordOfMonth(); } catch (e) { console.error('Word of the month:', e); startView.word = null; }
+  const box = document.getElementById('wom-box');
+  if (!startView.word || !box || startView.page) return;
+  box.innerHTML = wordTileHtml(startView.word);
+  box.querySelector('[data-start-page]').addEventListener('click', () => openPage(main, 'word'));
 }
