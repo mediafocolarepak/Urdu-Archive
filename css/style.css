@@ -444,3 +444,16 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
 .start-back-row { margin: 0 0 12px; }
 .start-page-ur { margin: 0 0 4px; font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-size: 24px; line-height: 2; text-align: left; border: 0; }
 .start-page-en { margin: 0 0 12px; font-size: 20px; line-height: 1.3; border: 0; }
+
+/* Help in Urdu: right to left, in Nastaliq, which needs more height between lines. */
+.help-guide[dir="rtl"], .help-row[dir="rtl"] { font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; }
+.help-guide[dir="rtl"] { font-size: 17px; line-height: 2.3; }
+.help-guide[dir="rtl"] h1 { font-size: 24px; line-height: 2; }
+.help-guide[dir="rtl"] h2, .help-guide[dir="rtl"] h3 { line-height: 2; }
+.help-guide[dir="rtl"] .lead { font-size: 18px; }
+.help-guide[dir="rtl"] table { line-height: 2.1; }
+.help-guide[dir="rtl"] summary { min-height: 54px; }
+.help-guide[dir="rtl"] summary::before { content: "\25C2"; }
+.help-guide[dir="rtl"] details[open] summary::before { content: "\25BE"; }
+.help-row[dir="rtl"] .help-row-title { font-size: 17px; line-height: 2; }
+.help-row[dir="rtl"] .help-row-summary { font-size: 14px; line-height: 2; }
