@@ -6,10 +6,14 @@
 import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
   nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved,
-} from './core.js?v=20261106135351';
-import { renderPolicySection } from './policy.js?v=20261106135351';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261106135351';
-import { renderApplicationsView } from './collaboration.js?v=20261106135351';
+  helpLinkHtml,
+} from './core.js?v=20261106163624';
+import { renderPolicySection } from './policy.js?v=20261106163624';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261106163624';
+import { renderApplicationsView } from './collaboration.js?v=20261106163624';
+
+// Each department's page opens its own guide from the "?" beside the title.
+const DEPT_GUIDES = { HR: 'dept-hr', COORD: 'dept-coordination', FORM: 'dept-formation', RF: 'dept-reward', COMM: 'dept-communication', ARCHIVE: 'dept-archive' };
 
 function myDepartmentCodes() {
   if (isAdmin()) return (State.optionListsByName.department || []).map(([c]) => c);
@@ -33,7 +37,7 @@ export async function renderMyDepartmentView(main) {
 
   main.innerHTML = `
     <div class="panel">
-      <h2>My Department</h2>
+      <h2>My Department ${helpLinkHtml(DEPT_GUIDES[selected] || 'my-department')}</h2>
       ${codes.length > 1
         ? `<div class="field" style="max-width:280px;"><label>Department</label><select id="mydept-select">${codes.map(c => `<option value="${esc(c)}" ${c === selected ? 'selected' : ''}>${esc(deptLabel(c))}</option>`).join('')}</select></div>`
         : `<p class="hint">${esc(deptLabel(selected))}</p>`}

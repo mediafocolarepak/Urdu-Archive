@@ -5,7 +5,7 @@
 // its own editor in My Department -> Communication (see renderOnboardingCardsManager in
 // mydepartment.js) - this module only ever reads onboarding_cards, never writes it.
 
-import { sb, State, esc, withStatus, ONBOARDING_MEDIA_BUCKET, HIDDEN_DOC_STATUSES, videoLinkHtml, mountAudioPlayer } from './core.js?v=20261106135351';
+import { sb, State, esc, withStatus, ONBOARDING_MEDIA_BUCKET, HIDDEN_DOC_STATUSES, videoLinkHtml, mountAudioPlayer } from './core.js?v=20261106163624';
 
 const thumbnailUrl = path => path ? sb.storage.from(ONBOARDING_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl : null;
 
@@ -119,6 +119,8 @@ export async function renderOnboardingView(main) {
       </div>`;
   }).join('') || '<div class="empty-msg">Nothing here yet - check back soon.</div>';
 
+  // Users have no Help tab: this is their way to the guides meant for them (userguide.js). English until the Owner gives the Urdu.
+  main.insertAdjacentHTML('beforeend', '<div class="btn-row" style="justify-content:center;"><button type="button" class="btn secondary" data-help-home>Guides</button></div>');
   main.querySelectorAll('[data-open-tab]').forEach(el => el.addEventListener('click', () => window.__renderTab(el.dataset.openTab)));
   renderWordOfMonth(document.getElementById('wom-box'));
 }

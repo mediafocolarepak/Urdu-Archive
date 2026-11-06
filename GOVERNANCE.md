@@ -1,7 +1,11 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.15 (2026-11-05) — decisions taken by the Owner; all of phases 1 through 3 are built and
+**Status: v1.16 (2026-11-06) — decisions taken by the Owner; all of phases 1 through 3 are built and
 merged (migrations 80–115). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.16:** Help redesigned with the Owner (§5.18, migration 116): guides by activity, and each
+person sees only those for what they can do. New guides present each role and department page. Users still have
+Start Here instead of a Help tab, with a link at its foot to the guides meant for them.
 
 **What changed in v1.15:** the Word of Life of a month is one package, and a magazine issue is a record of
 its own (§5.17, migration 115). A board post reaches the archive only through the proposal form, and anyone
@@ -674,7 +678,7 @@ The software below exists to carry out §1.6 — read that first for the reasoni
 only the mechanism.
 
 **"Start Here"** replaces the technical Help tab for Users only — Operators/Coordinators/Admin
-keep Help exactly as before. Content lives in `onboarding_cards` (bilingual: `title_ur`/`body_ur`
+keep Help (redesigned in §5.18). Content lives in `onboarding_cards` (bilingual: `title_ur`/`body_ur`
 required, `title_en`/`body_en` optional gloss), grouped into three sections — `about`,
 `how_to_use`, `how_to_collaborate` — writable by Communication (`is_dept_member('COMM')`) or
 Admin, readable by every signed-in user. A card can carry an image (`onboarding-media`, a public
@@ -942,6 +946,19 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
   Life keeps its own month. Issue records don't exist yet: they are added as proposals as their PDFs are ready.
 - **Data cleaned:** periods holding a page (`2001-04p.7`) now hold only the month. The page stays in the issue
   field, and the old values are in the log.
+
+### 5.18 Help: guides by activity (migration 116)
+
+- **One entry per guide, not per role:** eight groups (use the archive, add to it, work with the team, check others'
+  work, your role, department pages, run the project, reference). A person sees only what applies to their role,
+  qualifications, departments and boards (`help_pages.audience`). This is for clarity, not protection: any signed-in
+  person can read any guide through the API, so guides must hold nothing confidential.
+- **Languages:** English and Italian, one selector. Urdu is added as a language with the Owner's words.
+- **Role guides** set out a person's field, what isn't theirs, and a suggested daily and weekly rhythm. **The rhythm is
+  a suggestion, not a rule of this document.** Where a guide and this document differ, this document holds.
+- **A "?" beside a screen's title** opens its guide. **The Read aloud guide stays hidden from plain Users** until it is
+  announced, by adding `user` to its audience.
+- The old pages are kept in `_backup_help_pages_20261106`. Admins edit guides in place in the app.
 
 ---
 

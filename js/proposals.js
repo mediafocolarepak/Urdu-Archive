@@ -7,7 +7,8 @@ import {
   sb, State, esc, withStatus, optionsHtml, labelOf, isAdmin, isCoordinator, canManageReserved, canWrite, BUCKET, likeSafe,
   titleOverlapScore, ACCESS_LEVELS, readPdfPageCountFromBlob, getDriveAccessToken, uploadPdfToGDrive,
   AUDIO_BUCKET, AUDIO_FORMATS, audioFileProblem, audioDurationOf, HIDDEN_DOC_STATUSES, isMediaLinkOk, videoLinkHtml, mountAudioPlayer,
-} from './core.js?v=20261106135351';
+  helpLinkHtml,
+} from './core.js?v=20261106163624';
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // the Supabase Free plan's limit per file
 const FORMATS = [['DOC', 'Text or PDF'], ['AUD', 'Audio'], ['VID', 'Video']];
@@ -95,7 +96,7 @@ export async function renderProposalsView(main) {
   if (!tabs.some(([id]) => id === currentTab)) currentTab = 'mine';
   main.innerHTML = `
     <div class="panel">
-      <h2>Proposals</h2>
+      <h2>Proposals ${helpLinkHtml('propose')}</h2>
       <p class="hint">New content reaches the archive through a shared review: nobody publishes alone. Boards are separate, and what is posted there is not in the archive.</p>
       ${tabs.length > 1 ? `<div class="btn-row">${tabs.map(([id, label]) => `<button class="btn ${id === currentTab ? '' : 'secondary'}" data-prop-tab="${id}">${esc(label)}</button>`).join('')}</div>` : ''}
     </div>
