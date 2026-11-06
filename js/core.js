@@ -347,7 +347,7 @@ export const OPTION_LIST_LABELS = {
   board: 'Formation boards',
   formation_audience: 'Formation paths: target audience',
   department: 'Departments',
-  age_bracket: 'Age bracket (signup statistics)',
+  age_bracket: 'Age bracket (labels of the computed groups: keep the codes)',
 };
 
 // Pre-selection of the board from a document's recipient (suggestion, not a constraint).
@@ -462,6 +462,42 @@ export async function audioFileUrl(path) {
 // The small "?" beside a screen's title: opens that screen's guide in Help (userguide.js listens for it).
 export function helpLinkHtml(guideKey) {
   return `<button type="button" class="help-q" data-help-guide="${esc(guideKey)}" title="How this works" aria-label="How this works">?</button>`;
+}
+
+// Date of birth (120_date_of_birth.sql): three lists rather than a calendar, which is hard to take back to 1950 on a
+// phone. Used by the sign-up form, My Profile, Users and the pop-up that asks for it.
+const DOB_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+export function dateOfBirthFieldsHtml(prefix, value) {
+  const [y, m, d] = (value || '').split('-').map(Number);
+  const thisYear = new Date().getFullYear();
+  const years = [];
+  for (let i = thisYear; i >= 1920; i--) years.push(i);
+  if (y && !years.includes(y)) years.push(y);
+  const list = (part, label, options) => `<select id="${prefix}-${part}" aria-label="${label}"><option value="">${label}</option>${options.join('')}</select>`;
+  return `<div class="dob-fields">
+    ${list('day', 'Day', Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}" ${d === i + 1 ? 'selected' : ''}>${i + 1}</option>`))}
+    ${list('month', 'Month', DOB_MONTHS.map((name, i) => `<option value="${i + 1}" ${m === i + 1 ? 'selected' : ''}>${name}</option>`))}
+    ${list('year', 'Year', years.map(year => `<option value="${year}" ${y === year ? 'selected' : ''}>${year}</option>`))}
+  </div>`;
+}
+
+// { value: 'YYYY-MM-DD' or null when all three are empty, error: a message for the person, or null }
+export function readDateOfBirth(prefix) {
+  const part = name => parseInt(document.getElementById(`${prefix}-${name}`).value, 10);
+  const [d, m, y] = [part('day'), part('month'), part('year')];
+  if (!d && !m && !y) return { value: null, error: null };
+  if (!d || !m || !y) return { value: null, error: 'Please choose the day, the month and the year.' };
+  const date = new Date(y, m - 1, d);
+  if (date.getMonth() !== m - 1) return { value: null, error: 'This date does not exist. Please check the day and the month.' };
+  if (date > new Date()) return { value: null, error: 'A date of birth cannot be in the future.' };
+  return { value: `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`, error: null };
+}
+
+// Whole years old today, for showing an age instead of a date in lists.
+export function ageFromDate(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const now = new Date();
+  return now.getFullYear() - y - ((now.getMonth() + 1 < m || (now.getMonth() + 1 === m && now.getDate() < d)) ? 1 : 0);
 }
 
 export function videoLinkHtml(url, label, secondary) {
@@ -887,6 +923,56 @@ async function showApp(session, renderDashboardTab) {
 
   renderDashboardTab();
   await maybeShowSplash();
+  // The announcement comes first, if there is one: its "Got it" then asks for the date.
+  if (!document.querySelector('.overlay-backdrop')) maybeAskDateOfBirth();
+}
+
+// ---------- Asking for the date of birth ----------
+// Only those who haven't given it, once per session. It never blocks the app: "Later" asks again after 7 days.
+// The Urdu is the reviewers' to approve (Documentazione/Popup_data_nascita_urdu_da_rivedere.md): until then, English only.
+const DOB_PROMPT_UR = { title: '', body: '' };
+const DOB_LATER_DAYS = 7;
+export async function maybeAskDateOfBirth() {
+  if (sessionStorage.getItem('dobAsked')) return;
+  sessionStorage.setItem('dobAsked', '1');
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return;
+  const laterKey = `dobLater_${user.id}`;
+  try { if (Number(localStorage.getItem(laterKey)) > Date.now()) return; } catch { /* then simply ask */ }
+  const { data, error } = await sb.from('user_birth_dates').select('user_id').eq('user_id', user.id);
+  if (error || !data || data.length) return;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'overlay-backdrop';
+  backdrop.id = 'dob-popup';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel">
+      ${DOB_PROMPT_UR.title ? `<h2 class="start-page-ur" dir="auto">${esc(DOB_PROMPT_UR.title)}</h2>` : ''}
+      <h2 style="margin-top:0;">Please add your date of birth</h2>
+      ${DOB_PROMPT_UR.body ? `<p class="dob-ur" dir="auto">${esc(DOB_PROMPT_UR.body)}</p>` : ''}
+      <p>It keeps our programme statistics right, and helps us offer formation suited to your age.</p>
+      <p class="hint">Only you, the HR lead and Admins can see the date. A few people on the team see only your age group. If you don't know the exact date, choose the nearest.</p>
+      ${dateOfBirthFieldsHtml('dob-popup')}
+      <div id="dob-popup-error" class="dob-error"></div>
+      <div class="btn-row" style="justify-content:flex-end;">
+        <button class="btn secondary" id="dob-popup-later">Later</button>
+        <button class="btn" id="dob-popup-save">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  document.getElementById('dob-popup-later').addEventListener('click', () => {
+    try { localStorage.setItem(laterKey, String(Date.now() + DOB_LATER_DAYS * 86400000)); } catch { /* asked again next session */ }
+    backdrop.remove();
+  });
+  document.getElementById('dob-popup-save').addEventListener('click', async () => {
+    const errBox = document.getElementById('dob-popup-error');
+    const { value, error: problem } = readDateOfBirth('dob-popup');
+    errBox.textContent = problem || (value ? '' : 'Please choose the day, the month and the year.');
+    if (!value) return;
+    try {
+      await withStatus(sb.rpc('set_date_of_birth', { p_date: value }), 'Saving...');
+      backdrop.remove();
+    } catch (err) { errBox.textContent = err.message; }
+  });
 }
 
 // ---------- Splash-screen announcements ----------
@@ -915,6 +1001,7 @@ async function maybeShowSplash() {
   document.getElementById('splash-dismiss-btn').addEventListener('click', () => {
     backdrop.remove();
     sessionStorage.setItem('splashShown', '1');
+    maybeAskDateOfBirth();
   });
   document.getElementById('splash-history-btn').addEventListener('click', showSplashHistory);
 }
@@ -1316,8 +1403,7 @@ export function openFormationPostPopup({ doc = null, onSaved } = {}) {
 }
 
 // Populates a signup-form dropdown before login (anon-readable option_lists rows - see
-// option_lists_select_anon in 16_signup_chat_splash.sql). Used for both membership type and
-// age bracket.
+// option_lists_select_anon in 16_signup_chat_splash.sql). Used for membership type.
 export async function loadOptionsForSignup(listName) {
   const { data, error } = await sb.from('option_lists').select('code,label').eq('list_name', listName).order('sort_order');
   return error ? [] : data.map(r => [r.code, r.label]);
@@ -1358,10 +1444,7 @@ export function wireAuthButtons() {
     document.getElementById('signup-membership').innerHTML =
       '<option value=""></option>' + rows.map(([c, l]) => `<option value="${c}">${esc(l)}</option>`).join('');
   });
-  loadOptionsForSignup('age_bracket').then(rows => {
-    document.getElementById('signup-age-bracket').innerHTML =
-      '<option value=""></option>' + rows.map(([c, l]) => `<option value="${c}">${esc(l)}</option>`).join('');
-  });
+  document.getElementById('signup-dob').innerHTML = dateOfBirthFieldsHtml('signup-dob');
 
   document.getElementById('signup-btn').addEventListener('click', async () => {
     const email = document.getElementById('login-email').value.trim();
@@ -1370,13 +1453,14 @@ export function wireAuthButtons() {
     const city = document.getElementById('signup-city').value.trim();
     const membership_type = document.getElementById('signup-membership').value;
     const phone = document.getElementById('signup-phone').value.trim();
-    const age_bracket = document.getElementById('signup-age-bracket').value;
+    const dob = readDateOfBirth('signup-dob');
     const gender = document.getElementById('signup-gender').value;
     const errBox = document.getElementById('login-error');
     errBox.textContent = '';
     if (!email || password.length < 6) { errBox.textContent = 'Email and password (min. 6 characters) are required.'; return; }
-    if (!full_name || !city || !membership_type || !phone || !age_bracket || !gender) { errBox.textContent = 'Full name, city, membership type, phone, age bracket and gender are required.'; return; }
-    const { error } = await sb.auth.signUp({ email, password, options: { data: { full_name, city, membership_type, phone, age_bracket, gender }, emailRedirectTo: 'https://mediafocolarepak.github.io/Urdu-Archive/' } });
+    if (!full_name || !city || !membership_type || !phone || !gender) { errBox.textContent = 'Full name, city, membership type, phone, date of birth and gender are required.'; return; }
+    if (dob.error || !dob.value) { errBox.textContent = dob.error || 'Full name, city, membership type, phone, date of birth and gender are required.'; return; }
+    const { error } = await sb.auth.signUp({ email, password, options: { data: { full_name, city, membership_type, phone, date_of_birth: dob.value, gender }, emailRedirectTo: 'https://mediafocolarepak.github.io/Urdu-Archive/' } });
     if (error) { errBox.textContent = error.message; return; }
     errBox.style.color = 'var(--accent)';
     errBox.textContent = 'Sign-up submitted. Check your email to confirm, then sign in.';
@@ -1384,6 +1468,7 @@ export function wireAuthButtons() {
 
   document.getElementById('logout-btn').addEventListener('click', () => {
     sessionStorage.removeItem('splashShown');
+    sessionStorage.removeItem('dobAsked');
     sb.auth.signOut();
   });
 

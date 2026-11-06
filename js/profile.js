@@ -5,7 +5,7 @@
 // reviewed. Deliberately does not import from collaboration.js (project convention: modules
 // only import from core.js), so the skill-chip rendering is duplicated here in small form.
 
-import { sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml } from './core.js?v=20261106172224';
+import { sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml, dateOfBirthFieldsHtml, readDateOfBirth } from './core.js?v=20261106190049';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -24,12 +24,13 @@ let editing = false;
 export async function renderMyProfileView(main) {
   main.innerHTML = '<div class="empty-msg">Loading...</div>';
   const { data: { user } } = await sb.auth.getUser();
-  const [roleRows, profileRows, qualRows, certRows, reservedAccess] = await Promise.all([
+  const [roleRows, profileRows, qualRows, certRows, reservedAccess, birthRows] = await Promise.all([
     withStatus(sb.from('user_roles').select('role').eq('user_id', user.id)),
     withStatus(sb.from('user_profiles').select('*').eq('user_id', user.id)),
     withStatus(sb.from('user_qualifications').select('qualification_code').eq('user_id', user.id)),
     withStatus(sb.from('formation_certificates').select('*, formation_paths(title)').eq('user_id', user.id).order('issued_at', { ascending: false })),
     withStatus(sb.rpc('has_reserved_access')),
+    withStatus(sb.from('user_birth_dates').select('date_of_birth').eq('user_id', user.id)),
   ]);
   const role = roleRows[0]?.role || 'user';
   const profile = profileRows[0] || {};
@@ -77,7 +78,7 @@ export async function renderMyProfileView(main) {
   // Sign out is also in the top bar, which on a phone is easy to miss (owner's report 2026-10-27);
   // this clicks that same button so there is one sign-out routine (core.js), not two.
   document.getElementById('profile-signout').addEventListener('click', () => document.getElementById('logout-btn').click());
-  renderDemographics(document.getElementById('profile-demographics'), profile, user.id, main);
+  renderDemographics(document.getElementById('profile-demographics'), profile, birthRows[0]?.date_of_birth || '', main);
   if (role === 'operator') {
     renderEditable(document.getElementById('profile-editable'), profile, skillList, storedSkills, otherSkills, user.id, main);
   }
@@ -90,25 +91,30 @@ export async function renderMyProfileView(main) {
   });
 }
 
-// Age bracket + gender (85_signup_demographics.sql): collected at signup for HR statistics,
-// but every account created before that migration has both null - self-editable here (any
-// role, unlike the operator-only section below) so people can fill them in themselves instead
-// of HR having to chase everyone individually.
-function renderDemographics(box, profile, userId, main) {
+// Date of birth (120_date_of_birth.sql, its own protected table) + gender: collected at signup, but older accounts
+// don't have them - self-editable here (any role, unlike the operator-only section below) so people can fill them
+// in themselves instead of HR having to chase everyone individually.
+async function renderDemographics(box, profile, dateOfBirth, main) {
   const ageBracketList = State.optionListsByName.age_bracket || [];
+  const code = dateOfBirth ? await withStatus(sb.rpc('age_bracket_of', { p_dob: dateOfBirth })) : profile.age_bracket;
+  const groupLabel = code ? labelOf(ageBracketList, code) || code : '';
   box.innerHTML = `
-    <h3>Personal details <span class="hint">— used for programme statistics only</span></h3>
+    <h3>Personal details</h3>
+    <p class="hint">Only you, the HR lead and Admins can see your date of birth. A few people on the team see only your age group, for statistics and to prepare formation.</p>
     <div class="field-grid wide">
-      <div class="field"><label>Age bracket</label><select id="pf-age-bracket">${optionsHtml(ageBracketList, profile.age_bracket, true)}</select></div>
+      <div class="field"><label>Date of birth</label>${dateOfBirthFieldsHtml('pf-dob', dateOfBirth)}${groupLabel ? `<div class="hint">Your age group: ${esc(groupLabel)}${dateOfBirth ? '' : ' (as you declared it)'}</div>` : ''}<div id="pf-dob-error" class="dob-error"></div></div>
       <div class="field"><label>Gender</label><select id="pf-gender">${optionsHtml(GENDER_OPTIONS, profile.gender, true)}</select></div>
     </div>
     <div class="btn-row"><button class="btn secondary" id="pf-demographics-save">Save</button></div>`;
   document.getElementById('pf-demographics-save').addEventListener('click', async () => {
+    const dob = readDateOfBirth('pf-dob');
+    document.getElementById('pf-dob-error').textContent = dob.error || '';
+    if (dob.error) return;
+    if ((dob.value || '') !== dateOfBirth) await withStatus(sb.rpc('set_date_of_birth', { p_date: dob.value }), 'Saving...');
     await withStatus(sb.from('user_profiles').update({
-      age_bracket: document.getElementById('pf-age-bracket').value || null,
       gender: document.getElementById('pf-gender').value || null,
       profile_updated_at: new Date().toISOString(),
-    }).eq('user_id', userId), 'Saving...');
+    }).eq('user_id', profile.user_id), 'Saving...');
     await renderMyProfileView(main);
   });
 }

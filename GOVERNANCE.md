@@ -1,7 +1,10 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.18 (2026-11-06) — decisions taken by the Owner; all of phases 1 through 3 are built and
+**Status: v1.19 (2026-11-06) — decisions taken by the Owner; all of phases 1 through 3 are built and
 merged (migrations 80–115). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.19:** date of birth instead of age bracket (§5.19, migration 120, Owner's decision): the date is readable only by
+the person, the HR lead and Admins; the age group is computed from it, for those who need it.
 
 **What changed in v1.18:** the guides in Urdu, as drafts (§5.18, Owner's request): only Admins see them until they are reviewed.
 
@@ -971,6 +974,31 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
 - **A "?" beside a screen's title** opens its guide. **The Read aloud guide is visible to plain Users too** (Owner's
   decision, 2026-11-06, migration 117), since they can read aloud. Showing the guide isn't announcing the feature.
 - The old pages are kept in `_backup_help_pages_20261106`. Admins edit guides in place in the app.
+
+### 5.19 Date of birth (migration 120)
+
+- **Why:** a bracket goes out of date as people age. A date gives the right group every day, and will let Formation choose its
+  audience by age.
+- **Who sees what:**
+
+| Who | Sees |
+|---|---|
+| The person | Their own date |
+| HR lead, Admin | The date |
+| HR and Formation members, Coordinators | Only the age group |
+| Everyone else | Neither, for anyone but themselves |
+
+- **Permissions, not encoding (Owner's decision):** the date has its own table, `user_birth_dates`, with one rule for reading, enforced by
+  the database whatever the app does. It isn't in `user_profiles`, which Coordinators can read in full. Nobody writes it directly: a
+  person sets their own and an Admin anyone's through `set_date_of_birth()`. The value isn't copied to `archive_log`.
+- **The age group is computed, never stored,** by `age_bracket_of()`, the only place that defines the brackets. Others get it from
+  `people_age_brackets()`, which gives no date. The codes are those of the option list `age_bracket`, which holds the labels: keep them.
+- **Old brackets** can't become dates. They stand in, marked as declared, until the person gives the date, and are then cleared.
+- **At sign-up** the date is required. It can only travel through the account's metadata, so a trigger moves it to the table and removes it
+  from there. A bad date never blocks a sign-up.
+- **Asking those already registered:** a pop-up after sign-in, once per session, only for those with no date. It never blocks the app:
+  Later asks again after 7 days. English until the Urdu has been reviewed.
+- **Not built:** choosing a formation audience by age. Formation is to say first which brackets it needs: 18-30 and 31-65 may be too wide.
 
 ---
 
