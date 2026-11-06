@@ -1,7 +1,9 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.20 (2026-11-06) — decisions taken by the Owner; all of phases 1 through 3 are built and
+**Status: v1.21 (2026-11-06) — decisions taken by the Owner; all of phases 1 through 3 are built and
 merged (migrations 80–115). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.21:** Italian titles translated from English carry a visible mark (§5.20, migration 126, Owner's decision).
 
 **What changed in v1.20:** titles in three languages (§5.20, migration 122, Owner's decision): the Library shows the Urdu, English and Italian
 titles one under the other, Urdu at the top, and Italian gets a field of its own. Filling the missing titles is still to come.
@@ -1014,8 +1016,11 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
 - **The English title lives in two fields,** `title` and `en_title`, and different screens read different ones. The edit form now saves
   both, and shows `en_title` first.
 - **A new Italian version** gets its own title in `it_title` when it is created. Search covers `it_title`.
-- **Not yet done:** filling the missing titles, and what happens when a new text arrives without all three. As of 2026-11-06 only 1 of
-  1470 Works has a title in Urdu script. Titles translated by machine are drafts until someone has reviewed them, kept out of `ur_title`.
+- **Italian titles translated from English** (migration 126, Owner's decision, 2026-11-06) show "(translated)" beside them, because they may not be the
+  real title of the text. Someone who has checked one unticks the box in the edit form, and changing the title clears the mark as well. Titles found
+  elsewhere in the archive, and Word of Life titles made of the month and the year, carry no mark.
+- **Not yet done:** the Urdu titles, and what happens when a new text arrives without all three. As of 2026-11-06 only 1 of
+  1470 Works has a title in Urdu script. Urdu titles translated by machine are drafts until someone has reviewed them, kept out of `ur_title`.
 
 ---
 

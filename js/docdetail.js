@@ -9,7 +9,7 @@ import {
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, videoLinkHtml, mountAudioPlayer, eraseMyAudioFiles,
-} from './core.js?v=20261106210727';
+} from './core.js?v=20261106233522';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -777,6 +777,7 @@ async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
       ${textField('Title in Urdu', 'ur_title', doc.ur_title, 'text', 'auto')}
       ${textField('Title in English', 'title', doc.en_title || doc.title)}
       ${textField('Title in Italian', 'it_title', doc.it_title)}
+      ${doc.it_title_translated ? '<div class="field"><label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:12.5px;"><input type="checkbox" id="f-it-translated" checked> Italian title translated from English, not checked. Untick it once checked.</label></div>' : ''}
       ${textField('Original title', 'original_title', doc.original_title, 'text', 'auto')}
       ${textField('Place', 'place', doc.place)}
       ${textField('Reference date', 'ref_date', doc.ref_date, 'date')}
@@ -886,6 +887,9 @@ async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
     const recipientVal = document.getElementById('f-doc-recipient').value;
     out.recipient = recipientVal ? [recipientVal] : null;
     out.pending_deletion = document.getElementById('f-pending-deletion').checked;
+    // Changing the Italian title clears this on the server too (126_italian_titles_translated.sql).
+    const translated = document.getElementById('f-it-translated');
+    if (translated) out.it_title_translated = translated.checked;
     return out;
   }
   function collectCollections() {

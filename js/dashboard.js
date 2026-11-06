@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml } from './core.js?v=20261106210727';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261106210727';
+import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml } from './core.js?v=20261106233522';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261106233522';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
@@ -173,7 +173,7 @@ export async function renderDashboardView(main) {
 // .or() as the title/tag ilike below because it reads a different table, so it runs first as a
 // separate query and its document_ids are added as one more branch of that same .or().
 async function buildDashQuery(selectAll) {
-  let q = sb.from('documents').select(selectAll ? '*' : 'document_id,category,author,main_topic,recipient,title,original_title,en_title,ur_title,it_title,place,ref_date,pending_deletion,is_preferred,access_level,work_id,media_type');
+  let q = sb.from('documents').select(selectAll ? '*' : 'document_id,category,author,main_topic,recipient,title,original_title,en_title,ur_title,it_title,it_title_translated,place,ref_date,pending_deletion,is_preferred,access_level,work_id,media_type');
   const f = State.dashFilters;
   if (f.search && f.search.trim()) {
     const term = f.search.trim();
