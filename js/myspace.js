@@ -2,7 +2,7 @@
 // PROJECT_HANDOFF_v15.md). Personal and private: each user only ever sees their own favorites,
 // enforced by RLS on user_favorites, not by anything in this module.
 
-import { sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup, openFormationPostPopup, canReviewApplications, canWrite, openTranslatePopup } from './core.js?v=20261107205757';
+import { sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup, openFormationPostPopup, canReviewApplications, canWrite, openTranslatePopup } from './core.js?v=20261107210605';
 
 export async function renderMySpaceView(main) {
   const rows = await withStatus(sb.from('user_favorites')
@@ -96,6 +96,8 @@ async function renderMyTokens(box) {
       <h2>Tokens of appreciation <span class="count-badge">${esc(t.total)}</span></h2>
       <p class="hint">A thank-you for what you give the archive outside tasks. They are a sign of gratitude, never money.${t.waiting ? ` ${t.waiting === 1 ? 'One of your gifts is' : esc(t.waiting) + ' of your gifts are'} waiting to be counted.` : ''}${t.next_milestone ? ` ${esc(t.next_milestone - t.total)} more to your next certificate.` : ''}</p>
       ${t.encouragement ? `<div class="note" dir="auto" style="margin:8px 0;">${esc(t.encouragement)}</div>` : ''}
+      ${t.minor ? '' : `<label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:13px;margin:8px 0;">
+        <input type="checkbox" id="tok-consent" ${t.consent ? 'checked' : ''} style="width:auto;"> Thank me by name in the monthly thanks, in the app and in Hayat</label>`}
       ${certificates.length ? `<h3>Your certificates</h3>${certificates.map((c, i) => `
         <div class="dash-card"><div class="dash-card-title">Certificate of appreciation — ${esc(c.milestone)} tokens</div>
           <div class="dash-card-meta">${esc((c.issued_at || '').slice(0, 10))} &middot; code ${esc(c.code)}</div>
@@ -104,12 +106,16 @@ async function renderMyTokens(box) {
       <div class="help-list">${entries.map(e => `
         <div class="dash-card">
           <div class="dash-card-title" dir="auto">${e.document_id ? `#${esc(e.document_id)} ${esc(e.title) || ''}` : esc(TOKEN_KINDS[e.kind] || e.kind)}</div>
-          <div class="dash-card-meta">${esc(TOKEN_KINDS[e.kind] || e.kind)} &middot; ${esc(size(e))} &middot; ${e.annulled ? 'annulled' : (e.tokens == null ? 'waiting' : `${esc(e.tokens)} tokens`)}${e.listens != null ? ` &middot; listened ${esc(e.listens)} ${Number(e.listens) === 1 ? 'time' : 'times'}` : ''}${e.past ? ' &middot; before tokens existed' : ''}</div>
+          <div class="dash-card-meta">${esc(TOKEN_KINDS[e.kind] || e.kind)} &middot; ${esc(size(e))} &middot; ${e.annulled ? 'annulled' : (e.tokens == null ? 'waiting' : `${esc(e.tokens)} tokens`)}${e.listens != null ? ` &middot; listened ${esc(e.listens)} ${Number(e.listens) === 1 ? 'time' : 'times'}` : ''}${e.opens != null ? ` &middot; opened ${esc(e.opens)} ${Number(e.opens) === 1 ? 'time' : 'times'}` : ''}${e.past ? ' &middot; before tokens existed' : ''}</div>
           ${e.annulled && e.annul_note ? `<div class="hint">${esc(e.annul_note)}</div>` : ''}
           ${e.note && !e.document_id ? `<div class="hint">${esc(e.note)}</div>` : ''}
         </div>`).join('')}</div>
     </div>`;
   box.querySelectorAll('.tok-print').forEach(b => b.addEventListener('click', () => printCertificate(certificates[Number(b.dataset.i)], t.name)));
+  document.getElementById('tok-consent')?.addEventListener('change', async e => {
+    const { error } = await sb.rpc('set_token_thanks_consent', { p_consent: e.target.checked });
+    if (error) { alert(error.message); e.target.checked = !e.target.checked; }
+  });
 }
 
 // The certificate on its own page, ready to print or to save as PDF from the print dialog.

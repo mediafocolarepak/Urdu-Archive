@@ -9,7 +9,7 @@ import {
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, videoLinkHtml, mountAudioPlayer, eraseMyAudioFiles,
-} from './core.js?v=20261107205757';
+} from './core.js?v=20261107210605';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -718,7 +718,13 @@ export async function renderDocDetail(id, opts = {}) {
 
   const canEdit = isCoordinator() || isAdmin();
   renderDocDetailConsultation(box, doc, siblings, docCollections, canEdit, text, originalText, media);
+  // Counted anonymously, once per opening, for whoever gave the text (migration 129): never who opened it.
+  if (lastCountedOpen !== doc.document_id && (doc.media_type || 'DOC') === 'DOC') {
+    lastCountedOpen = doc.document_id;
+    sb.rpc('count_document_open', { p_document_id: doc.document_id }).then(() => {}, () => {});
+  }
 }
+let lastCountedOpen = null;
 
 // Opens the full field editor for a document in a full-screen overlay (Coordinator/Admin only,
 // triggered by the "Edit" button in the consultation panel). Re-fetches its own data rather

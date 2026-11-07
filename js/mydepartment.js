@@ -7,10 +7,10 @@ import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
   nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved,
   helpLinkHtml,
-} from './core.js?v=20261107205757';
-import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261107205757';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261107205757';
-import { renderApplicationsView } from './collaboration.js?v=20261107205757';
+} from './core.js?v=20261107210605';
+import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261107210605';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261107210605';
+import { renderApplicationsView } from './collaboration.js?v=20261107210605';
 
 // Each department's page opens its own guide from the "?" beside the title.
 const DEPT_GUIDES = { HR: 'dept-hr', COORD: 'dept-coordination', FORM: 'dept-formation', RF: 'dept-reward', COMM: 'dept-communication', ARCHIVE: 'dept-archive' };
@@ -956,6 +956,14 @@ async function renderRewardTokens(box) {
       </div>
       <div class="btn-row"><button class="btn secondary" id="tok-verify">Check</button><span id="tok-verify-result" class="hint"></span></div>
 
+      <h3 style="margin-top:16px;">Public thanks for a month</h3>
+      <p class="hint">Only adults who agreed in My Space, with a name, and what they gave that month. No ranking. Copy it for Communication, who publishes it in the app and in Hayat.</p>
+      <div class="field-grid">
+        <div class="field"><label>Month</label><input id="tok-thanks-month" type="month"></div>
+      </div>
+      <div class="btn-row"><button class="btn secondary" id="tok-thanks-show">Show the list</button><button class="btn secondary" id="tok-thanks-copy" disabled>Copy</button></div>
+      <div id="tok-thanks-box"></div>
+
       <h3 style="margin-top:16px;">A batch of Urdu title answers received</h3>
       <p class="hint">One unit for each batch a reviewer sends (docs/TOKEN_POLICY.md §2). Someone else in Reward gives it for your own answers.</p>
       <div class="field-grid">
@@ -990,6 +998,25 @@ async function renderRewardTokens(box) {
       fields: [{ name: 'text', label: 'Text', type: 'text', value: t.text }], onSaved: again,
     });
   }));
+  const monthInput = document.getElementById('tok-thanks-month');
+  const now = new Date();
+  monthInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  let thanksText = '';
+  box.querySelector('#tok-thanks-show').addEventListener('click', async () => {
+    const out = document.getElementById('tok-thanks-box');
+    if (!monthInput.value) return;
+    const rows = await withStatus(sb.rpc('reward_public_thanks', { p_month: monthInput.value + '-01' }));
+    const what = r => [[r.proposals, 'proposal', 'proposals'], [r.readings, 'reading aloud', 'readings aloud'], [r.reports, 'useful report', 'useful reports'], [r.titles, 'batch of Urdu titles', 'batches of Urdu titles']]
+      .filter(([n]) => Number(n) > 0).map(([n, one, many]) => `${n} ${Number(n) === 1 ? one : many}`).join(', ');
+    const lines = rows.map(r => `${r.full_name}: ${what(r)}`);
+    const monthName = new Date(monthInput.value + '-01T12:00:00').toLocaleString('en', { month: 'long', year: 'numeric' });
+    thanksText = lines.length ? `Thank you, ${monthName}\n${lines.join('\n')}` : '';
+    out.innerHTML = lines.length ? `<pre style="white-space:pre-wrap;" dir="auto">${esc(thanksText)}</pre>` : '<div class="empty-msg">Nobody to thank in public for this month.</div>';
+    document.getElementById('tok-thanks-copy').disabled = !lines.length;
+  });
+  box.querySelector('#tok-thanks-copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(thanksText); alert('Copied.'); } catch { alert('Copying is not allowed here: select the text and copy it.'); }
+  });
   box.querySelector('#tok-verify').addEventListener('click', async () => {
     const out = document.getElementById('tok-verify-result');
     const code = document.getElementById('tok-verify-code').value.trim();

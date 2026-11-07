@@ -120,6 +120,6 @@ contribution gives tokens once, in a number that recognizes its size.
 
 - [x] Decisions of the Owner: name, no money, public thanks, past contributions (7 November 2026)
 - [x] Reward's questions answered by the Owner (7 November 2026)
-- [ ] Built
+- [x] Built (migrations 127, 128, 129, 7 November 2026)
 - [ ] Numbers and texts set in the Reward department's page
 - [ ] Announced by Communication (Read aloud only once it is announced itself)
