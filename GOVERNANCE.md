@@ -1,7 +1,9 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.24 (2026-11-07) — decisions taken by the Owner; all of phases 1 through 3 are built and
+**Status: v1.25 (2026-11-07) — decisions taken by the Owner; all of phases 1 through 3 are built and
 merged (migrations 80–115). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.25:** tokens of appreciation, third part (§5.21, migration 129): useful reports, openings of a text, public thanks.
 
 **What changed in v1.24:** tokens of appreciation, second part (§5.21, migration 128): milestones, certificates, and the tokens in My Space.
 
@@ -1050,7 +1052,13 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
   can check (Reward's page). A milestone moved or removed doesn't take back certificates already issued.
 - **In My Space** each person sees their tokens, what they gave, how many times each reading of theirs was listened to (counted anonymously
   since migration 114), their certificates, ready to print, and, if under 18, the word of encouragement.
-- **Not yet built:** tokens for a useful problem report, the anonymous count of text openings, the monthly public thanks.
+- **A useful problem report** (migration 129): whoever handles reports (Coordinator, Admin) marks in Messages that a report led to a
+  correction, and its author receives one unit, once per report, never for one's own.
+- **Openings of a text** are counted anonymously, by document and day, never by person, like the listens of a recording, and shown in My
+  Space to whoever gave the text.
+- **Public thanks:** each adult gives or withdraws, in My Space, their consent to be thanked by name; it is never asked of those under 18.
+  Reward's page lists, for a month, those who consented and what they gave (no ranking, no past or annulled entries), for Communication to
+  publish in the app (for example as a Start Here card) and in Hayat.
 
 ---
 

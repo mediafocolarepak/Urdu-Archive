@@ -3,7 +3,7 @@
 // admins see every message and can reply + dismiss. Everything stays in chat_messages
 // forever - "dismiss" is a soft flag hiding a row from the admin's default list, not a delete.
 
-import { sb, State, esc, canReviewApplications, withStatus, nameMapForEmails, labelOf } from './core.js?v=20261107205757';
+import { sb, State, esc, canReviewApplications, withStatus, nameMapForEmails, labelOf } from './core.js?v=20261107210605';
 
 // Report types are admin-editable from Options ("Report type" list) - see OPTION_LIST_NAMES
 // in core.js and 55_report_types.sql for the seed. Read fresh each time rather than cached in
@@ -89,7 +89,7 @@ export async function renderAdminMessagesView(main) {
         <div class="field"><label>&nbsp;</label><label style="text-transform:none;font-size:13px;"><input id="msg-filter-dismissed" type="checkbox" style="width:auto;"> Show dismissed</label></div>
       </div>
       <div class="grid-wrap"><table class="grid" id="msg-grid">
-        <thead><tr><th>Date/time</th><th>User</th><th>Type</th><th>Doc ID</th><th>Message</th><th>Reply</th><th></th><th></th></tr></thead>
+        <thead><tr><th>Date/time</th><th>User</th><th>Type</th><th>Doc ID</th><th>Message</th><th>Reply</th><th></th><th></th><th>Led to a correction</th></tr></thead>
         <tbody id="msg-grid-body"></tbody>
       </table></div>
     </div>`;
@@ -114,6 +114,10 @@ async function refreshAdminMessages() {
   const rows = await withStatus(query);
   const filtered = emailFilter ? rows.filter(r => (r.user_email || '').toLowerCase().includes(emailFilter)) : rows;
   const nameMap = await nameMapForEmails(filtered.map(r => r.user_email));
+  // A report that led to a correction gives its author a token of appreciation (docs/TOKEN_POLICY.md, migration 129).
+  const { data: markedRows } = await sb.rpc('token_marked_reports');
+  const marked = new Set((markedRows || []).map(m => String(m.chat_message_id)));
+  const { data: { user: me } } = await sb.auth.getUser();
 
   const body = document.getElementById('msg-grid-body');
   body.innerHTML = filtered.map(r => `
@@ -129,7 +133,10 @@ async function refreshAdminMessages() {
         <button class="btn danger msg-dismiss-btn" style="padding:4px 10px;">Dismiss</button>
       </td>
       <td><button class="btn msg-create-task-btn" style="padding:4px 10px;">Create task</button></td>
-    </tr>`).join('') || '<tr><td colspan="8">No messages match the current filters.</td></tr>';
+      <td>${marked.has(String(r.id)) ? '<span class="hint">Yes, thanked</span>'
+        : (r.user_id === me.id ? '<span class="hint">Your own</span>'
+          : '<button class="btn secondary msg-corrected-btn" style="padding:4px 10px;">It led to a correction</button>')}</td>
+    </tr>`).join('') || '<tr><td colspan="9">No messages match the current filters.</td></tr>';
 
   body.querySelectorAll('tr[data-id]').forEach(tr => {
     const id = tr.dataset.id;
@@ -144,6 +151,12 @@ async function refreshAdminMessages() {
     });
     tr.querySelector('.msg-dismiss-btn').addEventListener('click', async () => {
       await withStatus(sb.from('chat_messages').update({ dismissed: true }).eq('id', id), 'Dismissing...');
+      await refreshAdminMessages();
+    });
+    tr.querySelector('.msg-corrected-btn')?.addEventListener('click', async () => {
+      if (!confirm('Did this report lead to a correction? Its author receives a token of appreciation.')) return;
+      const { error } = await sb.rpc('token_give_for_report', { p_message_id: Number(id) });
+      if (error) { alert(error.message); return; }
       await refreshAdminMessages();
     });
     tr.querySelector('.msg-create-task-btn').addEventListener('click', async () => {
