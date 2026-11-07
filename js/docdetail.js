@@ -9,7 +9,8 @@ import {
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, videoLinkHtml, mountAudioPlayer, eraseMyAudioFiles,
-} from './core.js?v=20261107220246';
+  textDir,
+} from './core.js?v=20261107224758';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -40,7 +41,7 @@ function renderDocSummary(doc) {
 // reviewed is labelled as an unverified automatic transcription, per the warning already
 // written into 68_document_texts.sql when the table was created: presenting machine-converted
 // text as authoritative before a human has read it would be worse than not showing it at all.
-function renderDocTextBox(text) {
+function renderDocTextBox(text, language) {
   if (!text) return '';
   const chars = text.char_count || (text.body || '').length;
   return `
@@ -49,7 +50,7 @@ function renderDocTextBox(text) {
         <label style="margin:0;">Text <span class="hint">(${chars.toLocaleString()} characters)</span></label>
         <span style="cursor:pointer;text-decoration:underline;font-size:12.5px;" id="doc-text-toggle">Show</span>
       </div>
-      <div id="doc-text-body" dir="auto" style="display:none;white-space:pre-wrap;font-size:14px;line-height:1.8;margin-top:6px;max-height:60vh;overflow-y:auto;">${esc(text.body)}</div>
+      <div id="doc-text-body" dir="${textDir(text.body, language)}" style="display:none;white-space:pre-wrap;font-size:14px;line-height:1.8;margin-top:6px;max-height:60vh;overflow-y:auto;">${esc(text.body)}</div>
     </div>`;
 }
 
@@ -144,8 +145,8 @@ function openReadingView(doc, text) {
     </div>
     <div class="reading-body" id="rv-scroll">
       <div class="reading-title">${esc(doc.en_title)}</div>
-      ${doc.ur_title ? `<div class="reading-title" dir="auto">${esc(doc.ur_title)}</div>` : ''}
-      <div id="rv-text" class="reading-text" dir="auto">${esc(text.body)}</div>
+      ${doc.ur_title ? `<div class="reading-title" dir="rtl">${esc(doc.ur_title)}</div>` : ''}
+      <div id="rv-text" class="reading-text" dir="${textDir(text.body, doc.language)}">${esc(text.body)}</div>
     </div>`;
   document.body.appendChild(view);
   const textEl = document.getElementById('rv-text');
@@ -175,7 +176,7 @@ function openDocTextPopup(doc, text) {
   backdrop.innerHTML = `
     <div class="panel overlay-panel">
       <h2 style="margin-top:0;">Text</h2>
-      <textarea id="doc-text-popup-body" readonly dir="auto" style="width:100%;min-height:50vh;font-size:14px;line-height:1.8;">${esc(text.body)}</textarea>
+      <textarea id="doc-text-popup-body" readonly dir="${textDir(text.body, doc.language)}" style="width:100%;min-height:50vh;font-size:14px;line-height:1.8;">${esc(text.body)}</textarea>
       <div class="btn-row" style="justify-content:flex-end;margin-top:8px;">
         <button class="btn secondary" id="doc-text-popup-copy">Copy</button>
         <button class="btn secondary" id="doc-text-popup-report">Report a problem</button>
@@ -275,7 +276,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
       <label>Collections</label>
       <div style="font-size:13px;padding:4px 0;">${renderCollectionsSummary(docCollections)}</div>
     </div>
-    ${renderDocTextBox(text)}
+    ${renderDocTextBox(text, doc.language)}
     ${renderWorkSiblingsHtml(workSiblings, doc.document_id, false)}
     ${doc.storage_path ? `<div class="field"><label>File</label><a href="#" id="doc-download">Download</a></div>` : ''}
     ${canEdit ? renderDocTasksBox(doc) : ''}

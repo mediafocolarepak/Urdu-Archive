@@ -7,8 +7,8 @@ import {
   sb, State, esc, withStatus, optionsHtml, labelOf, isAdmin, isCoordinator, canManageReserved, canWrite, BUCKET, likeSafe,
   titleOverlapScore, ACCESS_LEVELS, readPdfPageCountFromBlob, getDriveAccessToken, uploadPdfToGDrive,
   AUDIO_BUCKET, AUDIO_FORMATS, audioFileProblem, audioDurationOf, HIDDEN_DOC_STATUSES, isMediaLinkOk, videoLinkHtml, mountAudioPlayer,
-  helpLinkHtml,
-} from './core.js?v=20261107220246';
+  helpLinkHtml, textDir,
+} from './core.js?v=20261107224758';
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // the Supabase Free plan's limit per file
 const FORMATS = [['DOC', 'Text or PDF'], ['AUD', 'Audio'], ['VID', 'Video']];
@@ -414,7 +414,7 @@ function renderVersions() {
           <div class="hint">MP3 or M4A plays on every phone. Up to 25 MB, which is about 50 minutes of voice.</div></div>
       </div>
       <div class="pv-doc" style="display:${!v.media_type || v.media_type === 'DOC' ? 'block' : 'none'};">
-      <div class="field"><label>Text</label><textarea class="pv-body" dir="auto" rows="6">${esc(v.body)}</textarea></div>
+      <div class="field"><label>Text</label><textarea class="pv-body" dir="${textDir(v.body, v.language)}" rows="6">${esc(v.body)}</textarea></div>
       <div class="field"><label>Or load the text from Word <span class="hint">(.docx; the file itself is not kept)</span></label><input class="pv-word" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"><div class="hint pv-word-status"></div></div>
       <div class="field"><label>PDF file ${v.draft_path ? '<span class="hint">(already attached; choose another to replace it)</span>' : ''}</label><input class="pv-file" type="file" accept=".pdf"></div>
       </div>
@@ -439,6 +439,11 @@ function renderVersions() {
       if (problem) { alert(problem); e.target.value = ''; form.versions[i].audioFile = null; return; }
       form.versions[i].audioFile = file;
     });
+    // The text box follows the language chosen, or its letters while the language is not chosen.
+    const bodyBox = card.querySelector('.pv-body');
+    const setBodyDir = () => { bodyBox.dir = textDir(bodyBox.value, card.querySelector('.pv-language').value); };
+    bodyBox.addEventListener('input', setBodyDir);
+    card.querySelector('.pv-language').addEventListener('change', setBodyDir);
     card.querySelector('.pv-word').addEventListener('change', async e => {
       const file = e.target.files[0];
       e.target.value = '';
@@ -449,6 +454,7 @@ function renderVersions() {
       status.textContent = 'Reading the file...';
       const ok = await act(async () => {
         body.value = await textFromWord(file);
+        setBodyDir();
         status.textContent = `Text loaded from "${file.name}". Please check it: layout and images are not carried over.`;
       });
       if (!ok) status.textContent = '';
@@ -686,7 +692,7 @@ async function renderDetail(main, id) {
           ${v.duration ? `<div class="hint">Duration: ${esc(v.duration)}</div>` : ''}
           ${v.media_type === 'VID' ? `<div class="btn-row">${v.external_url ? videoLinkHtml(v.external_url, 'Watch the video', true) : '<span class="hint">No link yet.</span>'}</div>` : ''}
           ${v.media_type === 'AUD' ? `<div class="pd-audio">${v.audio_path ? '' : '<span class="hint">No recording yet.</span>'}</div>` : ''}
-          ${v.media_type !== 'DOC' ? '' : v.body ? `<div dir="auto" style="white-space:pre-wrap;max-height:320px;overflow:auto;border:1px solid var(--line);padding:8px;margin:6px 0;">${esc(v.body)}</div>` : '<div class="hint">No text: only searchable by title and tags.</div>'}
+          ${v.media_type !== 'DOC' ? '' : v.body ? `<div dir="${textDir(v.body, v.language)}" style="white-space:pre-wrap;max-height:320px;overflow:auto;border:1px solid var(--line);padding:8px;margin:6px 0;">${esc(v.body)}</div>` : '<div class="hint">No text: only searchable by title and tags.</div>'}
           ${v.draft_path ? '<div class="btn-row"><button class="btn secondary pd-file">Open the PDF</button></div>' : ''}
           ${canDecide && v.body ? `<label style="display:flex;align-items:center;gap:8px;margin-top:6px;text-transform:none;letter-spacing:normal;font-size:13.5px;"><input type="checkbox" class="pd-read" style="width:auto;flex:none;" value="${esc(v.document_id)}"> I have read this text against its source</label>` : ''}
         </div>`).join('')}
