@@ -999,6 +999,19 @@ export async function maybeAskDateOfBirth() {
   });
 }
 
+// ---------- Direction of a text ----------
+// dir="auto" looks only at the first letter, so an Urdu text that opens with a Latin word (a heading, "DUA", a
+// reference) was shown left to right as a whole. The document's language decides first; otherwise most letters do.
+const RTL_LANGUAGES = new Set(['URD']);
+export function textDir(text, language) {
+  if (language && RTL_LANGUAGES.has(language)) return 'rtl';
+  const s = String(text || '').slice(0, 5000);
+  const rtl = (s.match(/[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/g) || []).length;
+  const ltr = (s.match(/[A-Za-z\u00C0-\u024F]/g) || []).length;
+  if (!rtl && !ltr) return 'auto';
+  return rtl > ltr ? 'rtl' : 'ltr';
+}
+
 // ---------- Splash-screen announcements ----------
 // Shown once per browser session (not on every tab switch), and again after a fresh
 // login - the sessionStorage flag is set here and cleared by the sign-out handler below.
