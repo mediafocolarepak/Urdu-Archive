@@ -1,7 +1,9 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.23 (2026-11-07) — decisions taken by the Owner; all of phases 1 through 3 are built and
+**Status: v1.24 (2026-11-07) — decisions taken by the Owner; all of phases 1 through 3 are built and
 merged (migrations 80–115). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.24:** tokens of appreciation, second part (§5.21, migration 128): milestones, certificates, and the tokens in My Space.
 
 **What changed in v1.23:** tokens of appreciation, first part (§5.21, migration 127, docs/TOKEN_POLICY.md): what people give outside tasks is recognized, never with money.
 
@@ -1040,8 +1042,15 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
 - **A ledger that is only added to** (`token_events`): no write rule for anyone, nothing deleted, an entry changed only once, from waiting
   to valued. Only Reward annuls, with a note, in a separate entry (`token_annulments`), and never its own tokens. Reward also gives the
   unit for a batch of Urdu title answers. Each person can read their own entries.
-- **Not yet built:** tokens for a useful problem report, milestones and the certificate, the section in My Space, the anonymous count of
-  listens and openings, the monthly public thanks.
+- **Milestones and texts** (migration 128) are also Reward's, changed by proposal and approval like the values: the milestones
+  (`token_milestones`), the certificate's sentence and its signer, a Focolare responsible, and the word of encouragement for those under 18
+  (`token_texts`). Policy proposals accept these two tables.
+- **A certificate of appreciation** (`token_certificates`) is issued by itself when a person's tokens reach a milestone, and waits while the
+  sentence or the signer is empty. It keeps the sentence and signer it was issued with, never changes, and has a code anyone signed in
+  can check (Reward's page). A milestone moved or removed doesn't take back certificates already issued.
+- **In My Space** each person sees their tokens, what they gave, how many times each reading of theirs was listened to (counted anonymously
+  since migration 114), their certificates, ready to print, and, if under 18, the word of encouragement.
+- **Not yet built:** tokens for a useful problem report, the anonymous count of text openings, the monthly public thanks.
 
 ---
 
