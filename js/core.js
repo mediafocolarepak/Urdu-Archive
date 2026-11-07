@@ -1493,7 +1493,9 @@ export function wireAuthButtons() {
   document.getElementById('logout-btn').addEventListener('click', () => {
     sessionStorage.removeItem('splashShown');
     sessionStorage.removeItem('dobAsked');
-    sb.auth.signOut();
+    // A fresh page after signing out, so that nothing the screens kept in memory (the Help guides, qualifications)
+    // carries over to the next person who signs in on the same phone.
+    sb.auth.signOut().finally(() => location.reload());
   });
 
   document.getElementById('forgot-password-link').addEventListener('click', async () => {
