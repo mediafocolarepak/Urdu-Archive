@@ -7,10 +7,10 @@ import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
   nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved,
   helpLinkHtml,
-} from './core.js?v=20261107190326';
-import { renderPolicySection } from './policy.js?v=20261107190326';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261107190326';
-import { renderApplicationsView } from './collaboration.js?v=20261107190326';
+} from './core.js?v=20261107204730';
+import { renderPolicySection } from './policy.js?v=20261107204730';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261107204730';
+import { renderApplicationsView } from './collaboration.js?v=20261107204730';
 
 // Each department's page opens its own guide from the "?" beside the title.
 const DEPT_GUIDES = { HR: 'dept-hr', COORD: 'dept-coordination', FORM: 'dept-formation', RF: 'dept-reward', COMM: 'dept-communication', ARCHIVE: 'dept-archive' };
@@ -51,6 +51,7 @@ export async function renderMyDepartmentView(main) {
     ${selected === 'RF' ? '<div id="mydept-credits-box"></div>' : ''}
     ${selected === 'RF' ? '<div id="mydept-compensation-box"></div>' : ''}
     ${selected === 'RF' ? '<div id="mydept-anomalies-box"></div>' : ''}
+    ${selected === 'RF' ? '<div id="mydept-tokens-box"></div>' : ''}
     ${selected === 'COORD' ? '<div id="mydept-tasks-box"></div>' : ''}
     ${selected === 'FORM' ? '<div id="mydept-formation-box"></div>' : ''}
     ${selected === 'FORM' && canManageReserved() ? '<div id="mydept-reserved-box"></div>' : ''}
@@ -88,6 +89,8 @@ export async function renderMyDepartmentView(main) {
   // anomaly report - the two pieces migration 88 left open.
   if (selected === 'RF') await renderCompensationRuns(document.getElementById('mydept-compensation-box'));
   if (selected === 'RF') await renderRewardAnomalies(document.getElementById('mydept-anomalies-box'));
+  // Tokens of appreciation (docs/TOKEN_POLICY.md, migration 127): what people gave outside tasks.
+  if (selected === 'RF') await renderRewardTokens(document.getElementById('mydept-tokens-box'));
   // Coordination needs a live flow overview - counts plus who to follow up with - since
   // Tasks -> Team overview (js/tasks.js) only ever shows a filtered list, no counts, and
   // excludes open (unclaimed) tasks entirely. Read-only here: reassigning/reclaiming a task
@@ -882,6 +885,77 @@ async function renderRewardAnomalies(box) {
         </tr>`).join('') : '<tr><td colspan="6" class="empty-msg">Nobody is flagged right now.</td></tr>'}</tbody>
       </table></div>
     </div>`;
+}
+
+// ---------- Tokens of appreciation (docs/TOKEN_POLICY.md, migration 127) ----------
+// Given by themselves when a proposal or a reading is published, by pages or minutes. Never money.
+// Their values are in Policy values below (token_per_page, token_per_minute, token_per_unit): while one is 0,
+// its entries wait, and they are valued as soon as the value is approved.
+const TOKEN_KINDS = { proposal: 'Proposal', reading: 'Reading aloud', report: 'Useful report', titles: 'Urdu titles reviewed' };
+const TOKEN_UNITS = { page: ['page', 'pages'], minute: ['minute', 'minutes'], unit: ['unit', 'units'] };
+
+async function renderRewardTokens(box) {
+  const [people, entries] = await Promise.all([
+    withStatus(sb.rpc('reward_token_people')),
+    withStatus(sb.rpc('reward_token_entries', { p_limit: 100 })),
+  ]);
+  const waiting = people.reduce((n, p) => n + Number(p.waiting || 0), 0);
+  const size = e => `${e.units} ${TOKEN_UNITS[e.unit][e.units === 1 ? 0 : 1]}${e.size_recorded ? '' : ' (size not recorded)'}`;
+  const tokensCell = e => e.annulled ? `<s>${esc(e.tokens ?? '—')}</s>` : (e.tokens == null ? '<span class="hint">waiting</span>' : esc(e.tokens));
+  const what = e => e.document_id ? `#${esc(e.document_id)} ${esc(e.title) || ''}` : esc(e.note) || '—';
+
+  box.innerHTML = `
+    <div class="panel">
+      <h2>Tokens of appreciation <span class="hint">— docs/TOKEN_POLICY.md</span></h2>
+      <p class="hint">Given by themselves when a proposal or a reading is published, by its pages or minutes. Tokens are never money. How many tokens a page, a minute or a unit is worth is set in Policy values below; while a value is 0, the tokens wait${waiting ? ` (${waiting} entries waiting now)` : ''}, and they are counted as soon as the value is approved.</p>
+
+      <h3>Who gave <span class="count-badge">${people.length}</span></h3>
+      <div class="grid-wrap"><table class="grid">
+        <thead><tr><th>Person</th><th>Tokens</th><th>Contributions</th><th>Waiting</th><th>Annulled</th><th>Last</th></tr></thead>
+        <tbody>${people.length ? people.map(p => `<tr>
+          <td>${esc(p.full_name) || esc(p.email)}</td><td>${esc(p.tokens)}</td><td>${esc(p.entries)}</td>
+          <td>${esc(p.waiting)}</td><td>${esc(p.annulled)}</td><td>${esc((p.last_at || '').slice(0, 10))}</td>
+        </tr>`).join('') : '<tr><td colspan="6" class="empty-msg">Nobody has received tokens yet.</td></tr>'}</tbody>
+      </table></div>
+
+      <h3 style="margin-top:16px;">Latest entries</h3>
+      <div class="grid-wrap"><table class="grid">
+        <thead><tr><th>Date</th><th>Person</th><th>For</th><th>What</th><th>Size</th><th>Tokens</th><th></th></tr></thead>
+        <tbody>${entries.length ? entries.map(e => `<tr>
+          <td>${esc((e.created_at || '').slice(0, 10))}${e.past ? ' <span class="count-badge">before tokens</span>' : ''}</td>
+          <td>${esc(e.user_email) || '—'}</td><td>${esc(TOKEN_KINDS[e.kind] || e.kind)}</td>
+          <td style="white-space:normal;">${what(e)}</td><td>${esc(size(e))}</td><td>${tokensCell(e)}</td>
+          <td>${e.annulled ? `<span class="hint">Annulled: ${esc(e.annul_note)}</span>`
+            : `<button class="btn secondary tok-annul" style="padding:4px 10px;" data-id="${esc(e.id)}">Annul</button>`}</td>
+        </tr>`).join('') : '<tr><td colspan="7" class="empty-msg">No entries yet.</td></tr>'}</tbody>
+      </table></div>
+
+      <h3 style="margin-top:16px;">A batch of Urdu title answers received</h3>
+      <p class="hint">One unit for each batch a reviewer sends (docs/TOKEN_POLICY.md §2). Someone else in Reward gives it for your own answers.</p>
+      <div class="field-grid">
+        <div class="field"><label>Reviewer's email</label><input id="tok-titles-email" type="email" autocomplete="off"></div>
+        <div class="field"><label>Which batch</label><input id="tok-titles-note" placeholder="for example: the file of 12 November, Titles filter"></div>
+      </div>
+      <div class="btn-row"><button class="btn" id="tok-titles-give">Give the tokens</button><span id="tok-titles-status" class="hint"></span></div>
+    </div>`;
+
+  box.querySelectorAll('.tok-annul').forEach(b => b.addEventListener('click', async () => {
+    const note = prompt('Why are these tokens annulled? (for example: a copy of a text already in the archive)');
+    if (note == null) return;
+    if (!note.trim()) { alert('Please say why.'); return; }
+    const { error } = await sb.rpc('token_annul', { p_event_id: Number(b.dataset.id), p_note: note.trim() });
+    if (error) { alert(error.message); return; }
+    await renderRewardTokens(box);
+  }));
+  document.getElementById('tok-titles-give').addEventListener('click', async () => {
+    const status = document.getElementById('tok-titles-status');
+    const email = document.getElementById('tok-titles-email').value.trim();
+    const note = document.getElementById('tok-titles-note').value.trim();
+    if (!email || !note) { status.textContent = 'Please give the email and say which batch.'; return; }
+    const { error } = await sb.rpc('token_give_for_titles', { p_email: email, p_note: note });
+    if (error) { status.textContent = error.message; return; }
+    await renderRewardTokens(box);
+  });
 }
 
 async function renderRoster(code) {

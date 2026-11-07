@@ -1,7 +1,9 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.22 (2026-11-07) — decisions taken by the Owner; all of phases 1 through 3 are built and
+**Status: v1.23 (2026-11-07) — decisions taken by the Owner; all of phases 1 through 3 are built and
 merged (migrations 80–115). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.23:** tokens of appreciation, first part (§5.21, migration 127, docs/TOKEN_POLICY.md): what people give outside tasks is recognized, never with money.
 
 **What changed in v1.22:** the Urdu guides, still drafts, are shown to plain Users too (§5.18, Owner's decision): better a guide in Urdu to correct later than none.
 
@@ -1024,6 +1026,22 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
   elsewhere in the archive, and Word of Life titles made of the month and the year, carry no mark.
 - **Not yet done:** the Urdu titles, and what happens when a new text arrives without all three. As of 2026-11-06 only 1 of
   1470 Works has a title in Urdu script. Urdu titles translated by machine are drafts until someone has reviewed them, kept out of `ur_title`.
+
+### 5.21 Tokens of appreciation (migration 127, docs/TOKEN_POLICY.md)
+
+- **Credits pay for work done as a task; tokens thank for a gift** (Owner's decision, 2026-11-07): a text proposed, a voice lent to a
+  text, a useful problem report, a batch of Urdu title answers. Tokens are never converted, bought, sold or transferred. The name is
+  "Token of appreciation", or "token", in English in every language of the app.
+- **Given by themselves** when a proposal or a reading is published: one entry per published version, by its pages or its minutes, to
+  whoever proposed or read it. Where the size isn't recorded, one unit. Contributions published before tokens existed were counted
+  once, marked as past.
+- **Reward sets the values** (`token_per_page`, `token_per_minute`, `token_per_unit` in Policy values), changed like every policy value.
+  While a value is 0 its entries wait; when it is approved they are valued at once, and a later change applies only from then on.
+- **A ledger that is only added to** (`token_events`): no write rule for anyone, nothing deleted, an entry changed only once, from waiting
+  to valued. Only Reward annuls, with a note, in a separate entry (`token_annulments`), and never its own tokens. Reward also gives the
+  unit for a batch of Urdu title answers. Each person can read their own entries.
+- **Not yet built:** tokens for a useful problem report, milestones and the certificate, the section in My Space, the anonymous count of
+  listens and openings, the monthly public thanks.
 
 ---
 

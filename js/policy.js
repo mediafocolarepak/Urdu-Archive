@@ -6,7 +6,7 @@
 // People: any department lead or Admin) and from admin.js (per-row "Propose..." buttons that
 // replace the old direct-edit inputs on the reputation-tiers/policy-values/task-category panels).
 
-import { sb, State, esc, withStatus, canProposePolicyChange, canApprovePolicyChange } from './core.js?v=20261107190326';
+import { sb, State, esc, withStatus, canProposePolicyChange, canApprovePolicyChange } from './core.js?v=20261107204730';
 
 // Who may propose a change to each policy_values key (GOVERNANCE.md §2.8 "who owns which
 // policy table"). task_category_rates and task_reputation_tiers are Reward's alone.
@@ -18,6 +18,9 @@ const POLICY_VALUE_OWNERS = {
   risk_window_days: ['HR', 'RF'],
   board_misuse_reputation_delta: ['FORM', 'HR'],
   task_near_due_days: ['COORD'],
+  token_per_page: ['RF'],
+  token_per_minute: ['RF'],
+  token_per_unit: ['RF'],
 };
 
 export function ownersFor(targetTable, targetKey) {
