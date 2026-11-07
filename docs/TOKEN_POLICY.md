@@ -1,9 +1,9 @@
 # Reward — Tokens of Appreciation
 
 **Author:** prepared for Alessandro Maggi (Owner), for the Reward department · **Date:** 7 November 2026
-**Status:** 🟡 rules decided by the Owner (7 November 2026); the numbers are set in the Reward department's page, as the
-credit rates are. Awaiting the Owner's approval to build: the software follows the policy (GOVERNANCE.md §2.4,
-"Policy before software").
+**Status:** 🟢 rules decided by the Owner (7 November 2026), ready to build. The numbers and the texts (the
+certificate's sentence, the word of encouragement for those under 18) are set in the Reward department's page, as the
+credit rates are.
 
 ---
 
@@ -85,7 +85,7 @@ contribution gives tokens once, in a number that recognizes its size.
 - **Only for those who agree**, with a consent they can withdraw at any time, as for the reader's name on a reading.
 - **No rankings and no comparisons**: the thanks names people and what they gave, not who gave more.
 - **People under 18 are never named in public.** They are thanked privately, in My Space, with a special word of
-  encouragement. The app knows their age from the date of birth.
+  encouragement, written in the Reward department's page. The app knows their age from the date of birth.
 
 ## 8. Contributions made before tokens existed
 
@@ -120,7 +120,6 @@ contribution gives tokens once, in a number that recognizes its size.
 
 - [x] Decisions of the Owner: name, no money, public thanks, past contributions (7 November 2026)
 - [x] Reward's questions answered by the Owner (7 November 2026)
-- [ ] Numbers set in the Reward department's page (once it is built)
-- [ ] Approved by the Owner, to build
 - [ ] Built
+- [ ] Numbers and texts set in the Reward department's page
 - [ ] Announced by Communication (Read aloud only once it is announced itself)
