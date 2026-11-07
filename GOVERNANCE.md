@@ -1,7 +1,9 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.21 (2026-11-06) — decisions taken by the Owner; all of phases 1 through 3 are built and
+**Status: v1.22 (2026-11-07) — decisions taken by the Owner; all of phases 1 through 3 are built and
 merged (migrations 80–115). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.22:** the Urdu guides, still drafts, are shown to plain Users too (§5.18, Owner's decision): better a guide in Urdu to correct later than none.
 
 **What changed in v1.21:** Italian titles translated from English carry a visible mark (§5.20, migration 126, Owner's decision).
 
@@ -972,8 +974,9 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
   qualifications, departments and boards (`help_pages.audience`). This is for clarity, not protection: any signed-in
   person can read any guide through the API, so guides must hold nothing confidential.
 - **Languages:** English, Italian and Urdu, one selector. **The Urdu was drafted with the translation skill at the Owner's request
-  (2026-11-06, migration 119), and stays a draft, seen by the team (Operators and up) but not by plain Users, until those who know Urdu well have reviewed it** (§1
-  principle 7). It is opened guide by guide with `help_pages.draft`. Plain Users then read Urdu first, unless they choose otherwise.
+  (2026-11-06, migration 119), and stays a draft until those who know Urdu well have reviewed it** (§1 principle 7). Since 2026-11-07 everyone sees it,
+  plain Users too, marked "draft" (Owner's decision: better a guide in Urdu to correct later than none). Plain Users read Urdu first,
+  unless they chose another language. The mark goes guide by guide with `help_pages.draft` once reviewed.
 - **Role guides** set out a person's field, what isn't theirs, and a suggested daily and weekly rhythm. **The rhythm is
   a suggestion, not a rule of this document.** Where a guide and this document differ, this document holds.
 - **A "?" beside a screen's title** opens its guide. **The Read aloud guide is visible to plain Users too** (Owner's
