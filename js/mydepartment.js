@@ -7,10 +7,10 @@ import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
   nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved,
   helpLinkHtml,
-} from './core.js?v=20261107204730';
-import { renderPolicySection } from './policy.js?v=20261107204730';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261107204730';
-import { renderApplicationsView } from './collaboration.js?v=20261107204730';
+} from './core.js?v=20261107205757';
+import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261107205757';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261107205757';
+import { renderApplicationsView } from './collaboration.js?v=20261107205757';
 
 // Each department's page opens its own guide from the "?" beside the title.
 const DEPT_GUIDES = { HR: 'dept-hr', COORD: 'dept-coordination', FORM: 'dept-formation', RF: 'dept-reward', COMM: 'dept-communication', ARCHIVE: 'dept-archive' };
@@ -895,9 +895,11 @@ const TOKEN_KINDS = { proposal: 'Proposal', reading: 'Reading aloud', report: 'U
 const TOKEN_UNITS = { page: ['page', 'pages'], minute: ['minute', 'minutes'], unit: ['unit', 'units'] };
 
 async function renderRewardTokens(box) {
-  const [people, entries] = await Promise.all([
+  const [people, entries, milestones, texts] = await Promise.all([
     withStatus(sb.rpc('reward_token_people')),
     withStatus(sb.rpc('reward_token_entries', { p_limit: 100 })),
+    withStatus(sb.from('token_milestones').select('*').order('tokens')),
+    withStatus(sb.from('token_texts').select('*').order('key')),
   ]);
   const waiting = people.reduce((n, p) => n + Number(p.waiting || 0), 0);
   const size = e => `${e.units} ${TOKEN_UNITS[e.unit][e.units === 1 ? 0 : 1]}${e.size_recorded ? '' : ' (size not recorded)'}`;
@@ -930,6 +932,30 @@ async function renderRewardTokens(box) {
         </tr>`).join('') : '<tr><td colspan="7" class="empty-msg">No entries yet.</td></tr>'}</tbody>
       </table></div>
 
+      <h3 style="margin-top:16px;">Milestones and the certificate</h3>
+      <p class="hint">A certificate of appreciation is issued by itself when someone's tokens reach a milestone. It waits until the sentence and the signer below are written. Each change is a proposal an Admin who is not you approves, and appears under Pending policy proposals below.</p>
+      <div class="grid-wrap"><table class="grid">
+        <thead><tr><th>Tokens</th><th>Name of the milestone</th><th></th></tr></thead>
+        <tbody>${milestones.length ? milestones.map(m => `<tr>
+          <td>${esc(m.tokens)}</td><td style="white-space:normal;">${esc(m.label) || '—'}</td>
+          <td><button class="btn secondary tok-ms-change" style="padding:4px 10px;" data-tokens="${esc(m.tokens)}" data-label="${esc(m.label || '')}">Propose change</button>
+              <button class="btn secondary tok-ms-remove" style="padding:4px 10px;" data-tokens="${esc(m.tokens)}">Propose removal</button></td>
+        </tr>`).join('') : '<tr><td colspan="3" class="empty-msg">No milestone yet.</td></tr>'}</tbody>
+      </table></div>
+      <div class="btn-row"><button class="btn secondary" id="tok-ms-add">+ Propose a milestone</button></div>
+      <div class="grid-wrap"><table class="grid">
+        <thead><tr><th>Text</th><th>Now</th><th></th></tr></thead>
+        <tbody>${texts.map(t => `<tr>
+          <td style="white-space:normal;">${esc(t.label)}</td>
+          <td style="white-space:normal;" dir="auto">${t.text ? esc(t.text) : '<span class="hint">not written yet</span>'}</td>
+          <td><button class="btn secondary tok-text-change" style="padding:4px 10px;" data-key="${esc(t.key)}">Propose change</button></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+      <div class="field-grid">
+        <div class="field"><label>Check a certificate's code</label><input id="tok-verify-code" autocomplete="off" placeholder="10 letters and numbers"></div>
+      </div>
+      <div class="btn-row"><button class="btn secondary" id="tok-verify">Check</button><span id="tok-verify-result" class="hint"></span></div>
+
       <h3 style="margin-top:16px;">A batch of Urdu title answers received</h3>
       <p class="hint">One unit for each batch a reviewer sends (docs/TOKEN_POLICY.md §2). Someone else in Reward gives it for your own answers.</p>
       <div class="field-grid">
@@ -938,6 +964,41 @@ async function renderRewardTokens(box) {
       </div>
       <div class="btn-row"><button class="btn" id="tok-titles-give">Give the tokens</button><span id="tok-titles-status" class="hint"></span></div>
     </div>`;
+
+  const again = () => renderMyDepartmentView(document.getElementById('main'));
+  const proposeMilestone = (key, tokens, label) => openPolicyProposalModal({
+    title: key ? `Propose a change to the milestone of ${key} tokens` : 'Propose a new milestone',
+    targetTable: 'token_milestones', targetKey: key || '', action: 'upsert', owners: ['RF'],
+    fields: [{ name: 'tokens', label: 'Tokens needed', type: 'number', value: tokens }, { name: 'label', label: 'Name of the milestone (optional)', type: 'text', value: label }],
+    onSaved: again,
+  });
+  box.querySelector('#tok-ms-add').addEventListener('click', () => {
+    const n = prompt('How many tokens for the new milestone?');
+    if (n == null) return;
+    if (!/^[1-9][0-9]*$/.test(n.trim())) { alert('Please write a whole number above 0.'); return; }
+    proposeMilestone(n.trim(), n.trim(), '');
+  });
+  box.querySelectorAll('.tok-ms-change').forEach(b => b.addEventListener('click', () => proposeMilestone(b.dataset.tokens, b.dataset.tokens, b.dataset.label)));
+  box.querySelectorAll('.tok-ms-remove').forEach(b => b.addEventListener('click', () => openPolicyProposalModal({
+    title: `Propose removing the milestone of ${b.dataset.tokens} tokens`, targetTable: 'token_milestones', targetKey: b.dataset.tokens,
+    action: 'delete', owners: ['RF'], fields: null, onSaved: again,
+  })));
+  box.querySelectorAll('.tok-text-change').forEach(b => b.addEventListener('click', () => {
+    const t = texts.find(x => x.key === b.dataset.key);
+    openPolicyProposalModal({
+      title: `Propose a text — ${t.label}`, targetTable: 'token_texts', targetKey: t.key, action: 'upsert', owners: ['RF'],
+      fields: [{ name: 'text', label: 'Text', type: 'text', value: t.text }], onSaved: again,
+    });
+  }));
+  box.querySelector('#tok-verify').addEventListener('click', async () => {
+    const out = document.getElementById('tok-verify-result');
+    const code = document.getElementById('tok-verify-code').value.trim();
+    if (!code) return;
+    const { data, error } = await sb.rpc('verify_token_certificate', { p_code: code });
+    if (error) { out.textContent = error.message; return; }
+    const c = (data || [])[0];
+    out.textContent = c ? `Genuine: ${c.full_name}, ${c.milestone} tokens, ${(c.issued_at || '').slice(0, 10)}, signed by ${c.signer}.` : 'No certificate has this code.';
+  });
 
   box.querySelectorAll('.tok-annul').forEach(b => b.addEventListener('click', async () => {
     const note = prompt('Why are these tokens annulled? (for example: a copy of a text already in the archive)');

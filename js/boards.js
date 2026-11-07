@@ -12,7 +12,7 @@ import {
   openBoardPostPopup, likeSafe, DEFAULT_BOARD_FOR_MEMBERSHIP, BOARD_MEDIA_BUCKET, ackBoardPolicy,
   canWrite, isMediaLinkOk,
   helpLinkHtml,
-} from './core.js?v=20261107204730';
+} from './core.js?v=20261107205757';
 
 // Shown once, before a person's first post (84_boards_moderation.sql) - keep this in sync with
 // the Help guide "boards" (116_help_redesign.sql), which says the same thing in its own section.
