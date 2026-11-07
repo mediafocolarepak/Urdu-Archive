@@ -1,5 +1,5 @@
-import { dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange } from './core.js?v=20261107210605';
-import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261107210605';
+import { dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange } from './core.js?v=20261107220246';
+import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261107220246';
 
 // ---------- Users ----------
 
@@ -421,7 +421,10 @@ export async function renderAnnouncementsView(main) {
   main.innerHTML = `
     <div class="panel">
       <h2>Announcements <span class="hint">— shown to every user in a splash screen on their next login</span></h2>
-      <div class="field"><label>New announcement text</label><textarea id="splash-new-text" rows="4"></textarea></div>
+      <div class="field"><label>New announcement, in English (required)</label><textarea id="splash-new-text" rows="4"></textarea></div>
+      <div class="field"><label>In Italian (optional)</label><textarea id="splash-new-it" rows="4"></textarea></div>
+      <div class="field"><label>In Urdu (optional)</label><textarea id="splash-new-ur" rows="4" dir="rtl" class="splash-ur"></textarea></div>
+      <p class="hint">Readers choose the language with EN, IT and اردو at the top of the announcement. Whoever chooses a language with no text reads the English.</p>
       <div class="btn-row"><button class="btn" id="splash-publish-btn">Publish</button></div>
     </div>
     <div class="panel">
@@ -434,10 +437,15 @@ export async function renderAnnouncementsView(main) {
   await refreshAnnouncementsHistory();
   document.getElementById('splash-publish-btn').addEventListener('click', async () => {
     const text = document.getElementById('splash-new-text').value.trim();
-    if (!text) { alert('Announcement text is required.'); return; }
+    if (!text) { alert('The English text is required.'); return; }
     const { data: { user } } = await sb.auth.getUser();
-    await withStatus(sb.from('splash_messages').insert({ message_text: text, created_by_email: user.email }), 'Publishing...');
-    document.getElementById('splash-new-text').value = '';
+    const row = { message_text: text, created_by_email: user.email };
+    const it = document.getElementById('splash-new-it').value.trim();
+    const ur = document.getElementById('splash-new-ur').value.trim();
+    if (it) row.message_it = it;
+    if (ur) row.message_ur = ur;
+    await withStatus(sb.from('splash_messages').insert(row), 'Publishing...');
+    ['splash-new-text', 'splash-new-it', 'splash-new-ur'].forEach(id => { document.getElementById(id).value = ''; });
     await refreshAnnouncementsHistory();
   });
 }
@@ -448,6 +456,8 @@ async function refreshAnnouncementsHistory() {
   document.getElementById('splash-history-body').innerHTML = rows.map((r, i) => `<tr>
     <td>${esc((r.created_at || '').slice(0, 16).replace('T', ' '))}</td>
     <td>${esc(names[i])}</td>
-    <td style="white-space:normal;">${esc(r.message_text)}</td>
+    <td style="white-space:normal;"><div class="overlay-message">${esc(r.message_text)}</div>
+      ${r.message_it ? `<div class="hint">IT</div><div class="overlay-message">${esc(r.message_it)}</div>` : ''}
+      ${r.message_ur ? `<div class="hint">اردو</div><div class="overlay-message splash-ur" dir="rtl">${esc(r.message_ur)}</div>` : ''}</td>
   </tr>`).join('') || '<tr><td colspan="3">No announcements yet.</td></tr>';
 }

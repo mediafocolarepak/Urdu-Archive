@@ -1003,18 +1003,41 @@ export async function maybeAskDateOfBirth() {
 // Shown once per browser session (not on every tab switch), and again after a fresh
 // login - the sessionStorage flag is set here and cleared by the sign-out handler below.
 
+// An announcement in the reader's language (migration 131): English always, Italian and Urdu when written. The
+// language starts as the one chosen in Help (helpLang), and a choice made here is kept there too, from the next
+// opening of Help. Whoever chooses a language with no text reads the English.
+const SPLASH_LANGS = { en: 'EN', it: 'IT', ur: 'اردو' };
+const splashLangs = m => Object.keys(SPLASH_LANGS).filter(l => l === 'en' || (l === 'it' ? m.message_it : m.message_ur));
+const splashText = (m, lang) => (lang === 'it' && m.message_it) || (lang === 'ur' && m.message_ur) || m.message_text;
+function splashStartLang(m) {
+  const langs = splashLangs(m);
+  let saved = null;
+  try { saved = localStorage.getItem('helpLang'); } catch { /* then the default below */ }
+  if (saved && langs.includes(saved)) return saved;
+  return State.currentRole === 'user' && langs.includes('ur') ? 'ur' : 'en';
+}
+function splashMessageHtml(m, lang) {
+  const urdu = lang === 'ur' && m.message_ur;
+  return `<div class="overlay-message${urdu ? ' splash-ur' : ''}" ${urdu ? 'dir="rtl"' : 'dir="auto"'}>${esc(splashText(m, lang))}</div>`;
+}
+
 async function maybeShowSplash() {
   if (sessionStorage.getItem('splashShown')) return;
   const { data, error } = await sb.from('splash_messages').select('*').order('created_at', { ascending: false }).limit(1);
   if (error || !data || !data.length) { sessionStorage.setItem('splashShown', '1'); return; }
   const msg = data[0];
   const authorName = await getDisplayNameByEmail(msg.created_by_email);
+  const langs = splashLangs(msg);
+  let lang = splashStartLang(msg);
   const backdrop = document.createElement('div');
   backdrop.className = 'overlay-backdrop';
   backdrop.innerHTML = `
     <div class="panel overlay-panel">
-      <h2>Announcements</h2>
-      <div class="overlay-message">${esc(msg.message_text)}</div>
+      <div class="splash-head">
+        <h2>Announcements</h2>
+        ${langs.length > 1 ? '<div class="help-lang" role="group" aria-label="Language" id="splash-langs"></div>' : ''}
+      </div>
+      <div id="splash-text"></div>
       <p class="hint">Posted by ${esc(authorName)} on ${esc((msg.created_at || '').slice(0, 10))}</p>
       <div class="btn-row" style="justify-content:flex-end;">
         <button class="btn secondary" id="splash-history-btn">Previous Announcements</button>
@@ -1022,18 +1045,30 @@ async function maybeShowSplash() {
       </div>
     </div>`;
   document.body.appendChild(backdrop);
+  const show = () => {
+    document.getElementById('splash-text').innerHTML = splashMessageHtml(msg, lang);
+    const box = document.getElementById('splash-langs');
+    if (!box) return;
+    box.innerHTML = langs.map(l => `<button type="button" class="btn ${l === lang ? '' : 'secondary'}" data-splash-lang="${l}" aria-pressed="${l === lang}">${esc(SPLASH_LANGS[l])}</button>`).join('');
+    box.querySelectorAll('[data-splash-lang]').forEach(b => b.addEventListener('click', () => {
+      lang = b.dataset.splashLang;
+      try { localStorage.setItem('helpLang', lang); } catch { /* not needed to work */ }
+      show();
+    }));
+  };
+  show();
   document.getElementById('splash-dismiss-btn').addEventListener('click', () => {
     backdrop.remove();
     sessionStorage.setItem('splashShown', '1');
     maybeAskDateOfBirth();
   });
-  document.getElementById('splash-history-btn').addEventListener('click', showSplashHistory);
+  document.getElementById('splash-history-btn').addEventListener('click', () => showSplashHistory(lang));
 }
 
 // Read-only scrollable list of every past announcement, opened from the splash screen's
 // "Previous Announcements" button. Stacks on top of the splash overlay (which stays open
 // underneath) rather than replacing it, so "Got it" still works normally after closing this.
-async function showSplashHistory() {
+async function showSplashHistory(lang = 'en') {
   const { data } = await sb.from('splash_messages').select('*').order('created_at', { ascending: false });
   const rows = data || [];
   const names = await Promise.all(rows.map(r => getDisplayNameByEmail(r.created_by_email)));
@@ -1045,7 +1080,7 @@ async function showSplashHistory() {
       <div class="chat-thread" style="max-height:60vh;">
         ${rows.map((r, i) => `<div class="field" style="margin-bottom:8px;">
             <div class="hint">${esc((r.created_at || '').slice(0, 10))} &middot; ${esc(names[i])}</div>
-            <div class="overlay-message">${esc(r.message_text)}</div>
+            ${splashMessageHtml(r, lang)}
           </div>`).join('') || '<div class="empty-msg">No previous announcements.</div>'}
       </div>
       <div class="btn-row" style="justify-content:flex-end;">
