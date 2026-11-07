@@ -312,6 +312,10 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
 }
 .overlay-panel { max-width: 480px; width: 100%; max-height: 90vh; overflow-y: auto; }
 .overlay-message { white-space: pre-wrap; font-size: 13.5px; line-height: 1.6; margin: 8px 0 4px; }
+/* An announcement's language buttons beside its heading, and its Urdu text in Nastaliq (migration 131). */
+.splash-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.splash-head h2 { margin: 0; }
+.splash-ur { font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-size: 16px; line-height: 2.2; }
 
 /* ---------- Chat / messages ---------- */
 .chat-thread { display: flex; flex-direction: column; gap: 10px; max-height: 55vh; overflow: auto; margin-bottom: 14px; }
