@@ -311,6 +311,15 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
   z-index: 1000; padding: 20px;
 }
 .overlay-panel { max-width: 480px; width: 100%; max-height: 90vh; overflow-y: auto; }
+/* Document detail on a phone: only what helps to read (Owner's request, 2026-11-08). */
+.doc-phone-only { display: none; }
+.doc-phone-facts { font-size: 14px; margin: 2px 0 4px; }
+.sibling-title { color: var(--accent); text-decoration: underline; cursor: pointer; white-space: normal; min-width: 9em; }
+td.sibling-title.doc-title-ur { font-size: 1.05em; line-height: 2; }
+@media (max-width: 900px) {
+  .doc-wide-only { display: none !important; }
+  .doc-phone-only { display: block; }
+}
 .overlay-message { white-space: pre-wrap; font-size: 13.5px; line-height: 1.6; margin: 8px 0 4px; }
 /* An announcement's language buttons beside its heading, and its Urdu text in Nastaliq (migration 131). */
 .splash-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -448,6 +457,7 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
 .start-word { background: var(--accent-soft); border-color: var(--sec, var(--accent)); }
 .start-word .start-icon { color: var(--accent-ink); background: var(--sec, var(--accent)); }
 .start-word-heading { font-size: 17.5px; }
+.start-word-en { margin-top: 2px; font-size: 15px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
 .start-word-title { margin-top: 4px; font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-size: 18px; line-height: 2; overflow-wrap: anywhere; }
 .start-back-row { margin: 0 0 12px; }
 .start-page-ur { margin: 0 0 4px; font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-size: 24px; line-height: 2; text-align: left; border: 0; }

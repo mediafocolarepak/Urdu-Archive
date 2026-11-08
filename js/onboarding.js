@@ -6,7 +6,7 @@
 // by the Communication department through its own editor in My Department -> Communication (see
 // renderOnboardingCardsManager in mydepartment.js) - this module only ever reads onboarding_cards.
 
-import { sb, State, esc, withStatus, ONBOARDING_MEDIA_BUCKET, HIDDEN_DOC_STATUSES, videoLinkHtml, mountAudioPlayer } from './core.js?v=20261107224758';
+import { sb, State, esc, withStatus, ONBOARDING_MEDIA_BUCKET, HIDDEN_DOC_STATUSES, videoLinkHtml, mountAudioPlayer } from './core.js?v=20261108112113';
 
 const thumbnailUrl = path => path ? sb.storage.from(ONBOARDING_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl : null;
 
@@ -81,19 +81,27 @@ async function findWordOfMonth() {
   const video = media.find(d => d.media_type === 'VID' && d.external_url);
   const audioDoc = media.find(d => d.media_type === 'AUD');
   const reading = audioDoc ? (await withStatus(sb.from('audio_readings').select('document_id,path,reader_name').eq('document_id', audioDoc.document_id)))[0] : null;
-  return { doc, month, isCurrent: month === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`, video, reading: reading && reading.path ? reading : null };
+  // The English title: the document's own, otherwise another version of the same month's, never an Urdu one.
+  const latin = s => s && !/[\u0600-\u06FF]/.test(s);
+  const enTitle = [doc.en_title, ...sameMonth.map(d => d.en_title), ...sameMonth.filter(d => d.language === 'ENG').map(d => d.title), doc.title].find(latin) || '';
+  return { doc, month, enTitle, isCurrent: month === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`, video, reading: reading && reading.path ? reading : null };
 }
+
+// The English title under the Urdu one, for those who don't read Urdu (Owner's request, 2026-11-08).
+const englishTitleOf = (w, shown) => (w.enTitle && w.enTitle !== shown ? w.enTitle : '');
 
 function wordOfMonthHtml(w) {
   const [year, mon] = w.month.split('-').map(Number);
   const monthName = new Date(year, mon - 1, 1).toLocaleDateString('en', { month: 'long', year: 'numeric' });
   const title = w.doc.ur_title || w.doc.original_title || w.doc.en_title || w.doc.title;
+  const en = englishTitleOf(w, title);
   return `
     <div class="panel" id="wom-card">
       ${WORD_OF_MONTH_HEADING_UR ? `<h2 style="margin:0 0 4px;font-size:24px;line-height:1.3;text-align:left;" dir="auto">${esc(WORD_OF_MONTH_HEADING_UR)}</h2>` : ''}
       <h2 style="margin:0 0 8px;font-size:24px;line-height:1.3;">${w.isCurrent ? 'Word of Life of this month' : 'Latest Word of Life'}</h2>
       <div style="font-weight:600;font-size:18px;line-height:1.7;" dir="auto">${esc(title)}</div>
-      <div class="hint">${w.doc.en_title && w.doc.en_title !== title ? `${esc(w.doc.en_title)} &middot; ` : ''}${esc(monthName)}</div>
+      ${en ? `<div style="font-weight:600;font-size:16px;line-height:1.5;" dir="auto">${esc(en)}</div>` : ''}
+      <div class="hint">${esc(monthName)}</div>
       <div class="btn-row">
         <button class="btn" id="wom-read">Read</button>
         ${w.reading ? '<button class="btn" id="wom-listen">&#128266; Listen</button>' : ''}
@@ -122,6 +130,7 @@ function wordTileHtml(w) {
   const [year, mon] = w.month.split('-').map(Number);
   const monthName = new Date(year, mon - 1, 1).toLocaleDateString('en', { month: 'long', year: 'numeric' });
   const title = w.doc.ur_title || w.doc.original_title || w.doc.en_title || w.doc.title;
+  const en = englishTitleOf(w, title);
   return `
     <button type="button" class="start-tile start-word" data-start-page="word">
       ${navIcon('word')}
@@ -129,6 +138,7 @@ function wordTileHtml(w) {
         ${WORD_OF_MONTH_HEADING_UR ? `<span class="start-ur" dir="auto">${esc(WORD_OF_MONTH_HEADING_UR)}</span>` : ''}
         <span class="start-en start-word-heading">${w.isCurrent ? 'Word of Life of this month' : 'Latest Word of Life'}</span>
         <span class="start-word-title" dir="auto">${esc(title)}</span>
+        ${en ? `<span class="start-word-en" dir="auto">${esc(en)}</span>` : ''}
         <span class="hint">${esc(monthName)}</span>
       </span>
       ${CHEVRON}

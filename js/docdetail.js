@@ -10,7 +10,7 @@ import {
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, videoLinkHtml, mountAudioPlayer, eraseMyAudioFiles,
   textDir,
-} from './core.js?v=20261107224758';
+} from './core.js?v=20261108112113';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -22,6 +22,22 @@ const TASK_STATUS_LABEL = { open: 'Open', claimed: 'Claimed', submitted: 'Submit
 
 // Builds the "riassunto" text block that replaces the old grid of disabled input fields -
 // one line per group of related info, empty groups dropped entirely so the block stays short.
+// On a phone the detail shows only what helps to read: the number (in the heading), the titles, then the date and
+// the language in bold (Owner's request, 2026-11-08). The rest stays on wider screens (.doc-wide-only).
+function docDateLabel(doc) {
+  if (doc.ref_date) {
+    const d = new Date(doc.ref_date + 'T00:00:00');
+    return isNaN(d) ? doc.ref_date : d.toLocaleDateString('en', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+  const m = /^(\d{4})-(\d{2})$/.exec(doc.ref_period || '');
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, 1).toLocaleDateString('en', { month: 'long', year: 'numeric' }) : (doc.ref_period || '');
+}
+function renderDocPhoneFacts(doc) {
+  const parts = [docDateLabel(doc), labelOf(State.langs, doc.language),
+    ['VID', 'AUD'].includes(doc.media_type) && doc.duration ? doc.duration : ''].filter(Boolean).map(p => `<b>${esc(p)}</b>`);
+  return `<div class="doc-phone-only doc-phone-facts">${doc.access_level === 'reserved' ? '<span class="count-badge">Reserved</span> ' : ''}${parts.join(' &middot; ')}</div>`;
+}
+
 function renderDocSummary(doc) {
   const line = (...parts) => parts.filter(Boolean).join(' · ');
   const lines = [
@@ -45,7 +61,7 @@ function renderDocTextBox(text, language) {
   if (!text) return '';
   const chars = text.char_count || (text.body || '').length;
   return `
-    <div class="field">
+    <div class="field doc-wide-only">
       <div class="btn-row" style="justify-content:space-between;align-items:center;">
         <label style="margin:0;">Text <span class="hint">(${chars.toLocaleString()} characters)</span></label>
         <span style="cursor:pointer;text-decoration:underline;font-size:12.5px;" id="doc-text-toggle">Show</span>
@@ -264,15 +280,16 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     ${media.some(m => m.media_type === 'AUD' && String(m.source_document_id) === String(doc.document_id) && m.source_text_at && text?.updated_at > m.source_text_at) ? '<div class="hint">The text has been corrected since it was read aloud, so the two may differ.</div>' : ''}
     <div class="field" style="font-size:13px;line-height:1.7;">
       <div style="font-size:14px;margin-bottom:6px;">${docTitlesHtml(doc)}</div>
-      ${renderDocSummary(doc)}
+      ${renderDocPhoneFacts(doc)}
+      <div class="doc-wide-only">${renderDocSummary(doc)}</div>
       ${doc.contained_in_document_id ? `<div>In the magazine issue <a href="#" id="doc-contained-in">#${esc(doc.contained_in_document_id)}</a>${doc.contained_page ? `, page ${esc(doc.contained_page)}` : ''}</div>` : ''}
       <div id="doc-contains"></div>
     </div>
-    <div class="field">
+    <div class="field doc-wide-only">
       <label>Recipient(s)</label>
       <div style="font-size:13px;padding:4px 0;">${(doc.recipient || []).map(c => esc(labelOf(State.recipients, c))).join(', ') || '—'}</div>
     </div>
-    <div class="field">
+    <div class="field doc-wide-only">
       <label>Collections</label>
       <div style="font-size:13px;padding:4px 0;">${renderCollectionsSummary(docCollections)}</div>
     </div>
@@ -552,6 +569,12 @@ function renderCollectionsSummary(docCollections) {
 // enough to locate the file, so no extra download plumbing is built for them. Only one
 // version per Document may be "preferred" - the star is set from here or from Work
 // Consolidation, never automatically.
+// A version's title in its own language: Urdu for an Urdu version, Italian for an Italian one, and so on.
+function siblingTitle(s) {
+  const own = { URD: s.ur_title, ITA: s.it_title, ENG: s.en_title }[s.language];
+  return own || s.original_title || s.title || s.en_title || '';
+}
+
 function renderWorkSiblingsHtml(siblings, currentId, canEdit) {
   if (!siblings || siblings.length === 0) return '';
   const others = siblings.filter(s => String(s.document_id) !== String(currentId));
@@ -561,10 +584,10 @@ function renderWorkSiblingsHtml(siblings, currentId, canEdit) {
   // the fuller set needed to actually manage versions (source/type/file, set-preferred).
   const headCells = canEdit
     ? '<th>ID</th><th>Title</th><th>Language</th><th>Source</th><th>Type</th><th>File</th><th>Preferred</th><th></th>'
-    : '<th>ID</th><th>Title</th><th>Category</th><th>Author</th><th>Language</th><th></th>';
+    : '<th>ID</th><th>Language</th><th>Title</th><th>Category</th><th>Author</th><th></th>';
   return `
     <div class="field">
-      <label>Other versions of this document</label>
+      <label style="font-weight:700;">Other versions of this document</label>
       <div class="grid-wrap"><table class="grid">
         <thead><tr>${headCells}</tr></thead>
         <tbody>${others.map(s => {
@@ -574,8 +597,9 @@ function renderWorkSiblingsHtml(siblings, currentId, canEdit) {
                <td>${esc(s.file_name)}</td>
                <td>${s.is_preferred ? '<span class="count-badge">&#9733; Preferred</span>'
                    : `<button class="btn secondary sibling-set-preferred" style="padding:2px 8px;">Set preferred</button>`}</td>`
-            : `<td>${esc(s.document_id)}</td><td>${esc(s.title)}</td><td>${esc(labelOf(State.categories, s.category))}</td>
-               <td>${esc(labelOf(State.authors, s.author))}</td><td>${esc(labelOf(State.langs, s.language))}</td>`;
+            : `<td>${esc(s.document_id)}</td><td>${esc(labelOf(State.langs, s.language))}</td>
+               <td class="sibling-title${s.language === 'URD' ? ' doc-title-ur' : ''}" dir="${textDir(siblingTitle(s), s.language)}">${esc(siblingTitle(s))}</td>
+               <td>${esc(labelOf(State.categories, s.category))}</td><td>${esc(labelOf(State.authors, s.author))}</td>`;
           return `<tr data-sibling-id="${esc(s.document_id)}">
           ${cells}
           <td><button class="btn secondary sibling-open" style="padding:2px 8px;">Open</button></td>
@@ -613,7 +637,7 @@ function wireWorkSiblingsClicks(box, workId, navigate) {
 
 async function fetchWorkSiblings(workId) {
   if (!workId) return [];
-  return await withStatus(sb.from('documents').select('document_id,title,category,author,language,source,media_type,file_name,is_preferred,storage_path,external_url,workflow_status').eq('work_id', workId));
+  return await withStatus(sb.from('documents').select('document_id,title,en_title,ur_title,it_title,original_title,category,author,language,source,media_type,file_name,is_preferred,storage_path,external_url,workflow_status').eq('work_id', workId));
 }
 
 // The video links and readings to offer on this document: from its whole Work, one for each language
