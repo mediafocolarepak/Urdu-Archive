@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml } from './core.js?v=20261108112113';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261108112113';
+import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml } from './core.js?v=20261109090017';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261109090017';
 
 // "From the boards" (84_boards_moderation.sql): a small window onto recent public board
 // activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
@@ -65,8 +65,11 @@ export async function renderDashboardView(main) {
         ${canWrite() ? '<button class="btn secondary" id="dash-propose">+ Propose content</button>' : ''}
       </div>
       <div class="btn-row" style="margin-top:0;"><button class="btn ${State.dashFilters.withMedia ? '' : 'secondary'}" id="dash-media" aria-pressed="${State.dashFilters.withMedia}">&#128266; &#9654; Audio and video only</button></div>
-      <details class="dash-filters" id="dash-filters">
-      <summary id="dash-filters-summary">Filters</summary>
+      <div class="btn-row dash-search-tools">
+        <button type="button" class="btn dash-filters-toggle" id="dash-filters-toggle" aria-expanded="false" aria-controls="dash-filters"><span id="dash-filters-label">Search</span> <span id="dash-filters-arrow" aria-hidden="true">&#9662;</span></button>
+        <button type="button" class="btn secondary" id="dash-clear-filters">Clear all search</button>
+      </div>
+      <div class="dash-filters" id="dash-filters">
       <div class="field-grid" style="margin-bottom:10px;">
         <div class="field"><label>ID #</label><input id="dash-search-id" placeholder="ID #" value="${esc(State.dashFilters.idSearch)}"></div>
         <div class="field"><label>Category</label><select id="f-category">${optionsHtml(State.categories, State.dashFilters.category, true, 'All')}</select></div>
@@ -87,8 +90,7 @@ export async function renderDashboardView(main) {
           <input type="checkbox" id="f-pending" ${State.dashFilters.pendingOnly ? 'checked' : ''}> Show only documents marked for deletion
         </label>
       </div>`}
-      <div class="btn-row"><button class="btn secondary" id="dash-clear-filters">Clear all filters and search</button></div>
-      </details>
+      </div>
       ${isAdmin() ? '<div class="btn-row"><button class="btn secondary" id="dash-export-csv">Export CSV</button></div>' : ''}
       <div class="split split-wide-left">
         <div>
@@ -109,9 +111,22 @@ export async function renderDashboardView(main) {
       <div id="dash-from-boards-list"><div class="hint">Loading...</div></div>
     </div>`;
 
-  // Filters are a collapsed section on a phone (the nine dropdowns pushed the list a full screen
-  // down); on a wide screen they stay open and the toggle is hidden by CSS.
-  document.getElementById('dash-filters').open = !window.matchMedia('(max-width: 900px)').matches;
+  // On a phone the filters are a list that the Search button opens (the nine dropdowns pushed the
+  // list of documents a full screen down); a choice closes it again, so the results show at once
+  // (Owner's request, 2026-11-09). On a wide screen they stay open and the button is hidden by CSS.
+  const filtersBox = document.getElementById('dash-filters');
+  const filtersToggle = document.getElementById('dash-filters-toggle');
+  const setFiltersOpen = open => {
+    filtersBox.classList.toggle('open', open);
+    filtersToggle.setAttribute('aria-expanded', String(open));
+    document.getElementById('dash-filters-arrow').innerHTML = open ? '&#9652;' : '&#9662;';
+  };
+  const closeFiltersOnPhone = () => { if (window.matchMedia('(max-width: 900px)').matches) setFiltersOpen(false); };
+  filtersToggle.addEventListener('click', () => setFiltersOpen(!filtersBox.classList.contains('open')));
+  filtersBox.addEventListener('change', e => { if (e.target.tagName === 'SELECT' || e.target.type === 'checkbox') closeFiltersOnPhone(); });
+  document.getElementById('dash-search-id').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); closeFiltersOnPhone(); }
+  });
   document.getElementById('dash-clear-filters').addEventListener('click', () => {
     Object.assign(State.dashFilters, { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', access_level: '', collection: '', recipient: '', source: '', language: '', legacyOnly: false, pendingOnly: false, withMedia: false });
     renderDashboardView(main);
@@ -265,8 +280,8 @@ export async function refreshDashGrid() {
   document.getElementById('dash-count').textContent = rows.length;
   const f = State.dashFilters;
   const activeFilters = [f.idSearch, f.category, f.author, f.main_topic, f.workflow_status, f.access_level, f.recipient, f.source, f.collection, f.language, f.legacyOnly, f.pendingOnly].filter(Boolean).length;
-  const sum = document.getElementById('dash-filters-summary');
-  if (sum) sum.textContent = activeFilters ? `Filters (${activeFilters} active)` : 'Filters';
+  const sum = document.getElementById('dash-filters-label');
+  if (sum) sum.textContent = activeFilters ? `Search (${activeFilters} active)` : 'Search';
   const arrow = (col) => col !== State.dashSort.col ? '' : (State.dashSort.asc ? ' &uarr;' : ' &darr;');
   grid.innerHTML = `<colgroup>${Object.keys(cols).map(col => `<col style="width:${colWidths[col]}%">`).join('')}</colgroup>
     <thead><tr>${Object.entries(cols).map(([col, label]) =>
