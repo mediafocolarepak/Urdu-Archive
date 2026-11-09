@@ -10,7 +10,7 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, confirmPopup } from './core.js?v=20261109090017';
+import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, confirmPopup } from './core.js?v=20261109122910';
 
 // Thumbnails (migration 93, owner's request to make the catalog "look like Coursera") - a public
 // bucket, same shape as board post images (BOARD_MEDIA_BUCKET in core.js), but not shared outside
@@ -359,6 +359,7 @@ async function renderPathDetail(main, pathId) {
   const canEdit = path.owner_id === user.id || isCoAuthor || canReviewApplications();
   const canSeeEnrollees = canEdit;  // owner or Coordinator/Admin - formation_enrollees() checks this itself too
 
+  const partNumbers = numberParts(modules);
   const chaptersOf = moduleId => chapters.filter(c => c.module_id === moduleId);
   const postsOf = chapterId => posts.filter(p => p.chapter_id === chapterId);
 
@@ -450,7 +451,8 @@ async function renderPathDetail(main, pathId) {
       <hr style="margin:16px 0;">
       <div id="fp-tree">
         ${canEdit ? '<div class="btn-row" style="margin-bottom:10px;"><button class="btn" id="fp-add-module">+ Add module</button></div>' : ''}
-        ${modules.length ? modules.map((m, i) => renderModuleBlock(m, i + 1, chaptersOf(m.id), postsOf, canEdit, quizCtx, docById, textById)).join('') : '<div class="empty-msg">No modules yet.</div>'}
+        ${renderPathContentsHtml(modules)}
+        ${modules.length ? modules.map((m, i) => partHeadingHtml(m, partNumbers) + renderModuleBlock(m, i + 1, chaptersOf(m.id), postsOf, canEdit, quizCtx, docById, textById)).join('') : '<div class="empty-msg">No modules yet.</div>'}
       </div>
     </div>`;
 
@@ -512,6 +514,38 @@ async function renderPathDetail(main, pathId) {
   wireQuizActions(main, pathId, quizzes);
 
   wireTreeActions(main, pathId, modules, chapters, posts, canEdit);
+  main.querySelectorAll('[data-goto-module]').forEach(el => el.addEventListener('click', () => {
+    main.querySelector(`[data-module-block="${el.dataset.gotoModule}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }));
+}
+
+// ---------- Parts and contents (migration 133) ----------
+// A module with a part_title starts a part, like the parts of a book (Owner's request, 2026-11-09); the modules after
+// it belong to that part until another one starts. Modules keep one numbering across parts, so "Chapter 3.4" stays.
+
+// Part number by module id, only for the modules that start a part.
+function numberParts(modules) {
+  const out = {};
+  let n = 0;
+  for (const m of modules) if (m.part_title && m.part_title.trim()) out[m.id] = ++n;
+  return out;
+}
+
+function partHeadingHtml(m, partNumbers) {
+  if (!partNumbers[m.id]) return '';
+  return `<h3 class="fp-part-heading" dir="auto">Part ${partNumbers[m.id]} &middot; ${esc(m.part_title.trim())}</h3>`;
+}
+
+// The path's table of contents: parts with their modules, each module a link to its place on the page.
+function renderPathContentsHtml(modules) {
+  if (modules.length < 2) return '';
+  const partNumbers = numberParts(modules);
+  return `
+    <nav class="fp-contents" aria-label="Contents">
+      <div class="fp-contents-title">Contents</div>
+      ${modules.map((m, i) => `${partNumbers[m.id] ? `<div class="fp-contents-part" dir="auto">Part ${partNumbers[m.id]} &middot; ${esc(m.part_title.trim())}</div>` : ''}
+        <button type="button" class="fp-contents-module" data-goto-module="${m.id}" dir="auto"><span class="fp-contents-num">${i + 1}</span> ${esc(m.title)}</button>`).join('')}
+    </nav>`;
 }
 
 // ---------- Co-authors (migration 82) ----------
@@ -643,6 +677,8 @@ function openModulePopup({ pathId, module = null, sequence = 0, onSaved }) {
       <h2 style="margin-top:0;">${module ? 'Edit module' : 'New module'}</h2>
       <div class="field"><label>Title</label><input id="fm-module-title" dir="auto" value="${esc(module ? module.title : '')}"></div>
       <div class="field"><label>Description <span class="hint">(optional)</span></label><textarea id="fm-module-desc" dir="auto" rows="3">${esc(module ? module.description || '' : '')}</textarea></div>
+      <div class="field"><label>Starts a part <span class="hint">(optional)</span></label><input id="fm-module-part" dir="auto" placeholder="For example: The Story" value="${esc(module ? module.part_title || '' : '')}">
+        <div class="hint">Write the part's name only on its first module. The modules after it belong to the same part until another module starts a new one.</div></div>
       <div class="hint" id="fm-module-error"></div>
       <div class="btn-row" style="justify-content:flex-end;">
         <button class="btn secondary" id="fm-module-cancel">Cancel</button>
@@ -655,9 +691,10 @@ function openModulePopup({ pathId, module = null, sequence = 0, onSaved }) {
   document.getElementById('fm-module-save').addEventListener('click', async () => {
     const title = document.getElementById('fm-module-title').value.trim();
     const description = document.getElementById('fm-module-desc').value.trim() || null;
+    const part_title = document.getElementById('fm-module-part').value.trim() || null;
     if (!title) { document.getElementById('fm-module-error').textContent = 'Title is required.'; return; }
-    if (module) await withStatus(sb.from('formation_modules').update({ title, description }).eq('id', module.id), 'Saving...');
-    else await withStatus(sb.from('formation_modules').insert({ path_id: pathId, title, description, sequence_number: sequence }), 'Saving...');
+    if (module) await withStatus(sb.from('formation_modules').update({ title, description, part_title }).eq('id', module.id), 'Saving...');
+    else await withStatus(sb.from('formation_modules').insert({ path_id: pathId, title, description, part_title, sequence_number: sequence }), 'Saving...');
     backdrop.remove();
     onSaved();
   });
