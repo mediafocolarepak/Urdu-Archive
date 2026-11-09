@@ -320,6 +320,15 @@ td.sibling-title.doc-title-ur { font-size: 1.05em; line-height: 2; }
   .doc-wide-only { display: none !important; }
   .doc-phone-only { display: block; }
 }
+/* Formation path: parts and contents, like the index of a book (Owner's request, 2026-11-09). */
+.fp-contents { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
+.fp-contents-title { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+.fp-contents-part { font-weight: 700; color: var(--accent); margin: 8px 0 2px; }
+.fp-contents-module { display: block; width: 100%; text-align: start; background: none; border: 0; padding: 5px 0 5px 4px; color: inherit; font: inherit; font-size: 14px; cursor: pointer; }
+.fp-contents-module:hover { color: var(--accent); text-decoration: underline; }
+.fp-contents-num { display: inline-block; min-width: 1.6em; color: var(--accent); font-weight: 600; }
+.panel h3.fp-part-heading { text-transform: none; letter-spacing: normal; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 2px solid var(--accent); color: var(--accent); font-size: 17px; }
+[data-module-block] { scroll-margin-top: 70px; }
 .overlay-message { white-space: pre-wrap; font-size: 13.5px; line-height: 1.6; margin: 8px 0 4px; }
 /* An announcement's language buttons beside its heading, and its Urdu text in Nastaliq (migration 131). */
 .splash-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
