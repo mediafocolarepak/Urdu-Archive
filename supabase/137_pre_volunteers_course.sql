@@ -7,24 +7,34 @@
 -- Status: draft. Nothing is published, nobody is enrolled. Titles are in English; the Urdu ones are the formatore's.
 -- Modules 5 and 7 have very few texts in Urdu: their description says so.
 --
--- Owner of the path: the SQL Editor has no signed-in user, so the path is given to the only Admin account.
--- If there is more than one Admin, the run stops and says so: then put the owner's id in v_owner below.
+-- Owner of the path: the SQL Editor has no signed-in user. With one Admin account, the path is given to it.
+-- With more than one, write the owner's email IN THE EDITOR (not in this file) in place of OWNER-EMAIL, in the
+-- line that starts with v_email a few lines below (keep the quotes). The account must be an Admin.
 -- Running it again does nothing if the path already exists. To remove it:
 --   delete from public.formation_paths where title = 'Formation Course for Pre-Volunteers of God' and status = 'draft';
 
 do $$
 declare
+  v_email text := 'OWNER-EMAIL';
   v_owner uuid;
   v_path bigint;
   v_module bigint;
   v_chapter bigint;
   v_admins int;
 begin
-  select count(*) into v_admins from public.user_roles where role = 'admin';
-  if v_admins <> 1 then
-    raise exception 'There are % Admin accounts: write the owner''s id in v_owner in this file and run it again.', v_admins;
+  if v_email <> 'OWNER-EMAIL' then
+    select r.user_id into v_owner from public.user_roles r join auth.users u on u.id = r.user_id
+      where r.role = 'admin' and lower(u.email) = lower(btrim(v_email));
+    if v_owner is null then
+      raise exception 'No Admin account has the email written in v_email: check it and run again.';
+    end if;
+  else
+    select count(*) into v_admins from public.user_roles where role = 'admin';
+    if v_admins <> 1 then
+      raise exception 'There are % Admin accounts: write the owner''s email in place of OWNER-EMAIL (line v_email, near the top) and run again.', v_admins;
+    end if;
+    select user_id into v_owner from public.user_roles where role = 'admin';
   end if;
-  select user_id into v_owner from public.user_roles where role = 'admin';
 
   if exists (select 1 from public.formation_paths where title = 'Formation Course for Pre-Volunteers of God') then
     raise notice 'The path already exists: nothing done.';
