@@ -10,7 +10,9 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, confirmPopup } from './core.js?v=20261109122910';
+import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, confirmPopup } from './core.js?v=20261112154954';
+// The reader (a path read like a book) shows the same document card as the Library, as dashboard.js and matchreview.js do.
+import { renderDocDetail } from './docdetail.js?v=20261112154954';
 
 // Thumbnails (migration 93, owner's request to make the catalog "look like Coursera") - a public
 // bucket, same shape as board post images (BOARD_MEDIA_BUCKET in core.js), but not shared outside
@@ -365,6 +367,17 @@ async function renderPathDetail(main, pathId) {
 
   const badge = path.status === 'draft' ? 'Draft' : (path.status === 'archived' ? 'Archived' : 'Published');
 
+  // Read like a book (Owner's request, 2026-11-12): every post in the path's order, and the person's bookmark (migration
+  // 139). If 139 hasn't been run yet the bookmark is simply absent, the rest works.
+  const bookItems = bookOrder(modules, chapters, posts);
+  let bookmarkPostId = null;
+  if (bookItems.length) {
+    const { data: bm } = await sb.from('formation_bookmarks').select('post_id').eq('path_id', pathId).eq('user_id', user.id).maybeSingle();
+    if (bm && bookItems.some(it => it.post.id === bm.post_id)) bookmarkPostId = bm.post_id;
+  }
+  reader = { main, pathId, pathTitle: path.title, modules, items: bookItems, docById, index: 0, bookmarkPostId, userId: user.id, loading: false };
+  const bookmarkItem = bookItems.find(it => it.post.id === bookmarkPostId);
+
   let myEnrollment = null, enrolledCount = 0;
   if (path.status === 'published') {
     const [myRow, countRows] = await Promise.all([
@@ -451,6 +464,10 @@ async function renderPathDetail(main, pathId) {
       <hr style="margin:16px 0;">
       <div id="fp-tree">
         ${canEdit ? '<div class="btn-row" style="margin-bottom:10px;"><button class="btn" id="fp-add-module">+ Add module</button></div>' : ''}
+        ${bookItems.length ? `<div class="fp-read-row">
+          <button class="btn" id="fp-start-reading">&#128214; ${bookmarkItem ? 'Continue reading' : 'Start reading'}</button>
+          ${bookmarkItem ? `<span class="hint" dir="auto">&#128278; ${esc(bookmarkItem.post.title)} &middot; Chapter ${esc(bookmarkItem.chapterLabel)}</span>` : ''}
+        </div>` : ''}
         ${renderPathContentsHtml(modules)}
         ${modules.length ? modules.map((m, i) => partHeadingHtml(m, partNumbers) + renderModuleBlock(m, i + 1, chaptersOf(m.id), postsOf, canEdit, quizCtx, docById, textById)).join('') : '<div class="empty-msg">No modules yet.</div>'}
       </div>
@@ -517,7 +534,188 @@ async function renderPathDetail(main, pathId) {
   main.querySelectorAll('[data-goto-module]').forEach(el => el.addEventListener('click', () => {
     main.querySelector(`[data-module-block="${el.dataset.gotoModule}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }));
+  document.getElementById('fp-start-reading')?.addEventListener('click', () => {
+    const i = bookItems.findIndex(it => it.post.id === bookmarkPostId);
+    openReader(i < 0 ? 0 : i);
+  });
 }
+
+// ---------- Reading a path like a book (Owner's request, 2026-11-12) ----------
+// "Open" on a post no longer leaves for the Library: the post opens on a page of its own over the path, with the same
+// document card as the Library's right-hand side and nothing else. Previous/Next (buttons, swipe, arrow keys) turn the
+// pages in the path's order across chapters and modules; Contents jumps anywhere; the bookmark (migration 139, one per
+// person and path) is where "Continue reading" starts. ✕ and the phone's Back return to the path where the reader was.
+
+let reader = null;  // { main, pathId, pathTitle, modules, items, docById, index, bookmarkPostId, userId, loading }
+
+// Every post of the path in reading order: modules, their chapters, their posts (all three already sorted by sequence).
+function bookOrder(modules, chapters, posts) {
+  const items = [];
+  modules.forEach((m, mi) => {
+    chapters.filter(c => c.module_id === m.id).forEach((c, ci) => {
+      posts.filter(p => p.chapter_id === c.id).forEach(p => items.push({ post: p, module: m, moduleNumber: mi + 1, chapter: c, chapterLabel: `${mi + 1}.${ci + 1}` }));
+    });
+  });
+  return items;
+}
+
+function openReader(index) {
+  if (!reader || !reader.items.length) return;
+  if (!document.getElementById('fp-reader')) {
+    reader.main.insertAdjacentHTML('beforeend', `
+      <div class="fp-reader" id="fp-reader" role="dialog" aria-label="Reading">
+        <div class="fp-reader-bar">
+          <button type="button" class="btn secondary fp-reader-close" id="fp-reader-close" aria-label="Close">&#10005;</button>
+          <div class="fp-reader-where">
+            <div class="fp-reader-path" dir="auto">${esc(reader.pathTitle)}</div>
+            <div class="fp-reader-pos" id="fp-reader-pos"></div>
+          </div>
+          <button type="button" class="btn secondary" id="fp-reader-bookmark"></button>
+          <button type="button" class="btn secondary" id="fp-reader-toc-btn" aria-label="Contents">&#9776;<span class="fp-btn-label"> Contents</span></button>
+        </div>
+        <div class="fp-reader-toc" id="fp-reader-toc" hidden></div>
+        <div class="fp-reader-body" id="fp-reader-body"></div>
+        <div class="fp-reader-nav">
+          <button type="button" class="btn secondary" id="fp-reader-prev">&lsaquo; Previous</button>
+          <span class="hint" id="fp-reader-count"></span>
+          <button type="button" class="btn" id="fp-reader-next">Next &rsaquo;</button>
+        </div>
+      </div>`);
+    history.pushState({ fpReader: true }, '');
+    wireReader();
+  }
+  showReaderPage(index);
+}
+
+async function showReaderPage(index) {
+  if (index < 0 || index >= reader.items.length || reader.loading) return;
+  reader.loading = true;
+  reader.index = index;
+  const it = reader.items[index];
+  const inChapter = reader.items.filter(x => x.chapter.id === it.chapter.id);
+  document.getElementById('fp-reader-pos').innerHTML = `Module ${it.moduleNumber} &middot; Chapter ${esc(it.chapterLabel)} &middot; ${inChapter.indexOf(it) + 1} of ${inChapter.length}`;
+  document.getElementById('fp-reader-count').textContent = `${index + 1} / ${reader.items.length}`;
+  document.getElementById('fp-reader-prev').disabled = index === 0;
+  document.getElementById('fp-reader-next').disabled = index === reader.items.length - 1;
+  document.getElementById('fp-reader-toc').hidden = true;
+  updateBookmarkButton();
+  const doc = it.post.document_id != null ? reader.docById[it.post.document_id] : null;
+  const body = document.getElementById('fp-reader-body');
+  body.innerHTML = `
+    <div class="fp-reader-post">
+      <div class="fp-reader-chapter" dir="auto">${esc(it.chapter.title)}</div>
+      <h2 dir="auto">${esc(it.post.title)}</h2>
+      ${it.post.body ? `<div dir="auto" style="white-space:pre-wrap;">${esc(it.post.body)}</div>` : ''}
+    </div>
+    ${doc ? '<div class="panel fp-reader-doc" id="doc-detail"></div>'
+      : (it.post.document_id != null ? '<div class="hint">The document of this post is not available to you.</div>' : '')}`;
+  body.scrollTop = 0;
+  try {
+    if (doc) await renderDocDetail(doc.document_id);
+  } finally {
+    reader.loading = false;
+  }
+}
+
+function updateBookmarkButton() {
+  const btn = document.getElementById('fp-reader-bookmark');
+  if (!btn) return;
+  const here = reader.bookmarkPostId === reader.items[reader.index].post.id;
+  btn.innerHTML = `&#128278;<span class="fp-btn-label"> ${here ? 'Bookmarked' : 'Bookmark'}</span>`;
+  btn.setAttribute('aria-label', here ? 'Bookmarked' : 'Bookmark');
+  btn.classList.toggle('fp-bookmark-on', here);
+  btn.title = here ? 'Remove the bookmark' : 'Keep my place here';
+}
+
+async function toggleBookmark() {
+  const post = reader.items[reader.index].post;
+  if (reader.bookmarkPostId === post.id) {
+    await withStatus(sb.from('formation_bookmarks').delete().eq('path_id', reader.pathId).eq('user_id', reader.userId), 'Saving...');
+    reader.bookmarkPostId = null;
+  } else {
+    await withStatus(sb.from('formation_bookmarks').upsert({ user_id: reader.userId, path_id: reader.pathId, post_id: post.id, updated_at: new Date().toISOString() }, { onConflict: 'user_id,path_id' }), 'Saving...');
+    reader.bookmarkPostId = post.id;
+  }
+  updateBookmarkButton();
+}
+
+function readerTocHtml() {
+  const partNumbers = numberParts(reader.modules);
+  const current = reader.items[reader.index];
+  let html = '', lastModule = null, lastChapter = null;
+  reader.items.forEach((it, i) => {
+    if (it.module.id !== lastModule) {
+      lastModule = it.module.id;
+      if (partNumbers[it.module.id]) html += `<div class="fp-contents-part" dir="auto">Part ${partNumbers[it.module.id]} &middot; ${esc(it.module.part_title.trim())}</div>`;
+      html += `<div class="fp-toc-module" dir="auto">${it.moduleNumber} &middot; ${esc(it.module.title)}</div>`;
+    }
+    if (it.chapter.id !== lastChapter) {
+      lastChapter = it.chapter.id;
+      html += `<div class="fp-toc-chapter" dir="auto">${esc(it.chapterLabel)} &middot; ${esc(it.chapter.title)}</div>`;
+    }
+    const mark = it.post.id === reader.bookmarkPostId ? ' &#128278;' : '';
+    html += `<button type="button" class="fp-toc-post${it === current ? ' current' : ''}" data-reader-go="${i}" dir="auto">${esc(it.post.title)}${mark}</button>`;
+  });
+  return html;
+}
+
+function wireReader() {
+  const go = d => showReaderPage(reader.index + d);
+  document.getElementById('fp-reader-prev').addEventListener('click', () => go(-1));
+  document.getElementById('fp-reader-next').addEventListener('click', () => go(1));
+  document.getElementById('fp-reader-close').addEventListener('click', () => {
+    if (history.state && history.state.fpReader) history.back(); else closeReader();
+  });
+  document.getElementById('fp-reader-bookmark').addEventListener('click', () => toggleBookmark().catch(() => {}));
+  const toc = document.getElementById('fp-reader-toc');
+  document.getElementById('fp-reader-toc-btn').addEventListener('click', () => {
+    toc.hidden = !toc.hidden;
+    if (toc.hidden) return;
+    toc.innerHTML = readerTocHtml();
+    toc.querySelector('.current')?.scrollIntoView({ block: 'center' });
+  });
+  toc.addEventListener('click', e => {
+    const b = e.target.closest('[data-reader-go]');
+    if (b) showReaderPage(parseInt(b.dataset.readerGo, 10));
+  });
+  // A swipe turns the page, except on something that scrolls sideways (the table of other versions).
+  const body = document.getElementById('fp-reader-body');
+  let start = null;
+  body.addEventListener('touchstart', e => {
+    start = (e.touches.length === 1 && !e.target.closest('.grid-wrap')) ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null;
+  }, { passive: true });
+  body.addEventListener('touchend', e => {
+    if (!start) return;
+    const dx = e.changedTouches[0].clientX - start.x, dy = e.changedTouches[0].clientY - start.y;
+    start = null;
+    if (Math.abs(dx) > 70 && Math.abs(dy) < 50) go(dx < 0 ? 1 : -1);
+  }, { passive: true });
+  document.addEventListener('keydown', readerKeys);
+}
+
+function readerKeys(e) {
+  if (!document.getElementById('fp-reader') || document.querySelector('.overlay-backdrop, .reading-view')) return;
+  if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+  if (e.key === 'ArrowRight') showReaderPage(reader.index + 1);
+  else if (e.key === 'ArrowLeft') showReaderPage(reader.index - 1);
+  else if (e.key === 'Escape') document.getElementById('fp-reader-close').click();
+}
+
+// Back to the path, at the post the reader was on: its chapter opened, the post in view.
+async function closeReader() {
+  const el = document.getElementById('fp-reader');
+  document.removeEventListener('keydown', readerKeys);
+  if (!el) return;
+  el.remove();
+  const it = reader.items[reader.index];
+  if (!it) return;
+  // Drawn again even when the chapter was already open, because the bookmark may have moved while reading.
+  expandedChapters.add(it.chapter.id);
+  await renderPathDetail(reader.main, reader.pathId);
+  reader.main.querySelector(`[data-post-row="${it.post.id}"]`)?.scrollIntoView({ block: 'center' });
+}
+
+window.addEventListener('popstate', () => { if (document.getElementById('fp-reader')) closeReader(); });
 
 // ---------- Parts and contents (migration 133) ----------
 // A module with a part_title starts a part, like the parts of a book (Owner's request, 2026-11-09); the modules after
@@ -1007,8 +1205,8 @@ function renderPostRow(p, canEdit, doc, text) {
       <label>Document</label>
       <div style="font-size:13px;">#${esc(doc.document_id)} &middot; ${esc(doc.en_title) || '<span class="hint">(no title)</span>'}${doc.ur_title ? ` / <span dir="auto">${esc(doc.ur_title)}</span>` : ''}</div>
       ${text ? `<div class="board-doc-preview" dir="auto">${esc(textPreview(text.body))}</div>` : ''}
-      <button class="btn secondary" data-open-doc="${esc(doc.document_id)}" style="margin-top:4px;">Open</button>
     </div>` : ''}
+    <button class="btn secondary" data-read-post="${p.id}" style="margin-top:4px;">&#128214; Open</button>
   </div>`;
 }
 
@@ -1033,9 +1231,10 @@ function wireTreeActions(main, pathId, modules, chapters, posts, canEdit) {
     refresh();
   }));
 
-  document.querySelectorAll('[data-open-doc]').forEach(btn => btn.addEventListener('click', () => {
-    State.selectedDocId = btn.dataset.openDoc;
-    window.__renderTab('dashboard');
+  // Opens the post as a page of the book, over the path (no longer the Library).
+  document.querySelectorAll('[data-read-post]').forEach(btn => btn.addEventListener('click', () => {
+    const i = reader ? reader.items.findIndex(it => it.post.id === parseInt(btn.dataset.readPost, 10)) : -1;
+    if (i >= 0) openReader(i);
   }));
 
   if (!canEdit) return;
