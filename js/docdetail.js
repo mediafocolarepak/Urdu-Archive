@@ -10,7 +10,7 @@ import {
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, videoLinkHtml, mountAudioPlayer, eraseMyAudioFiles,
   textDir,
-} from './core.js?v=20261109122910';
+} from './core.js?v=20261112154954';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -576,9 +576,14 @@ function siblingTitle(s) {
 }
 
 function renderWorkSiblingsHtml(siblings, currentId, canEdit) {
-  if (!siblings || siblings.length === 0) return '';
-  const others = siblings.filter(s => String(s.document_id) !== String(currentId));
-  if (!others.length) return '';
+  const others = (siblings || []).filter(s => String(s.document_id) !== String(currentId));
+  // The reader's card always shows the section, so one knows there is nothing else to look for (Owner's request,
+  // 2026-11-12). Versions the person may not read are not listed, as before.
+  if (!others.length) return canEdit ? '' : `
+    <div class="field">
+      <label style="font-weight:700;">Other versions of this document</label>
+      <div class="hint" style="padding:4px 0;">No other versions in the archive.</div>
+    </div>`;
   // Consultation (canEdit false - plain User/Operator reading a document) shows only the
   // fields someone browsing needs to pick a version; the editing context (canEdit true) keeps
   // the fuller set needed to actually manage versions (source/type/file, set-preferred).

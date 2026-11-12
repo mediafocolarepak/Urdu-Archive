@@ -329,6 +329,37 @@ td.sibling-title.doc-title-ur { font-size: 1.05em; line-height: 2; }
 .fp-contents-num { display: inline-block; min-width: 1.6em; color: var(--accent); font-weight: 600; }
 .panel h3.fp-part-heading { text-transform: none; letter-spacing: normal; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 2px solid var(--accent); color: var(--accent); font-size: 17px; }
 [data-module-block] { scroll-margin-top: 70px; }
+/* Formation path read like a book (Owner's request, 2026-11-12): one post per page over the path, below popups (1000). */
+.fp-read-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.fp-reader { position: fixed; inset: 0; z-index: 900; background: var(--bg); display: flex; flex-direction: column; }
+.fp-reader-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.fp-reader-bar .btn { flex: 0 0 auto; white-space: nowrap; padding: 6px 10px; }
+.fp-reader-close { font-size: 16px; line-height: 1; }
+.fp-reader-where { flex: 1 1 auto; min-width: 0; }
+.fp-reader-path { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fp-reader-pos { font-size: 12px; color: var(--ink-soft); }
+.fp-bookmark-on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.fp-reader-body { flex: 1 1 auto; overflow-y: auto; padding: 16px; }
+.fp-reader-body > * { max-width: 860px; margin-left: auto; margin-right: auto; }
+.fp-reader-post { margin-bottom: 14px; }
+.fp-reader-post h2 { margin: 2px 0 8px; }
+.fp-reader-chapter { font-size: 12.5px; color: var(--accent); font-weight: 600; }
+.fp-reader-doc { margin-bottom: 12px; }
+.fp-reader-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--panel); }
+.fp-reader-nav .btn { min-width: 110px; }
+.fp-reader-nav .btn:disabled { opacity: .4; cursor: default; }
+.fp-reader-toc { max-height: 60vh; overflow-y: auto; padding: 8px 16px 12px; border-bottom: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); }
+.fp-toc-module { font-weight: 700; margin: 10px 0 2px; }
+.fp-toc-chapter { font-size: 13px; color: var(--ink-soft); margin: 6px 0 0 8px; }
+.fp-toc-post { display: block; width: 100%; text-align: start; background: none; border: 0; border-radius: 6px; padding: 5px 8px 5px 18px; color: inherit; font: inherit; font-size: 14px; cursor: pointer; }
+.fp-toc-post:hover { color: var(--accent); }
+.fp-toc-post.current { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+@media (max-width: 600px) {
+  .fp-reader-bar { padding: 6px 8px; gap: 6px; }
+  .fp-reader-body { padding: 12px; }
+  .fp-reader-nav .btn { min-width: 0; }
+  .fp-btn-label { display: none; }
+}
 .overlay-message { white-space: pre-wrap; font-size: 13.5px; line-height: 1.6; margin: 8px 0 4px; }
 /* An announcement's language buttons beside its heading, and its Urdu text in Nastaliq (migration 131). */
 .splash-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
