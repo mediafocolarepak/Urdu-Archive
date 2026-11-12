@@ -1,12 +1,14 @@
 -- 143_gen3_teens_course.sql
 -- The draft path "Formation Course for the Gen 3 and Teens" (Owner, 2026-11-12): simple, exciting, full of stories and pictures.
 -- Chiara's childhood (illustrated slides), the first companions telling the Gen 3 their adventure in Trent, the Ideal
--- in short talks and stories (God Love, the Word, Jesus Forsaken, Mary, the art of loving), the Gen 3, Chiara's answers
--- to them, and Teens for Unity with Run4Unity in Rawalpindi and Dalwal.
--- 10 modules in three parts (Chiara's story, The Ideal in our life, The Gen 3 and Teens for Unity), 10 chapters,
--- 41 posts, each linking one Urdu document of the archive.
+-- in short talks and stories (the Word, Jesus Forsaken, Mary, the art of loving), the Gen 3 books of Christian catechesis
+-- for teenagers (the Marian School worksheets, "The little flame", "Vices and virtues"), the Gen 3, Chiara's answers to
+-- them, and Teens for Unity with Run4Unity in Rawalpindi and Dalwal.
+-- 12 modules in four parts (Chiara's story, The Ideal in our life, Growing as Christians, The Gen 3 and Teens for Unity),
+-- 12 chapters, 45 posts, each linking one Urdu document of the archive.
 -- Texts chosen by Claude at the Owner's request from the agents' labels (135): texts told to the Gen 3 (a few to the
--- Gen 4), stories and experiences first, long books left out, one copy of each text, no defective text, no text twice.
+-- Gen 4), stories and experiences first, one copy of each text (the draft of "The little flame" and the first part of
+-- "Vices and virtues" are left out, the whole books are in), no defective text, no text twice.
 -- Status: draft. Nothing is published, nobody is enrolled. Titles are in English; the Urdu ones are the formatore's.
 --
 -- Owner of the path: the SQL Editor has no signed-in user. With one Admin account, the path is given to it.
@@ -45,7 +47,7 @@ begin
 
   insert into public.formation_paths (title, description, status, owner_id)
     values ('Formation Course for the Gen 3 and Teens',
-            'A path for the Gen 3 and teenagers, told in stories: Chiara as a child and the adventure of Trent, God who loves us, the Word lived, Jesus Forsaken our secret, Mary, the art of loving, who the Gen 3 are, Chiara''s answers to them, and Teens for Unity.',
+            'A path for the Gen 3 and teenagers, told in stories: Chiara as a child and the adventure of Trent, the Word lived, Jesus Forsaken our secret, Mary, the art of loving, the Marian School, the little flame, vices and virtues, who the Gen 3 are, Chiara''s answers to them, and Teens for Unity.',
             'draft', v_owner)
     returning id into v_path;
 
@@ -70,17 +72,7 @@ begin
     where public.document_is_postable(d.document_id)
     order by x.ord;
   insert into public.formation_modules (path_id, title, description, part_title, sequence_number)
-    values (v_path, 'God loves me immensely', null, 'The Ideal in our life', 2) returning id into v_module;
-  insert into public.formation_chapters (module_id, title, sequence_number)
-    values (v_module, 'Readings', 0) returning id into v_chapter;
-  insert into public.formation_posts (chapter_id, document_id, title, sequence_number, posted_by)
-    select v_chapter, d.document_id, coalesce(nullif(btrim(d.en_title), ''), nullif(btrim(d.title), ''), 'Document ' || d.document_id), x.ord - 1, v_owner
-    from unnest(array[1468, 1467, 1465]) with ordinality as x(id, ord)
-    join public.documents d on d.document_id = x.id
-    where public.document_is_postable(d.document_id)
-    order by x.ord;
-  insert into public.formation_modules (path_id, title, description, part_title, sequence_number)
-    values (v_path, 'Living the Word', null, null, 3) returning id into v_module;
+    values (v_path, 'Living the Word', null, 'The Ideal in our life', 2) returning id into v_module;
   insert into public.formation_chapters (module_id, title, sequence_number)
     values (v_module, 'Readings', 0) returning id into v_chapter;
   insert into public.formation_posts (chapter_id, document_id, title, sequence_number, posted_by)
@@ -90,7 +82,7 @@ begin
     where public.document_is_postable(d.document_id)
     order by x.ord;
   insert into public.formation_modules (path_id, title, description, part_title, sequence_number)
-    values (v_path, 'Jesus Forsaken, our secret', null, null, 4) returning id into v_module;
+    values (v_path, 'Jesus Forsaken, our secret', null, null, 3) returning id into v_module;
   insert into public.formation_chapters (module_id, title, sequence_number)
     values (v_module, 'Readings', 0) returning id into v_chapter;
   insert into public.formation_posts (chapter_id, document_id, title, sequence_number, posted_by)
@@ -100,7 +92,7 @@ begin
     where public.document_is_postable(d.document_id)
     order by x.ord;
   insert into public.formation_modules (path_id, title, description, part_title, sequence_number)
-    values (v_path, 'Mary, our mother', null, null, 5) returning id into v_module;
+    values (v_path, 'Mary, our mother', null, null, 4) returning id into v_module;
   insert into public.formation_chapters (module_id, title, sequence_number)
     values (v_module, 'Readings', 0) returning id into v_chapter;
   insert into public.formation_posts (chapter_id, document_id, title, sequence_number, posted_by)
@@ -110,7 +102,7 @@ begin
     where public.document_is_postable(d.document_id)
     order by x.ord;
   insert into public.formation_modules (path_id, title, description, part_title, sequence_number)
-    values (v_path, 'The art of loving', null, null, 6) returning id into v_module;
+    values (v_path, 'The art of loving', null, null, 5) returning id into v_module;
   insert into public.formation_chapters (module_id, title, sequence_number)
     values (v_module, 'Readings', 0) returning id into v_chapter;
   insert into public.formation_posts (chapter_id, document_id, title, sequence_number, posted_by)
@@ -120,7 +112,37 @@ begin
     where public.document_is_postable(d.document_id)
     order by x.ord;
   insert into public.formation_modules (path_id, title, description, part_title, sequence_number)
-    values (v_path, 'Who are the Gen 3', null, 'The Gen 3 and Teens for Unity', 7) returning id into v_module;
+    values (v_path, 'The Marian School', 'The Marian School of the Gen 3: worksheets 1 to 3 (God our Father who is Love, the Trinity, creation).', 'Growing as Christians', 6) returning id into v_module;
+  insert into public.formation_chapters (module_id, title, sequence_number)
+    values (v_module, 'Readings', 0) returning id into v_chapter;
+  insert into public.formation_posts (chapter_id, document_id, title, sequence_number, posted_by)
+    select v_chapter, d.document_id, coalesce(nullif(btrim(d.en_title), ''), nullif(btrim(d.title), ''), 'Document ' || d.document_id), x.ord - 1, v_owner
+    from unnest(array[1468, 1465, 1467]) with ordinality as x(id, ord)
+    join public.documents d on d.document_id = x.id
+    where public.document_is_postable(d.document_id)
+    order by x.ord;
+  insert into public.formation_modules (path_id, title, description, part_title, sequence_number)
+    values (v_path, 'The little flame', 'Chiara''s book for the Gen 3 (ages 10 to 16): the divine flame lit at baptism and kept alive by the sacraments. A long book: read it a chapter at a time.', null, 7) returning id into v_module;
+  insert into public.formation_chapters (module_id, title, sequence_number)
+    values (v_module, 'Readings', 0) returning id into v_chapter;
+  insert into public.formation_posts (chapter_id, document_id, title, sequence_number, posted_by)
+    select v_chapter, d.document_id, coalesce(nullif(btrim(d.en_title), ''), nullif(btrim(d.title), ''), 'Document ' || d.document_id), x.ord - 1, v_owner
+    from unnest(array[1418, 1414, 1149]) with ordinality as x(id, ord)
+    join public.documents d on d.document_id = x.id
+    where public.document_is_postable(d.document_id)
+    order by x.ord;
+  insert into public.formation_modules (path_id, title, description, part_title, sequence_number)
+    values (v_path, 'Vices and virtues', 'Chiara''s book for the Gen 3: the seven vices as invented animals and the seven virtues Mary lived, with Gen 3 experiences. A long book: read it a chapter at a time.', null, 8) returning id into v_module;
+  insert into public.formation_chapters (module_id, title, sequence_number)
+    values (v_module, 'Readings', 0) returning id into v_chapter;
+  insert into public.formation_posts (chapter_id, document_id, title, sequence_number, posted_by)
+    select v_chapter, d.document_id, coalesce(nullif(btrim(d.en_title), ''), nullif(btrim(d.title), ''), 'Document ' || d.document_id), x.ord - 1, v_owner
+    from unnest(array[1172]) with ordinality as x(id, ord)
+    join public.documents d on d.document_id = x.id
+    where public.document_is_postable(d.document_id)
+    order by x.ord;
+  insert into public.formation_modules (path_id, title, description, part_title, sequence_number)
+    values (v_path, 'Who are the Gen 3', null, 'The Gen 3 and Teens for Unity', 9) returning id into v_module;
   insert into public.formation_chapters (module_id, title, sequence_number)
     values (v_module, 'Readings', 0) returning id into v_chapter;
   insert into public.formation_posts (chapter_id, document_id, title, sequence_number, posted_by)
@@ -130,7 +152,7 @@ begin
     where public.document_is_postable(d.document_id)
     order by x.ord;
   insert into public.formation_modules (path_id, title, description, part_title, sequence_number)
-    values (v_path, 'Chiara answers the Gen 3', null, null, 8) returning id into v_module;
+    values (v_path, 'Chiara answers the Gen 3', null, null, 10) returning id into v_module;
   insert into public.formation_chapters (module_id, title, sequence_number)
     values (v_module, 'Readings', 0) returning id into v_chapter;
   insert into public.formation_posts (chapter_id, document_id, title, sequence_number, posted_by)
@@ -140,7 +162,7 @@ begin
     where public.document_is_postable(d.document_id)
     order by x.ord;
   insert into public.formation_modules (path_id, title, description, part_title, sequence_number)
-    values (v_path, 'Teens for Unity: towards a united world', 'Teens for Unity, the Golden Rule and Run4Unity, also in Rawalpindi and Dalwal.', null, 9) returning id into v_module;
+    values (v_path, 'Teens for Unity: towards a united world', 'Teens for Unity, the Golden Rule and Run4Unity, also in Rawalpindi and Dalwal.', null, 11) returning id into v_module;
   insert into public.formation_chapters (module_id, title, sequence_number)
     values (v_module, 'Readings', 0) returning id into v_chapter;
   insert into public.formation_posts (chapter_id, document_id, title, sequence_number, posted_by)
@@ -160,10 +182,10 @@ with p as (select id, owner_id, status from public.formation_paths where title =
      t as (select fp.* from public.formation_posts fp join c on c.id = fp.chapter_id)
 select 1 as ord, 'one draft path' as what, (select count(*) = 1 from p where status = 'draft') as ok
 union all select 2, 'owned by an Admin', (select bool_and(exists (select 1 from public.user_roles r where r.user_id = p.owner_id and r.role = 'admin')) from p)
-union all select 3, 'modules (10)', (select count(*) = 10 from m)
-union all select 4, 'parts start at modules 1, 3, 8', (select string_agg((sequence_number + 1)::text, ',' order by sequence_number) = '1,3,8' from m where part_title is not null)
-union all select 5, 'chapters (10)', (select count(*) = 10 from c)
-union all select 6, 'posts (41)', (select count(*) = 41 from t)
+union all select 3, 'modules (12)', (select count(*) = 12 from m)
+union all select 4, 'parts start at modules 1, 3, 7, 10', (select string_agg((sequence_number + 1)::text, ',' order by sequence_number) = '1,3,7,10' from m where part_title is not null)
+union all select 5, 'chapters (12)', (select count(*) = 12 from c)
+union all select 6, 'posts (45)', (select count(*) = 45 from t)
 union all select 7, 'no document posted twice', (select count(distinct document_id) = count(*) from t)
-union all select 8, 'Teens for Unity module holds its 6 texts', (select count(*) = 6 from t fp join c on c.id = fp.chapter_id join m on m.id = c.module_id where m.sequence_number = 9)
+union all select 8, 'Teens for Unity module holds its 6 texts', (select count(*) = 6 from t fp join c on c.id = fp.chapter_id join m on m.id = c.module_id where m.sequence_number = 11)
 order by ord;
