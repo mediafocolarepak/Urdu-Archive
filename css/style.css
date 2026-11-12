@@ -342,6 +342,11 @@ td.sibling-title.doc-title-ur { font-size: 1.05em; line-height: 2; }
 .fp-reader-body { flex: 1 1 auto; overflow-y: auto; padding: 16px; }
 .fp-reader-body > * { max-width: 860px; margin-left: auto; margin-right: auto; }
 .fp-reader-post { margin-bottom: 14px; }
+/* Pictures of modules and posts (migration 145): wide pictures, 5:2, with rounded corners and a soft shadow. */
+.fp-reader-img { display: block; width: 100%; aspect-ratio: 5 / 2; object-fit: cover; border-radius: 12px; margin-bottom: 14px; box-shadow: var(--shadow); }
+.fp-module-img { display: block; width: calc(100% + 0px); aspect-ratio: 5 / 2; max-height: 260px; object-fit: cover; border-radius: 8px; margin: 0 0 10px; }
+.fp-post-thumb { width: 64px; height: 26px; object-fit: cover; border-radius: 4px; flex: 0 0 auto; }
+.fp-picture-preview { display: block; max-width: 260px; width: 100%; border-radius: 6px; }
 .fp-reader-post h2 { margin: 2px 0 8px; }
 .fp-reader-chapter { font-size: 12.5px; color: var(--accent); font-weight: 600; }
 .fp-reader-doc { margin-bottom: 12px; }

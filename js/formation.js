@@ -10,15 +10,37 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, confirmPopup } from './core.js?v=20261112154954';
+import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, confirmPopup } from './core.js?v=20261113001350';
 // The reader (a path read like a book) shows the same document card as the Library, as dashboard.js and matchreview.js do.
-import { renderDocDetail } from './docdetail.js?v=20261112154954';
+import { renderDocDetail } from './docdetail.js?v=20261113001350';
 
 // Thumbnails (migration 93, owner's request to make the catalog "look like Coursera") - a public
 // bucket, same shape as board post images (BOARD_MEDIA_BUCKET in core.js), but not shared outside
 // this file so it isn't exported from core.js.
 const FORMATION_MEDIA_BUCKET = 'formation-media';
-const thumbnailUrl = path => path ? sb.storage.from(FORMATION_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl : null;
+// A picture is either a file of the app itself ("app:img/paths/...", the illustrations drawn for the paths, migration
+// 145) or a file uploaded to the bucket. Used for a path's cover and, since 145, a module's or a post's picture.
+const thumbnailUrl = path => !path ? null : path.startsWith('app:') ? path.slice(4) : sb.storage.from(FORMATION_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
+async function uploadFormationImage(file) {
+  const objectPath = `${Date.now()}-${file.name}`.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const { error } = await sb.storage.from(FORMATION_MEDIA_BUCKET).upload(objectPath, file, { upsert: true });
+  if (error) { alert('Could not upload the picture: ' + error.message); return null; }
+  return objectPath;
+}
+// The picture field of the module and post popups: the current picture, a file to replace it, and a box to remove it.
+function pictureFieldHtml(prefix, current, hint) {
+  return `<div class="field"><label>Picture <span class="hint">(${hint})</span></label>
+    ${current ? `<img src="${esc(thumbnailUrl(current))}" alt="" class="fp-picture-preview">
+      <label class="hint" style="display:block;margin:4px 0;"><input type="checkbox" id="${prefix}-pic-remove"> Remove this picture</label>` : ''}
+    <input id="${prefix}-pic" type="file" accept="image/*"></div>`;
+}
+// What the picture field asks to save: undefined = leave as it is, null = remove, a path = the new picture.
+async function pictureFieldValue(prefix) {
+  const file = document.getElementById(`${prefix}-pic`).files[0];
+  if (file) { const p = await uploadFormationImage(file); return p === null ? undefined : p; }
+  if (document.getElementById(`${prefix}-pic-remove`)?.checked) return null;
+  return undefined;
+}
 
 // Standard prompt for drafting a quiz with an AI tool (GOVERNANCE.md §2.3), shared by the
 // "Copy prompt" button below and the matching Help entry (see supabase/83_formation_ai_prompt_help.sql)
@@ -257,10 +279,8 @@ function openPathPopup({ path = null, onSaved } = {}) {
     let thumbnail_path = path ? path.thumbnail_path : null;
     const file = document.getElementById('fpp-thumbnail').files[0];
     if (file) {
-      const objectPath = `${Date.now()}-${file.name}`.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const { error } = await sb.storage.from(FORMATION_MEDIA_BUCKET).upload(objectPath, file, { upsert: true });
-      if (error) { alert('Could not upload the thumbnail: ' + error.message); return; }
-      thumbnail_path = objectPath;
+      thumbnail_path = await uploadFormationImage(file);
+      if (!thumbnail_path) return;
     }
     const row = {
       title,
@@ -292,7 +312,8 @@ function openPostPopup({ chapterId, post = null, sequence = 0, onSaved }) {
     <div class="panel overlay-panel">
       <h2 style="margin-top:0;">${post ? 'Edit post' : 'New post'}</h2>
       <div class="field"><label>Title</label><input id="fppost-title" value="${esc(post ? post.title : '')}"></div>
-      <div class="field"><label>Text</label><textarea id="fppost-body" dir="auto" rows="8">${esc(post ? post.body : '')}</textarea></div>
+      <div class="field"><label>Text${post && post.document_id != null ? ' <span class="hint">(optional: the post shows a document)</span>' : ''}</label><textarea id="fppost-body" dir="auto" rows="8">${esc(post ? post.body : '')}</textarea></div>
+      ${pictureFieldHtml('fppost', post && post.image_path, "optional: without one the post shows its module's picture")}
       <div class="btn-row" style="justify-content:flex-end;">
         <button class="btn secondary" id="fppost-cancel">Cancel</button>
         <button class="btn" id="fppost-save">Save</button>
@@ -305,9 +326,13 @@ function openPostPopup({ chapterId, post = null, sequence = 0, onSaved }) {
     const title = document.getElementById('fppost-title').value.trim();
     const body = document.getElementById('fppost-body').value.trim();
     if (!title) { alert('Title is required.'); return; }
-    if (!body) { alert('Text is required.'); return; }
-    if (post) await withStatus(sb.from('formation_posts').update({ title, body }).eq('id', post.id), 'Saving...');
-    else await withStatus(sb.from('formation_posts').insert({ chapter_id: chapterId, title, body, sequence_number: sequence }), 'Saving...');
+    // A post that shows a document may have no text of its own (the database requires one or the other).
+    if (!body && !(post && post.document_id != null)) { alert('Text is required.'); return; }
+    const image_path = await pictureFieldValue('fppost');
+    const row = { title, body: body || null };
+    if (image_path !== undefined) row.image_path = image_path;
+    if (post) await withStatus(sb.from('formation_posts').update(row).eq('id', post.id), 'Saving...');
+    else await withStatus(sb.from('formation_posts').insert({ ...row, chapter_id: chapterId, sequence_number: sequence }), 'Saving...');
     backdrop.remove();
     if (onSaved) onSaved();
   });
@@ -601,7 +626,10 @@ async function showReaderPage(index) {
   updateBookmarkButton();
   const doc = it.post.document_id != null ? reader.docById[it.post.document_id] : null;
   const body = document.getElementById('fp-reader-body');
+  // The post's own picture, or else its module's (migration 145).
+  const pic = it.post.image_path || it.module.image_path;
   body.innerHTML = `
+    ${pic ? `<img src="${esc(thumbnailUrl(pic))}" alt="" class="fp-reader-img">` : ''}
     <div class="fp-reader-post">
       <div class="fp-reader-chapter" dir="auto">${esc(it.chapter.title)}</div>
       <h2 dir="auto">${esc(it.post.title)}</h2>
@@ -846,6 +874,7 @@ async function refreshChatThread(main, pathId, channel) {
 function renderModuleBlock(m, moduleNumber, chapters, postsOf, canEdit, quizCtx, docById, textById) {
   return `
   <div class="panel" style="margin-bottom:10px;" data-module-block="${m.id}">
+    ${m.image_path ? `<img src="${esc(thumbnailUrl(m.image_path))}" alt="" class="fp-module-img" loading="lazy">` : ''}
     <div class="btn-row" style="justify-content:space-between;">
       <div style="font-weight:600;" dir="auto">Module ${moduleNumber} &mdash; ${esc(m.title)}</div>
       ${canEdit ? `<div class="btn-row">
@@ -877,6 +906,7 @@ function openModulePopup({ pathId, module = null, sequence = 0, onSaved }) {
       <div class="field"><label>Description <span class="hint">(optional)</span></label><textarea id="fm-module-desc" dir="auto" rows="3">${esc(module ? module.description || '' : '')}</textarea></div>
       <div class="field"><label>Starts a part <span class="hint">(optional)</span></label><input id="fm-module-part" dir="auto" placeholder="For example: The Story" value="${esc(module ? module.part_title || '' : '')}">
         <div class="hint">Write the part's name only on its first module. The modules after it belong to the same part until another module starts a new one.</div></div>
+      ${pictureFieldHtml('fm-module', module && module.image_path, 'optional: shown at the top of the module and on its posts that have none')}
       <div class="hint" id="fm-module-error"></div>
       <div class="btn-row" style="justify-content:flex-end;">
         <button class="btn secondary" id="fm-module-cancel">Cancel</button>
@@ -891,8 +921,11 @@ function openModulePopup({ pathId, module = null, sequence = 0, onSaved }) {
     const description = document.getElementById('fm-module-desc').value.trim() || null;
     const part_title = document.getElementById('fm-module-part').value.trim() || null;
     if (!title) { document.getElementById('fm-module-error').textContent = 'Title is required.'; return; }
-    if (module) await withStatus(sb.from('formation_modules').update({ title, description, part_title }).eq('id', module.id), 'Saving...');
-    else await withStatus(sb.from('formation_modules').insert({ path_id: pathId, title, description, part_title, sequence_number: sequence }), 'Saving...');
+    const image_path = await pictureFieldValue('fm-module');
+    const row = { title, description, part_title };
+    if (image_path !== undefined) row.image_path = image_path;
+    if (module) await withStatus(sb.from('formation_modules').update(row).eq('id', module.id), 'Saving...');
+    else await withStatus(sb.from('formation_modules').insert({ ...row, path_id: pathId, sequence_number: sequence }), 'Saving...');
     backdrop.remove();
     onSaved();
   });
@@ -1192,7 +1225,7 @@ function renderPostRow(p, canEdit, doc, text) {
   return `
   <div style="padding:6px 0;border-top:1px solid var(--accent-soft);" data-post-row="${p.id}">
     <div class="btn-row" style="justify-content:space-between;align-items:flex-start;">
-      <div style="font-weight:600;" dir="auto">${esc(p.title)}</div>
+      <div style="font-weight:600;display:flex;align-items:center;gap:8px;" dir="auto">${p.image_path ? `<img src="${esc(thumbnailUrl(p.image_path))}" alt="" class="fp-post-thumb" loading="lazy">` : ''}${esc(p.title)}</div>
       ${canEdit ? `<div class="btn-row">
         <button class="btn secondary" data-move-post-up="${p.id}" style="padding:2px 6px;">&#9650;</button>
         <button class="btn secondary" data-move-post-down="${p.id}" style="padding:2px 6px;">&#9660;</button>
