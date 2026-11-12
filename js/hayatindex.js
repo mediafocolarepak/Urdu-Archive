@@ -2,7 +2,7 @@
 // For actual editing use the Hayat Editor tab; this view's only action is one-click Extract,
 // sharing core.js's extractHayatRowToDocument so both tabs create documents identically.
 
-import { sb, esc, likeSafe, isAdmin, withStatus, extractHayatRowToDocument } from './core.js?v=20261112154954';
+import { sb, esc, likeSafe, isAdmin, withStatus, extractHayatRowToDocument } from './core.js?v=20261113001350';
 
 export async function renderHayatView(main) {
   main.innerHTML = `
