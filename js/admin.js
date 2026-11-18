@@ -449,9 +449,9 @@ export async function renderAnnouncementsView(main) {
     errBox.textContent = '';
     toggle.disabled = true;
     const { data: { user } } = await sb.auth.getUser();
-    const { error } = await sb.from('app_settings').upsert({ key: 'announcements_popup', value: on, updated_at: new Date().toISOString(), updated_by: user.id }, { onConflict: 'key' });
+    const { error } = await sb.from('app_settings').upsert({ key: 'announcements_popup', value: on ? 'true' : 'false', updated_at: new Date().toISOString(), updated_by_email: user.email }, { onConflict: 'key' });
     toggle.disabled = false;
-    if (error) { showState(!on); errBox.textContent = `Not saved: ${error.message}. If the table is missing, migration 147 has not been run yet.`; return; }
+    if (error) { showState(!on); errBox.textContent = `Not saved: ${error.message}. If the table is missing, migrations 147 and 148 have not been run yet.`; return; }
     showState(on);
   });
   await refreshAnnouncementsHistory();

@@ -1021,7 +1021,8 @@ export function textDir(text, language) {
 export async function announcementsPopupOn() {
   const { data, error } = await sb.from('app_settings').select('value').eq('key', 'announcements_popup');
   if (error || !data || !data.length) return true;
-  return data[0].value !== false;
+  // app_settings.value is text (sql/21_app_settings.sql): the switch is 'true' or 'false'.
+  return String(data[0].value).replace(/"/g, '').trim() !== 'false';
 }
 
 async function lastSeenSplashId(userId) {
