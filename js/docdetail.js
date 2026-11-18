@@ -10,7 +10,7 @@ import {
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, videoLinkHtml, mountAudioPlayer, eraseMyAudioFiles,
   textDir,
-} from './core.js?v=20261118150921';
+} from './core.js?v=20261118170442';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -144,7 +144,7 @@ function loadReadingPrefs() {
 }
 function saveReadingPrefs(prefs) { try { localStorage.setItem('readingPrefs', JSON.stringify(prefs)); } catch { /* private mode: not remembered */ } }
 
-function openReadingView(doc, text) {
+export function openReadingView(doc, text) {
   document.getElementById('reading-view')?.remove();
   const prefs = loadReadingPrefs();
   const view = document.createElement('div');
