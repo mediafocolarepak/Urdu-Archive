@@ -5,7 +5,7 @@
 // reviewed. Deliberately does not import from collaboration.js (project convention: modules
 // only import from core.js), so the skill-chip rendering is duplicated here in small form.
 
-import { sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml, dateOfBirthFieldsHtml, readDateOfBirth } from './core.js?v=20261118170442';
+import { sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml, dateOfBirthFieldsHtml, readDateOfBirth, displayLogin, PHONE_LOGIN_DOMAIN } from './core.js?v=20261118171436';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -49,7 +49,7 @@ export async function renderMyProfileView(main) {
       </div>
       <div class="field-grid wide" style="margin-bottom:16px;">
         <div class="field"><label>Full name</label><div style="font-size:13.5px;padding:4px 0;">${esc(profile.full_name) || '—'}</div></div>
-        <div class="field"><label>Email</label><div style="font-size:13.5px;padding:4px 0;">${esc(user.email)}</div></div>
+        <div class="field"><label>${String(user.email || '').endsWith('@' + PHONE_LOGIN_DOMAIN) ? 'Mobile phone (to sign in)' : 'Email'}</label><div style="font-size:13.5px;padding:4px 0;">${esc(displayLogin(user.email))}</div></div>
         <div class="field"><label>Role</label><div style="font-size:13.5px;padding:4px 0;">${esc(ROLE_LABEL[role] || role)}</div></div>
         <div class="field"><label>Qualifications</label><div style="font-size:13.5px;padding:4px 0;">${myQualLabels.map(esc).join(', ') || '—'}</div></div>
         ${reservedAccess ? '<div class="field"><label>Reserved documents</label><div style="font-size:13.5px;padding:4px 0;">You can read them</div></div>' : ''}

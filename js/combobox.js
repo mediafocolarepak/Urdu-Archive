@@ -11,7 +11,7 @@
 //   wireCombobox(opts)  -> call once the element is in the DOM, attaches the change handler
 // renderCombobox(container, opts) is a convenience for the simple case: build + wire in one call.
 
-import { esc, SessionCache } from './core.js?v=20261118170442';
+import { esc, SessionCache } from './core.js?v=20261118171436';
 
 export function comboboxHtml({ id, listName, value, placeholder }) {
   const options = SessionCache.getAll(listName);

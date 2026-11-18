@@ -1,5 +1,5 @@
-import { dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, announcementsPopupOn, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange } from './core.js?v=20261118170442';
-import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261118170442';
+import { dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange } from './core.js?v=20261118171436';
+import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261118171436';
 
 // ---------- Users ----------
 
@@ -43,13 +43,13 @@ export async function renderUsersView(main) {
       <p class="hint">Qualifications are tags on top of the Operator role, not extra roles - a person can hold more than one (e.g. Translator + Revisor). They control which task categories someone can see and claim (Translation -> Translator, Revision -> Revisor); manage the list itself from Options -> Operator qualifications.</p>
       <p class="hint">An Admin's role can't be changed from this dropdown - remove their access and re-add them at the new role instead. There must always be at least one Admin, so the last one can't be removed either.</p>
       <div class="grid-wrap"><table class="grid" id="users-grid">
-        <thead><tr><th data-sort="full_name">Full name${arrow('full_name')}</th><th>Age</th><th>Email</th><th>Role</th><th>Departments</th><th>Standing</th><th>Qualifications</th><th>Credits</th><th>Reputation</th><th>City</th><th>Membership</th><th>Phone</th><th data-sort="created_at">Since${arrow('created_at')}</th><th></th></tr></thead>
+        <thead><tr><th data-sort="full_name">Full name${arrow('full_name')}</th><th>Age</th><th>Sign-in (email or phone)</th><th>Role</th><th>Departments</th><th>Standing</th><th>Qualifications</th><th>Credits</th><th>Reputation</th><th>City</th><th>Membership</th><th>Phone</th><th data-sort="created_at">Since${arrow('created_at')}</th><th></th></tr></thead>
         <tbody>${rows.map(r => { const p = profileByUid[r.user_id] || {}; const uidQuals = qualByUid[r.user_id] || new Set(); const lowRep = r.role === 'operator' && r.reputation != null && r.reputation < 20;
           const deptLabel = (deptByUid[r.user_id] || []).map(d => `${labelOf(State.optionListsByName.department || [], d.department_code)}${d.is_lead ? ' (lead)' : ''}`).join(', ');
           return `<tr data-uid="${esc(r.user_id)}">
           <td>${esc(p.full_name)}</td>
           <td>${ageCell(r.user_id, p)}</td>
-          <td>${esc(r.email)}</td>
+          <td>${esc(displayLogin(r.email))}</td>
           <td><select class="role-select" data-uid="${esc(r.user_id)}" style="width:10ch;" ${r.role === 'admin' ? 'disabled title="Admin role can\'t be changed here - remove access and re-add at the new role instead."' : ''}>${optionsHtml([['user', 'User'], ['operator', 'Operator'], ['coordinator', 'Coordinator'], ['admin', 'Admin']], r.role, false)}</select></td>
           <td style="white-space:normal;">${esc(deptLabel) || '<span class="hint">—</span>'}</td>
           <td>${STANDING_BADGE[r.standing] ?? esc(r.standing)}</td>
@@ -65,6 +65,7 @@ export async function renderUsersView(main) {
           <td>${esc((r.created_at || '').slice(0, 10))}</td>
           <td>
             <button class="btn secondary edit-profile-btn" data-uid="${esc(r.user_id)}" data-email="${esc(r.email)}" style="padding:4px 10px;">Edit</button>
+            <button class="btn secondary set-password-btn" data-uid="${esc(r.user_id)}" data-login="${esc(displayLogin(r.email))}" style="padding:4px 10px;">Set password</button>
             <button class="btn danger propose-exclusion-btn" data-uid="${esc(r.user_id)}" data-email="${esc(r.email)}" style="padding:4px 10px;">Propose exclusion</button>
           </td></tr>`; }).join('')}</tbody>
       </table></div>
@@ -95,6 +96,19 @@ export async function renderUsersView(main) {
     alert('Exclusion proposed and recorded as pending. It needs another Admin (or the HR lead) to approve it via rpc(\'decide_people_decision\') before it takes effect - there is no approval screen yet (planned for the People tab).');
     await renderUsersView(main);
   }));
+  // A temporary password for someone who forgot theirs: those who signed up with a mobile number have no email to get
+  // a reset link (Edge Function "phone-account", Admins only). The Admin tells the person, who can change it in My Profile.
+  main.querySelectorAll('.set-password-btn').forEach(btn => btn.addEventListener('click', async () => {
+    const suggested = String(Math.floor(10000000 + Math.random() * 90000000));
+    const pw = prompt(`New temporary password for ${btn.dataset.login} (at least 6 characters).
+Tell it to the person: they can change it in My Profile.`, suggested);
+    if (pw == null) return;
+    if (pw.trim().length < 6) { alert('At least 6 characters.'); return; }
+    const { error } = await withStatus(sb.functions.invoke(PHONE_ACCOUNT_FUNCTION, { body: { action: 'set_password', user_id: btn.dataset.uid, password: pw.trim() } }), 'Saving...').then(() => ({ error: null }), e => ({ error: e }));
+    if (error) { alert('Not saved. If the function "phone-account" is not deployed yet, deploy it first (see the PR).
+' + (error.message || error)); return; }
+    alert(`Done. The new password of ${btn.dataset.login} is: ${pw.trim()}`);
+  }));
   main.querySelectorAll('.edit-profile-btn').forEach(btn => btn.addEventListener('click', () => {
     showEditProfileModal(btn.dataset.uid, btn.dataset.email, profileByUid[btn.dataset.uid] || {}, main, birthByUid[btn.dataset.uid] || '');
   }));
@@ -105,7 +119,7 @@ function showEditProfileModal(uid, email, profile, main, dateOfBirth) {
   backdrop.className = 'overlay-backdrop';
   backdrop.innerHTML = `
     <div class="panel overlay-panel">
-      <h2>Edit profile <span class="hint">— ${esc(email)}</span></h2>
+      <h2>Edit profile <span class="hint">— ${esc(displayLogin(email))}</span></h2>
       <div class="field"><label>Full name</label><input id="edit-profile-fullname" value="${esc(profile.full_name)}"></div>
       <div class="field"><label>City</label><input id="edit-profile-city" value="${esc(profile.city)}"></div>
       <div class="field"><label>Focolare membership type</label>

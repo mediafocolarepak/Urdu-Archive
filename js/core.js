@@ -884,7 +884,7 @@ export async function boot(renderDashboardTab) {
   sb.auth.onAuthStateChange(async (event, session) => {
     if (event === 'PASSWORD_RECOVERY') { showRecoveryScreen(); return; }
     if (session && !State.appShown) await showApp(session, renderDashboardTab);
-    else if (session) document.getElementById('user-email').textContent = session.user.email;
+    else if (session) document.getElementById('user-email').textContent = displayLogin(session.user.email);
     else { State.appShown = false; showLogin(); }
   });
 }
@@ -923,7 +923,7 @@ async function showApp(session, renderDashboardTab) {
   State.currentRole = roleRow ? roleRow.role : 'user';
   State.standing = roleRow ? roleRow.standing : 'active';
   State.boardPostingBlocked = roleRow ? !!roleRow.board_posting_blocked : false;
-  document.getElementById('user-email').textContent = `${session.user.email} (${State.currentRole})`;
+  document.getElementById('user-email').textContent = `${displayLogin(session.user.email)} (${State.currentRole})`;
   if (State.currentRole === 'operator' && roleRow) renderStandingWidget(roleRow.credits, roleRow.reputation);
 
   const { data: deptRows } = await sb.from('department_members').select('department_code,is_lead').eq('user_id', session.user.id);
@@ -1525,22 +1525,62 @@ export async function loadOptionsForSignup(listName) {
   return error ? [] : data.map(r => [r.code, r.label]);
 }
 
+// ---------- Signing in with a mobile number (Owner's request, 2026-11-18) ----------
+// Many members, the elderly above all, have no email or cannot confirm one. Signing up with a number goes through the
+// Edge Function "phone-account" (supabase/functions/phone-account), which creates the account already confirmed with
+// an internal address <digits>@phone.dua.invalid (".invalid": no mail is ever delivered there). Signing in with the
+// number uses that address. Accounts made with an email keep signing in with their email.
+export const PHONE_LOGIN_DOMAIN = 'phone.dua.invalid';
+// The Edge Function's slug as deployed by the Owner (2026-11-18): "Phone-Account", capitals included (slugs can't be renamed).
+export const PHONE_ACCOUNT_FUNCTION = 'Phone-Account';
+// Digits only, Pakistan by default: 0300 1234567 -> 923001234567. Same rule as the Edge Function.
+export function normalizePhone(raw) {
+  let d = String(raw || '').replace(/\D/g, '');
+  if (d.startsWith('00')) d = d.slice(2);
+  else if (d.startsWith('0')) d = '92' + d.slice(1);
+  if (d.startsWith('92') && d.length !== 12) return null;
+  return d.length >= 10 && d.length <= 15 ? d : null;
+}
+// What to show for an account: the number for a phone account, the email otherwise.
+export function displayLogin(email) {
+  const s = String(email || '');
+  const suffix = '@' + PHONE_LOGIN_DOMAIN;
+  return s.endsWith(suffix) && /^\d+$/.test(s.slice(0, -suffix.length)) ? '+' + s.slice(0, -suffix.length) : s;
+}
+const PHONE_SIGNUP_ERRORS = {
+  phone_invalid: 'This mobile number does not look right. Write it like 0300 1234567.',
+  password_short: 'The password needs at least 6 characters.',
+  fields_missing: 'Please fill in every field.',
+  phone_in_use: 'This number already has an account. Sign in with it, or ask an Admin of DUA for help.',
+};
+
 // Called explicitly from app.js, not run automatically on import - tests.html imports
 // core.js too (for the pure helper functions) but has none of these DOM elements.
 export function wireAuthButtons() {
+  const errBox = document.getElementById('login-error');
+  const showError = msg => { errBox.style.color = 'var(--danger)'; errBox.textContent = msg; };
+  const showDone = msg => { errBox.style.color = 'var(--accent)'; errBox.textContent = msg; };
+
   document.getElementById('login-btn').addEventListener('click', async () => {
-    const email = document.getElementById('login-email').value.trim();
+    const id = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
-    const errBox = document.getElementById('login-error');
     errBox.textContent = '';
+    let email = id;
+    if (!id.includes('@')) {
+      const digits = normalizePhone(id);
+      if (!digits) { showError('Write your mobile number like 0300 1234567, or your email.'); return; }
+      email = digits + '@' + PHONE_LOGIN_DOMAIN;
+    }
     const { error } = await sb.auth.signInWithPassword({ email, password });
-    if (error) errBox.textContent = error.message;
+    if (error) showError(/invalid login credentials/i.test(error.message) ? 'The number (or email) or the password is not right.' : error.message);
   });
 
   const signupFields = document.getElementById('signup-fields');
   const switchLink = document.getElementById('auth-switch-link');
   const switchHint = document.getElementById('auth-switch-hint');
+  const idInput = document.getElementById('login-email');
   let signupMode = false;
+  let gender = '';
 
   function setSignupMode(on) {
     signupMode = on;
@@ -1549,9 +1589,14 @@ export function wireAuthButtons() {
     document.getElementById('signup-btn').style.display = on ? 'flex' : 'none';
     switchHint.textContent = on ? 'Already have an account?' : 'New here?';
     switchLink.textContent = on ? 'Sign in' : 'Sign up';
+    document.getElementById('login-id-label').textContent = on ? 'Mobile phone' : 'Mobile phone or email';
+    document.getElementById('login-id-hint').style.display = on ? 'block' : 'none';
+    idInput.type = on ? 'tel' : 'text';
+    idInput.autocomplete = on ? 'tel' : 'username';
     document.getElementById('login-password-label').textContent = on ? 'Create a new password' : 'Password';
+    document.getElementById('login-password').autocomplete = on ? 'new-password' : 'current-password';
     document.getElementById('forgot-password-row').style.display = on ? 'none' : 'block';
-    document.getElementById('login-error').textContent = '';
+    errBox.textContent = '';
   }
   switchLink.addEventListener('click', () => setSignupMode(!signupMode));
   setSignupMode(false);
@@ -1561,6 +1606,15 @@ export function wireAuthButtons() {
     backToLanding.addEventListener('click', () => showLogin());
   }
 
+  document.querySelectorAll('.gender-btn').forEach(b => b.addEventListener('click', () => {
+    gender = b.dataset.gender;
+    document.querySelectorAll('.gender-btn').forEach(x => {
+      const on = x.dataset.gender === gender;
+      x.classList.toggle('secondary', !on);
+      x.setAttribute('aria-checked', String(on));
+    });
+  }));
+
   loadOptionsForSignup('membership_type').then(rows => {
     document.getElementById('signup-membership').innerHTML =
       '<option value=""></option>' + rows.map(([c, l]) => `<option value="${c}">${esc(l)}</option>`).join('');
@@ -1568,23 +1622,36 @@ export function wireAuthButtons() {
   document.getElementById('signup-dob').innerHTML = dateOfBirthFieldsHtml('signup-dob');
 
   document.getElementById('signup-btn').addEventListener('click', async () => {
-    const email = document.getElementById('login-email').value.trim();
+    const digits = normalizePhone(idInput.value);
     const password = document.getElementById('login-password').value;
     const full_name = document.getElementById('signup-fullname').value.trim();
     const city = document.getElementById('signup-city').value.trim();
     const membership_type = document.getElementById('signup-membership').value;
-    const phone = document.getElementById('signup-phone').value.trim();
     const dob = readDateOfBirth('signup-dob');
-    const gender = document.getElementById('signup-gender').value;
-    const errBox = document.getElementById('login-error');
     errBox.textContent = '';
-    if (!email || password.length < 6) { errBox.textContent = 'Email and password (min. 6 characters) are required.'; return; }
-    if (!full_name || !city || !membership_type || !phone || !gender) { errBox.textContent = 'Full name, city, membership type, phone, date of birth and gender are required.'; return; }
-    if (dob.error || !dob.value) { errBox.textContent = dob.error || 'Full name, city, membership type, phone, date of birth and gender are required.'; return; }
-    const { error } = await sb.auth.signUp({ email, password, options: { data: { full_name, city, membership_type, phone, date_of_birth: dob.value, gender }, emailRedirectTo: 'https://mediafocolarepak.github.io/Urdu-Archive/' } });
-    if (error) { errBox.textContent = error.message; return; }
-    errBox.style.color = 'var(--accent)';
-    errBox.textContent = 'Sign-up submitted. Check your email to confirm, then sign in.';
+    if (!digits) { showError(PHONE_SIGNUP_ERRORS.phone_invalid); return; }
+    if (password.length < 6) { showError(PHONE_SIGNUP_ERRORS.password_short); return; }
+    if (!full_name || !city || !membership_type || !gender) { showError('Please fill in your full name, city, membership type, and choose Male or Female.'); return; }
+    if (dob.error || !dob.value) { showError(dob.error || 'Please choose your date of birth.'); return; }
+    const btn = document.getElementById('signup-btn');
+    btn.disabled = true;
+    showDone('Creating your account...');
+    try {
+      const { data, error } = await sb.functions.invoke(PHONE_ACCOUNT_FUNCTION, {
+        body: { action: 'signup', phone: digits, password, full_name, city, membership_type, gender, date_of_birth: dob.value },
+      });
+      if (error) {
+        let code = null;
+        try { code = (await error.context.json()).error; } catch { /* no readable answer */ }
+        console.warn('Sign-up:', error.message, code);
+        showError(PHONE_SIGNUP_ERRORS[code] || 'Sign-up did not work. Check your connection and try again.');
+        return;
+      }
+      const { error: signInError } = await sb.auth.signInWithPassword({ email: data.login, password });
+      if (signInError) { setSignupMode(false); showError('Your account is ready: sign in with your number and password.'); }
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   document.getElementById('logout-btn').addEventListener('click', () => {
@@ -1595,15 +1662,17 @@ export function wireAuthButtons() {
     sb.auth.signOut().finally(() => location.reload());
   });
 
+  // An email account gets a reset link; a phone account has no email, so an Admin gives a temporary password (Users).
   document.getElementById('forgot-password-link').addEventListener('click', async () => {
-    const errBox = document.getElementById('login-error');
-    const email = document.getElementById('login-email').value.trim();
-    if (!email) { errBox.style.color = 'var(--danger)'; errBox.textContent = 'Type your email above first, then click "Forgot your password?" again.'; return; }
+    const id = idInput.value.trim();
+    if (!id.includes('@')) {
+      showDone('If you signed up with your mobile number, ask an Admin of DUA: they will give you a new password, which you can then change in My Profile. If you signed up with an email, type your email above and tap "Forgot your password?" again.');
+      return;
+    }
     errBox.textContent = '';
-    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: 'https://mediafocolarepak.github.io/Urdu-Archive/' });
-    if (error) { errBox.style.color = 'var(--danger)'; errBox.textContent = error.message; return; }
-    errBox.style.color = 'var(--accent)';
-    errBox.textContent = 'Check your email for a link to reset your password.';
+    const { error } = await sb.auth.resetPasswordForEmail(id, { redirectTo: 'https://mediafocolarepak.github.io/Urdu-Archive/' });
+    if (error) { showError(error.message); return; }
+    showDone('Check your email for a link to reset your password.');
   });
 }
 
