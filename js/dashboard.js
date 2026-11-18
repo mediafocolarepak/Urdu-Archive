@@ -1,27 +1,8 @@
-import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml } from './core.js?v=20261118135641';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261118135641';
+import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml } from './core.js?v=20261118143404';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261118143404';
 
-// "From the boards" (84_boards_moderation.sql): a small window onto recent public board
-// activity from the Dashboard, so board posts aren't only discoverable by opening the Boards
-// tab. Read-only, latest few published posts across every board - no filters, no pagination,
-// deliberately lightweight (the Boards tab itself is where you actually browse/search/post).
-async function renderFromBoards() {
-  const box = document.getElementById('dash-from-boards-list');
-  if (!box) return;
-  const posts = await withStatus(sb.from('board_posts').select('id,board_code,title,body,created_at')
-    .eq('status', 'published').order('created_at', { ascending: false }).limit(5));
-  const boardList = State.optionListsByName.board || [];
-  box.innerHTML = posts.length ? posts.map(p => `
-    <div style="padding:6px 0;border-top:1px solid var(--line);cursor:pointer;" data-open-board="${esc(p.board_code)}">
-      <div style="font-weight:600;" dir="auto">${esc(p.title)}</div>
-      <div class="hint">${esc(labelOf(boardList, p.board_code))} &middot; ${esc((p.created_at || '').slice(0, 10))}</div>
-      ${p.body ? `<div class="hint" dir="auto">${esc((p.body || '').slice(0, 140))}${(p.body || '').length > 140 ? '…' : ''}</div>` : ''}
-    </div>`).join('') : '<div class="hint">No board posts yet.</div>';
-  box.querySelectorAll('[data-open-board]').forEach(el => el.addEventListener('click', () => {
-    State.boardsSelected = el.dataset.openBoard;
-    window.__renderTab('boards');
-  }));
-}
+// The "From the boards" section (84_boards_moderation.sql) was removed on the Owner's request, 2026-11-18: the
+// Library shows only the archive; board posts are in the Boards tab.
 
 // Which Works have a reading or a video, for the marks on the list. Those records are few.
 let mediaWorks = { aud: new Set(), vid: new Set() };
@@ -104,11 +85,6 @@ export async function renderDashboardView(main) {
           <div class="panel" id="doc-detail" style="margin:0;"></div>
         </div>
       </div>
-    </div>
-    <div class="panel" style="border-style:dashed;background:transparent;margin-top:28px;">
-      <h2 style="margin-bottom:2px;">From the boards</h2>
-      <p class="hint" style="margin-top:0;">Boards are a shared space, separate from the archive: these posts are not archive documents.</p>
-      <div id="dash-from-boards-list"><div class="hint">Loading...</div></div>
     </div>`;
 
   // On a phone the filters are a list that the Search button opens (the nine dropdowns pushed the
@@ -178,7 +154,6 @@ export async function renderDashboardView(main) {
     State.dashOpenDetail = false;
     if (window.matchMedia('(max-width: 900px)').matches) openDocDetailScreen();
   }
-  renderFromBoards();
 }
 
 // Fase 2 (PROJECT_HANDOFF_v16.md): the search box now also reaches into the Urdu body text
