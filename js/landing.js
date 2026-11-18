@@ -5,9 +5,9 @@
 // department (My Department -> Communication); a card that points into the app ("tab:<id>") is shown without a link
 // here, since the app needs signing in.
 
-import { sb, esc, ONBOARDING_MEDIA_BUCKET, showSignIn } from './core.js?v=20261118170442';
-import { openReadingView } from './docdetail.js?v=20261118170442';
-import { homeTileHtml, navIcon, CHEVRON } from './onboarding.js?v=20261118170442';
+import { sb, esc, ONBOARDING_MEDIA_BUCKET, showSignIn } from './core.js?v=20261118171436';
+import { openReadingView } from './docdetail.js?v=20261118171436';
+import { homeTileHtml, navIcon, CHEVRON } from './onboarding.js?v=20261118171436';
 
 const SECTIONS = [
   ['about', 'یہ آپ کا گھر ہے', 'This is your home'],

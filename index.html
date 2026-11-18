@@ -8,9 +8,9 @@
 <meta name="theme-color" content="#7a5230">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=20261118170442">
+<link rel="stylesheet" href="css/style.css?v=20261118171436">
 <style>
-#login-screen, #recovery-screen { display: flex; align-items: center; justify-content: center; height: 100vh; }
+#login-screen, #recovery-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; box-sizing: border-box; }
 #login-card, #recovery-card { width: 100%; max-width: 360px; }
 #login-error, #recovery-error { color: var(--danger); font-size: 12.5px; margin-top: 8px; min-height: 16px; }
 .auth-switch { font-size: 12.5px; text-align: center; margin-top: 10px; color: var(--ink-soft); }
@@ -24,20 +24,20 @@
 <div id="login-screen" style="display:none;">
   <div class="panel" id="login-card">
     <h2 style="text-align:center;">Digital Urdu Archive</h2>
-    <p class="hint" style="text-align:center; margin-bottom:16px;">Team sign-in (shared database)</p>
-    <div class="field"><label>Email</label><input id="login-email" type="email" autocomplete="username"></div>
-    <div class="field"><label id="login-password-label">Password</label><input id="login-password" type="password" autocomplete="new-password"></div>
+    <p class="hint" style="text-align:center; margin-bottom:16px;">Sign in, or sign up with your mobile number</p>
+    <div class="field"><label id="login-id-label" for="login-email">Mobile phone or email</label><input id="login-email" type="text" autocomplete="username" autocapitalize="off" spellcheck="false"><div class="hint" id="login-id-hint" style="display:none;">For example 0300 1234567</div></div>
+    <div class="field"><label id="login-password-label" for="login-password">Password</label><input id="login-password" type="password" autocomplete="current-password"></div>
     <div id="signup-fields" style="display:none;">
-      <div class="field"><label>Full name</label><input id="signup-fullname" type="text" autocomplete="name"></div>
-      <div class="field"><label>City</label><input id="signup-city" type="text" autocomplete="address-level2"></div>
-      <div class="field"><label>Focolare membership type</label><select id="signup-membership"></select></div>
-      <div class="field"><label>Mobile phone</label><input id="signup-phone" type="tel" autocomplete="tel"></div>
+      <div class="field"><label for="signup-fullname">Full name</label><input id="signup-fullname" type="text" autocomplete="name"></div>
+      <div class="field"><label for="signup-city">City</label><input id="signup-city" type="text" autocomplete="address-level2"></div>
+      <div class="field"><label for="signup-membership">Focolare membership type</label><select id="signup-membership"></select></div>
+      <div class="field"><label>Male / Female</label>
+        <div class="gender-choice" role="radiogroup" aria-label="Male or female">
+          <button type="button" class="btn secondary gender-btn" data-gender="M" role="radio" aria-checked="false">Male</button>
+          <button type="button" class="btn secondary gender-btn" data-gender="F" role="radio" aria-checked="false">Female</button>
+        </div>
+      </div>
       <div class="field"><label>Date of birth</label><div id="signup-dob"></div><div class="hint">If you don't know the exact date, choose the nearest. Only you, the HR lead and Admins can see it.</div></div>
-      <div class="field"><label>Gender</label><select id="signup-gender">
-        <option value=""></option>
-        <option value="M">Male</option>
-        <option value="F">Female</option>
-      </select></div>
     </div>
     <div class="btn-row" style="justify-content:center;">
       <button class="btn" id="login-btn" style="flex:1;">Sign in</button>
@@ -82,6 +82,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
 <script>if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.worker.min.js';</script>
-<script type="module" src="js/app.js?v=20261118170442"></script>
+<script type="module" src="js/app.js?v=20261118171436"></script>
 </body>
 </html>
