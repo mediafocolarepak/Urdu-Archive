@@ -2,7 +2,7 @@
 // not by role, and each person sees only the guides for what they can do. Content lives in help_pages
 // (one row per guide and language, 116_help_redesign.sql). The list loads titles only; a guide's text is
 // fetched when it is opened. Users have no Help tab (Start Here stands in for it, GOVERNANCE 5.8): they
-// reach this view from the Guides button of Start Here. Admin can edit a guide in place.
+// reach this view from the Help button of Start Here. Admin can edit a guide in place.
 //
 // audience tokens (help_pages.audience, any match shows the guide; Admin sees everything):
 //   user | operator | coordinator   the role or anything above it
@@ -11,7 +11,7 @@
 //   qual:<CODE>                     holds that qualification
 //   board_editor                    looks after at least one board
 
-import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20261113001350';
+import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20261118135641';
 
 const SECTIONS = [
   ['use', { en: 'Use the archive', it: 'Usare l\'archivio', ur: 'آرکائیو کا استعمال' }],
@@ -270,7 +270,7 @@ window.addEventListener('popstate', e => {
 });
 
 // Links work from anywhere: inside a guide (data-tab, data-help-guide), from the "?" beside a screen's
-// title (helpLinkHtml in core.js), and from the Guides button of Start Here (data-help-home).
+// title (helpLinkHtml in core.js), and from the Help button of Start Here (data-help-home).
 document.addEventListener('click', e => {
   const guide = e.target.closest('[data-help-guide]');
   if (guide) { e.preventDefault(); openGuide(guide.dataset.helpGuide); return; }

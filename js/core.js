@@ -946,7 +946,7 @@ async function showApp(session, renderDashboardTab) {
   State.boardPolicyAcked = !!(profileRows && profileRows[0] && profileRows[0].board_policy_ack_at);
 
   renderDashboardTab();
-  await maybeShowSplash();
+  await maybeShowSplash(session.user.id);
   // The announcement comes first, if there is one: its "Got it" then asks for the date.
   if (!document.querySelector('.overlay-backdrop')) maybeAskDateOfBirth();
 }
@@ -1013,8 +1013,30 @@ export function textDir(text, language) {
 }
 
 // ---------- Splash-screen announcements ----------
-// Shown once per browser session (not on every tab switch), and again after a fresh
-// login - the sessionStorage flag is set here and cleared by the sign-out handler below.
+// Owner's request, 2026-11-18 (migration 147): an announcement opens by itself only while the Admin's switch is on
+// (app_settings 'announcements_popup'), and only until the person closes it with "Got it": a closed one never opens
+// again, on any device (splash_seen). Checked once per browser session; the sessionStorage flag is cleared by the
+// sign-out handler below. Before 147 runs: no switch means on, and closed announcements are remembered on the device.
+
+export async function announcementsPopupOn() {
+  const { data, error } = await sb.from('app_settings').select('value').eq('key', 'announcements_popup');
+  if (error || !data || !data.length) return true;
+  return data[0].value !== false;
+}
+
+async function lastSeenSplashId(userId) {
+  let seen = 0;
+  try { seen = Number(localStorage.getItem(`splashSeen_${userId}`)) || 0; } catch { /* the database decides */ }
+  const { data, error } = await sb.from('splash_seen').select('splash_id').eq('user_id', userId);
+  if (!error && data && data.length) seen = Math.max(seen, Number(data[0].splash_id) || 0);
+  return seen;
+}
+
+async function markSplashSeen(userId, splashId) {
+  try { localStorage.setItem(`splashSeen_${userId}`, String(splashId)); } catch { /* the database keeps it */ }
+  const { error } = await sb.from('splash_seen').upsert({ user_id: userId, splash_id: splashId, seen_at: new Date().toISOString() }, { onConflict: 'user_id' });
+  if (error) console.warn('Closed announcement not saved in the database:', error.message);
+}
 
 // An announcement in the reader's language (migration 131): English always, Italian and Urdu when written. The
 // language starts as the one chosen in Help (helpLang), and a choice made here is kept there too, from the next
@@ -1034,11 +1056,14 @@ function splashMessageHtml(m, lang) {
   return `<div class="overlay-message${urdu ? ' splash-ur' : ''}" ${urdu ? 'dir="rtl"' : 'dir="auto"'}>${esc(splashText(m, lang))}</div>`;
 }
 
-async function maybeShowSplash() {
+async function maybeShowSplash(userId) {
   if (sessionStorage.getItem('splashShown')) return;
+  sessionStorage.setItem('splashShown', '1');
+  if (!userId || !(await announcementsPopupOn())) return;
   const { data, error } = await sb.from('splash_messages').select('*').order('created_at', { ascending: false }).limit(1);
-  if (error || !data || !data.length) { sessionStorage.setItem('splashShown', '1'); return; }
+  if (error || !data || !data.length) return;
   const msg = data[0];
+  if (Number(msg.id) <= await lastSeenSplashId(userId)) return;
   const authorName = await getDisplayNameByEmail(msg.created_by_email);
   const langs = splashLangs(msg);
   let lang = splashStartLang(msg);
@@ -1072,7 +1097,7 @@ async function maybeShowSplash() {
   show();
   document.getElementById('splash-dismiss-btn').addEventListener('click', () => {
     backdrop.remove();
-    sessionStorage.setItem('splashShown', '1');
+    markSplashSeen(userId, msg.id);
     maybeAskDateOfBirth();
   });
   document.getElementById('splash-history-btn').addEventListener('click', () => showSplashHistory(lang));

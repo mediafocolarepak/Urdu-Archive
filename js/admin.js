@@ -1,5 +1,5 @@
-import { dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange } from './core.js?v=20261113001350';
-import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261113001350';
+import { dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, announcementsPopupOn, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange } from './core.js?v=20261118135641';
+import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261118135641';
 
 // ---------- Users ----------
 
@@ -420,7 +420,13 @@ export async function renderAnnouncementsView(main) {
   if (!isAdmin()) { main.innerHTML = '<div class="empty-msg">Admin access required.</div>'; return; }
   main.innerHTML = `
     <div class="panel">
-      <h2>Announcements <span class="hint">— shown to every user in a splash screen on their next login</span></h2>
+      <h2>Pop-up</h2>
+      <label class="switch-row"><input type="checkbox" class="switch" role="switch" id="splash-popup-switch"> <span id="splash-popup-label">Open new announcements by themselves</span></label>
+      <p class="hint">On: a new announcement opens once when each person opens the app; after "Got it" it does not open again. Off: no announcement opens by itself.</p>
+      <div id="splash-popup-error" class="dob-error"></div>
+    </div>
+    <div class="panel">
+      <h2>Announcements <span class="hint">— opens once for each person, if the pop-up is on</span></h2>
       <div class="field"><label>New announcement, in English (required)</label><textarea id="splash-new-text" rows="4"></textarea></div>
       <div class="field"><label>In Italian (optional)</label><textarea id="splash-new-it" rows="4"></textarea></div>
       <div class="field"><label>In Urdu (optional)</label><textarea id="splash-new-ur" rows="4" dir="rtl" class="splash-ur"></textarea></div>
@@ -434,6 +440,20 @@ export async function renderAnnouncementsView(main) {
         <tbody id="splash-history-body"></tbody>
       </table></div>
     </div>`;
+  const toggle = document.getElementById('splash-popup-switch');
+  const showState = on => { toggle.checked = on; document.getElementById('splash-popup-label').textContent = on ? 'Open new announcements by themselves: on' : 'Open new announcements by themselves: off'; };
+  showState(await announcementsPopupOn());
+  toggle.addEventListener('change', async () => {
+    const on = toggle.checked;
+    const errBox = document.getElementById('splash-popup-error');
+    errBox.textContent = '';
+    toggle.disabled = true;
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb.from('app_settings').upsert({ key: 'announcements_popup', value: on, updated_at: new Date().toISOString(), updated_by: user.id }, { onConflict: 'key' });
+    toggle.disabled = false;
+    if (error) { showState(!on); errBox.textContent = `Not saved: ${error.message}. If the table is missing, migration 147 has not been run yet.`; return; }
+    showState(on);
+  });
   await refreshAnnouncementsHistory();
   document.getElementById('splash-publish-btn').addEventListener('click', async () => {
     const text = document.getElementById('splash-new-text').value.trim();
