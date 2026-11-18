@@ -545,3 +545,26 @@ input.switch:checked { background: var(--accent); }
 input.switch:checked::after { left: 23px; }
 input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 input.switch:disabled { opacity: .6; cursor: wait; }
+
+/* Home tiles (Owner's layout, 2026-11-18): English in bold on the left, Urdu in Nastaliq on the right. Used by Home
+   (onboarding.js) and by the landing page before signing in (landing.js). */
+.home-tile { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 76px; padding: 10px 14px; text-align: left; font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); cursor: pointer; }
+.home-tile:hover, .home-tile:focus-visible { border-color: var(--sec, var(--accent)); }
+.home-tile-en { flex: 1 1 auto; min-width: 0; font-size: 17px; font-weight: 700; line-height: 1.3; text-align: left; }
+.home-tile-ur { flex: 0 0 auto; white-space: nowrap; font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-size: 21px; line-height: 2; text-align: right; }
+@media (max-width: 420px) { .home-tile { gap: 10px; padding: 10px 10px 10px 12px; } .home-tile .start-icon { flex-basis: 40px; width: 40px; height: 40px; } .home-tile-ur { font-size: 18px; } .home-tile-en { font-size: 16px; } }
+.home-word { align-items: flex-start; background: var(--accent-soft); border-color: var(--sec, var(--accent)); }
+.home-word .start-icon { margin-top: 4px; color: var(--accent-ink); background: var(--sec, var(--accent)); }
+.home-word .start-chevron { align-self: center; }
+.home-word-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.home-word-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.home-word-ur { font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-size: 20px; line-height: 2.1; text-align: right; overflow-wrap: anywhere; }
+.home-word-en { font-size: 15.5px; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
+.home-signin { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.home-signin .start-icon { color: var(--accent); background: var(--accent-ink); }
+.home-signin .start-chevron { color: var(--accent-ink); }
+
+/* The landing page before signing in. */
+#landing-screen { min-height: 100vh; padding: 16px; background: var(--bg); }
+.landing-home { padding-bottom: 24px; }
+.landing-title { margin: 8px 0 4px; font-size: 24px; text-align: center; }

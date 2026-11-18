@@ -889,15 +889,33 @@ export async function boot(renderDashboardTab) {
   });
 }
 
+// Before signing in, the landing page comes first (landing.js, set by app.js as window.__renderLanding); its Sign in
+// tile opens the sign-in card, whose "Back" returns to it. Without it, the sign-in card as before.
 function showLogin() {
-  document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
+  const landing = document.getElementById('landing-screen');
+  if (landing && window.__renderLanding) {
+    document.getElementById('login-screen').style.display = 'none';
+    landing.style.display = 'block';
+    window.__renderLanding(landing);
+  } else {
+    document.getElementById('login-screen').style.display = 'flex';
+  }
+}
+
+export function showSignIn() {
+  const landing = document.getElementById('landing-screen');
+  if (landing) landing.style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  window.scrollTo(0, 0);
 }
 
 async function showApp(session, renderDashboardTab) {
   State.appShown = true;
   State.selectedDocId = null; State.selectedCategoryId = null;
   document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('landing-screen')?.style.setProperty('display', 'none');
+  document.getElementById('reading-view')?.remove();
   document.getElementById('app').style.display = 'flex';
 
   const { data: roleRows } = await sb.from('user_roles').select('role,credits,reputation,standing,board_posting_blocked').eq('user_id', session.user.id);
@@ -1537,6 +1555,11 @@ export function wireAuthButtons() {
   }
   switchLink.addEventListener('click', () => setSignupMode(!signupMode));
   setSignupMode(false);
+  const backToLanding = document.getElementById('back-to-landing');
+  if (backToLanding) {
+    backToLanding.parentElement.style.display = window.__renderLanding ? '' : 'none';
+    backToLanding.addEventListener('click', () => showLogin());
+  }
 
   loadOptionsForSignup('membership_type').then(rows => {
     document.getElementById('signup-membership').innerHTML =
@@ -1590,6 +1613,7 @@ export function wireAuthButtons() {
 // recovery session, not a real sign-in.
 function showRecoveryScreen() {
   document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('landing-screen')?.style.setProperty('display', 'none');
   document.getElementById('app').style.display = 'none';
   document.getElementById('recovery-screen').style.display = 'flex';
   const errBox = document.getElementById('recovery-error');
