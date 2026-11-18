@@ -1531,6 +1531,8 @@ export async function loadOptionsForSignup(listName) {
 // an internal address <digits>@phone.dua.invalid (".invalid": no mail is ever delivered there). Signing in with the
 // number uses that address. Accounts made with an email keep signing in with their email.
 export const PHONE_LOGIN_DOMAIN = 'phone.dua.invalid';
+// The Edge Function's slug as deployed by the Owner (2026-11-18): "Phone-Account", capitals included (slugs can't be renamed).
+export const PHONE_ACCOUNT_FUNCTION = 'Phone-Account';
 // Digits only, Pakistan by default: 0300 1234567 -> 923001234567. Same rule as the Edge Function.
 export function normalizePhone(raw) {
   let d = String(raw || '').replace(/\D/g, '');
@@ -1635,7 +1637,7 @@ export function wireAuthButtons() {
     btn.disabled = true;
     showDone('Creating your account...');
     try {
-      const { data, error } = await sb.functions.invoke('phone-account', {
+      const { data, error } = await sb.functions.invoke(PHONE_ACCOUNT_FUNCTION, {
         body: { action: 'signup', phone: digits, password, full_name, city, membership_type, gender, date_of_birth: dob.value },
       });
       if (error) {

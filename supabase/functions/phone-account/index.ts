@@ -10,7 +10,8 @@
 //   { action: "set_password", user_id, password }
 //       Admins only (checked from the caller's own sign-in): a temporary password for someone who forgot theirs.
 //
-// Deploy: Supabase Dashboard -> Edge Functions -> Deploy a new function -> Via Editor, name "phone-account", paste this
+// Deployed 2026-11-18 with the slug "Phone-Account" (capitals included; the app calls it by that name, js/core.js
+// PHONE_ACCOUNT_FUNCTION). To deploy again: Supabase Dashboard -> Edge Functions -> Phone-Account -> Code, paste this
 // file, Deploy. Keep "Verify JWT" on (the app sends its public key or the signed-in user's token). The service key is
 // provided to the function by Supabase itself; it never appears in the app.
 
