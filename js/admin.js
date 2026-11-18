@@ -1,5 +1,5 @@
-import { dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange } from './core.js?v=20261118171436';
-import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261118171436';
+import { dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange } from './core.js?v=20261118214633';
+import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261118214633';
 
 // ---------- Users ----------
 
@@ -105,8 +105,7 @@ Tell it to the person: they can change it in My Profile.`, suggested);
     if (pw == null) return;
     if (pw.trim().length < 6) { alert('At least 6 characters.'); return; }
     const { error } = await withStatus(sb.functions.invoke(PHONE_ACCOUNT_FUNCTION, { body: { action: 'set_password', user_id: btn.dataset.uid, password: pw.trim() } }), 'Saving...').then(() => ({ error: null }), e => ({ error: e }));
-    if (error) { alert('Not saved. If the function "phone-account" is not deployed yet, deploy it first (see the PR).
-' + (error.message || error)); return; }
+    if (error) { alert(`Not saved: ${error.message || error}`); return; }
     alert(`Done. The new password of ${btn.dataset.login} is: ${pw.trim()}`);
   }));
   main.querySelectorAll('.edit-profile-btn').forEach(btn => btn.addEventListener('click', () => {
