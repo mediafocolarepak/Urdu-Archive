@@ -7,7 +7,8 @@
 // by the Communication department through its own editor in My Department -> Communication (see
 // renderOnboardingCardsManager in mydepartment.js) - this module only ever reads onboarding_cards.
 
-import { sb, State, esc, withStatus, ONBOARDING_MEDIA_BUCKET, HIDDEN_DOC_STATUSES, videoLinkHtml, mountAudioPlayer } from './core.js?v=20261118143404';
+import { sb, State, esc, withStatus, ONBOARDING_MEDIA_BUCKET, HIDDEN_DOC_STATUSES } from './core.js?v=20261118150921';
+import { renderDocDetail } from './docdetail.js?v=20261118150921';
 
 const thumbnailUrl = path => path ? sb.storage.from(ONBOARDING_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl : null;
 
@@ -103,26 +104,43 @@ async function findWordOfMonth() {
 // The English title under the Urdu one, for those who don't read Urdu (Owner's request, 2026-11-08).
 const englishTitleOf = (w, shown) => (w.enTitle && w.enTitle !== shown ? w.enTitle : '');
 
-function wordOfMonthHtml(w) {
+// The tile opens the document's card (read, listen, watch, other versions) in a reading page over Start Here, the
+// same page a formation path uses (Owner's request, 2026-11-18): no detour through the Library. ✕, Esc and the
+// phone's Back return to Start Here.
+function openWordReader(w) {
+  if (document.getElementById('wom-reader')) return;
   const [year, mon] = w.month.split('-').map(Number);
   const monthName = new Date(year, mon - 1, 1).toLocaleDateString('en', { month: 'long', year: 'numeric' });
-  const title = w.doc.ur_title || w.doc.original_title || w.doc.en_title || w.doc.title;
-  const en = englishTitleOf(w, title);
-  return `
-    <div class="panel" id="wom-card">
-      ${WORD_OF_MONTH_HEADING_UR ? `<h2 style="margin:0 0 4px;font-size:24px;line-height:1.3;text-align:left;" dir="auto">${esc(WORD_OF_MONTH_HEADING_UR)}</h2>` : ''}
-      <h2 style="margin:0 0 8px;font-size:24px;line-height:1.3;">${w.isCurrent ? 'Word of Life of this month' : 'Latest Word of Life'}</h2>
-      <div style="font-weight:600;font-size:18px;line-height:1.7;" dir="auto">${esc(title)}</div>
-      ${en ? `<div style="font-weight:600;font-size:16px;line-height:1.5;" dir="auto">${esc(en)}</div>` : ''}
-      <div class="hint">${esc(monthName)}</div>
-      <div class="btn-row">
-        <button class="btn" id="wom-read">Read</button>
-        ${w.reading ? '<button class="btn" id="wom-listen">&#128266; Listen</button>' : ''}
-        ${w.video ? videoLinkHtml(w.video.external_url, 'Watch video') : ''}
+  document.getElementById('main').insertAdjacentHTML('beforeend', `
+    <div class="fp-reader" id="wom-reader" role="dialog" aria-label="Word of Life">
+      <div class="fp-reader-bar">
+        <button type="button" class="btn secondary fp-reader-close" id="wom-reader-close" aria-label="Close">&#10005;</button>
+        <div class="fp-reader-where">
+          <div class="fp-reader-path">${w.isCurrent ? 'Word of Life of this month' : 'Latest Word of Life'}</div>
+          <div class="fp-reader-pos">${esc(monthName)}</div>
+        </div>
       </div>
-      <div id="wom-player"></div>
-    </div>`;
+      <div class="fp-reader-body"><div class="panel fp-reader-doc" id="doc-detail"><div class="empty-msg">Loading...</div></div></div>
+    </div>`);
+  history.pushState({ womReader: true }, '');
+  document.getElementById('wom-reader-close').addEventListener('click', () => {
+    if (history.state && history.state.womReader) history.back(); else closeWordReader();
+  });
+  document.addEventListener('keydown', wordReaderKeys);
+  renderDocDetail(w.doc.document_id);
 }
+
+function wordReaderKeys(e) {
+  if (e.key !== 'Escape' || document.querySelector('.overlay-backdrop, .reading-view')) return;
+  document.getElementById('wom-reader-close')?.click();
+}
+
+function closeWordReader() {
+  document.removeEventListener('keydown', wordReaderKeys);
+  document.getElementById('wom-reader')?.remove();
+}
+
+window.addEventListener('popstate', () => { if (document.getElementById('wom-reader')) closeWordReader(); });
 
 // ---------- The first screen: large buttons ----------
 const startView = { page: null, cards: [], word: null, homeScroll: 0 };
@@ -188,6 +206,7 @@ function renderHome(main) {
 
 // ---------- The pages behind the buttons ----------
 function openPage(main, page) {
+  if (page === 'word') { if (startView.word) openWordReader(startView.word); return; }
   startView.homeScroll = main.scrollTop;
   startView.page = page;
   history.pushState({ startPage: page }, '');
@@ -201,10 +220,7 @@ function backHtml() {
 function renderPage(main) {
   const page = startView.page;
   const section = SECTIONS.find(([code]) => code === page);
-  if (page === 'word' && startView.word) {
-    main.innerHTML = backHtml() + wordOfMonthHtml(startView.word);
-    wireWordOfMonth(startView.word);
-  } else if (section) {
+  if (section) {
     const [code, headingUr, headingEn] = section;
     main.innerHTML = backHtml() + `
       <div class="panel">
@@ -224,15 +240,6 @@ function renderPage(main) {
     renderHome(main);
   });
   main.scrollTop = 0;
-}
-
-function wireWordOfMonth(w) {
-  document.getElementById('wom-read').addEventListener('click', () => {
-    State.selectedDocId = w.doc.document_id;
-    State.dashOpenDetail = true;
-    window.__renderTab('dashboard');
-  });
-  document.getElementById('wom-listen')?.addEventListener('click', () => mountAudioPlayer(document.getElementById('wom-player'), w.reading, true));
 }
 
 // The phone's Back goes from a page to the first screen, as it closes a document in the Library.
