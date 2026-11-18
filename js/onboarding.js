@@ -3,12 +3,14 @@
 // before signing in (landing.js). Home is a short set of large tiles to the sections of the app: in each, the English
 // in bold on the left and the Urdu in Nastaliq on the right (Owner's layout).
 
-import { esc } from './core.js?v=20261118214633';
+import { esc } from './core.js?v=20261118221716';
 
 // The Urdu names are the ones of the Urdu guides (Documentazione/guide-help/ur1.mjs, ur2.mjs, migration 119): Boards,
 // Formation Paths and Help have one there; the others are named in Latin letters there too, so they stand alone
 // until the Owner gives a word. Never invented (memory: Urdu wording is the Owner's).
 const HOME_TILES = [
+  // The Library first (Owner's request, 2026-11-18). The Urdu guides call it "Library" in Latin letters too.
+  ['dashboard', 'Library', ''],
   ['myspace', 'My Space', ''],
   ['boards', 'Boards', 'بورڈز'],
   ['formation', 'Formation Paths', 'تربیتی راستے'],
@@ -19,6 +21,7 @@ const HOME_TILES = [
 const HELP_UR = 'مدد';
 
 const NAV_PATHS = {
+  dashboard: 'M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3zM4 17a3 3 0 0 1 3-3h12',
   myspace: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0',
   boards: 'M4 4h16v11H4zM8 20l4-5 4 5M8 8h8M8 11h5',
   formation: 'M12 6C10 4.5 7 4 4 4v15c3 0 6 .5 8 2 2-1.5 5-2 8-2V4c-3 0-6 .5-8 2zM12 6v15',
