@@ -7,7 +7,7 @@ import {
   sb, State, esc, withStatus, labelOf, isAdmin, isCoordinator, isDeptMember, AUDIO_BUCKET, AUDIO_FORMATS,
   audioFileProblem, audioDurationOf, mountAudioPlayer, eraseMyAudioFiles,
   helpLinkHtml,
-} from './core.js?v=20261122092332';
+} from './core.js?v=20261122093352';
 
 // AAC in MP4 first, the likeliest to play on every phone; plain 'audio/mp4' can hold Opus, as in Chrome.
 const RECORD_FORMATS = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
@@ -17,6 +17,12 @@ const UPLOAD_ATTEMPTS = 3;
 const STATUS_LABELS = { submitted: 'Waiting to be heard', to_correct: 'To record again', published: 'Published', rejected: 'Not accepted', draft: 'Not sent yet' };
 
 let currentTab = 'mine';
+let waitingLanguage = ''; // the language of "Texts waiting for a voice": all of them while empty (154_readings_any_language.sql)
+// Urdu in Nastaliq; Italian, English and the other languages in a Latin font (css .reading-text-latin).
+const readingTextClass = language => (!language || language === 'URD' ? 'reading-text' : 'reading-text reading-text-latin');
+const titleInOwnLanguage = d => (d.language === 'URD' ? d.ur_title || d.original_title || d.en_title || d.title
+  : d.language === 'ITA' ? d.it_title || d.original_title || d.title || d.en_title
+  : d.original_title || d.title || d.en_title || d.ur_title);
 let active = null; // the recording in progress, so leaving the screen can stop it safely
 
 const scrollTop = () => { document.getElementById('main').scrollTop = 0; };
@@ -117,7 +123,8 @@ const docNumber = id => (id === null || id === undefined ? '' : `#${esc(id)} &mi
 // ---------- My readings ----------
 async function renderMine(main, body) {
   await eraseMyAudioFiles();
-  const d = await withStatus(sb.rpc('get_my_readings'));
+  const d = await withStatus(sb.rpc('get_my_readings', { p_language: waitingLanguage || null }));
+  const languages = Object.entries(d.languages || {}).sort((a, b) => b[1] - a[1]);
   body.innerHTML = `
     ${d.readings.length ? `<div class="panel"><h3 style="margin-top:0;">My readings</h3>
       ${d.readings.map(r => `
@@ -145,6 +152,11 @@ async function renderMine(main, body) {
     <div class="panel">
       <h3 style="margin-top:0;">Texts waiting for a voice</h3>
       <p class="hint" style="margin-top:0;">${d.limit <= 4000 ? 'Your first reading is a short one, so you can get used to it. ' : ''}You can also start from any text in the Library, with its Read aloud button.</p>
+      ${languages.length > 1 || waitingLanguage ? `<div class="field" style="max-width:280px;"><label for="rd-language">Language</label>
+        <select id="rd-language">
+          <option value="">All languages (${esc(languages.reduce((n, [, c]) => n + c, 0))})</option>
+          ${languages.map(([code, n]) => `<option value="${esc(code)}" ${code === waitingLanguage ? 'selected' : ''}>${esc(labelOf(State.langs, code) || code)} (${esc(n)})</option>`).join('')}
+        </select></div>` : ''}
       ${d.waiting.length ? d.waiting.map(w => `
         <div class="btn-row" data-wait="${esc(w.document_id)}" style="justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding:6px 0;margin:0;">
           <div style="min-width:0;"><div dir="auto">${esc(w.title) || '<span class="hint">(no title)</span>'}</div>
@@ -176,6 +188,10 @@ async function renderMine(main, body) {
       await clearChunks(id);
       if (await act(() => withStatus(sb.rpc('release_reading', { p_document_id: id }), 'Saving...'))) renderReadingsView(main);
     });
+  });
+  document.getElementById('rd-language')?.addEventListener('change', e => {
+    waitingLanguage = e.target.value;
+    renderReadingsView(main);
   });
   body.querySelectorAll('[data-wait]').forEach(row => {
     row.querySelector('.rd-take').addEventListener('click', () => openReading(main, parseInt(row.dataset.wait, 10)));
@@ -267,7 +283,7 @@ function storedFormat(mime) {
 
 async function renderRecorder(main, documentId, state) {
   const [docs, texts] = await Promise.all([
-    withStatus(sb.from('documents').select('document_id,title,en_title,ur_title,original_title,language').eq('document_id', documentId)),
+    withStatus(sb.from('documents').select('document_id,title,en_title,ur_title,it_title,original_title,language').eq('document_id', documentId)),
     withStatus(sb.from('document_texts').select('body').eq('document_id', documentId)),
   ]);
   const doc = docs[0];
@@ -276,7 +292,7 @@ async function renderRecorder(main, documentId, state) {
   main.innerHTML = `
     <div class="panel">
       <div class="btn-row" style="justify-content:space-between;align-items:center;margin:0 0 8px;">
-        <h2 style="margin:0;" dir="auto">${esc(doc.ur_title || doc.original_title || doc.en_title || doc.title)}</h2>
+        <h2 style="margin:0;" dir="auto">${esc(titleInOwnLanguage(doc))}</h2>
         <button class="btn secondary" id="rc-back">Back</button>
       </div>
       <div class="hint">Document #${esc(documentId)}</div>
@@ -295,7 +311,7 @@ async function renderRecorder(main, documentId, state) {
         <input id="rc-file" type="file" accept=".mp3,.m4a,.mp4,.aac,.ogg,.opus,.webm,audio/*" style="margin-top:6px;">
       </div>
     </div>
-    <div class="panel"><div dir="auto" class="reading-text" style="font-size:24px;" id="rc-text">${esc(texts[0]?.body)}</div></div>
+    <div class="panel"><div dir="auto" class="${readingTextClass(doc.language)}" style="font-size:24px;" id="rc-text">${esc(texts[0]?.body)}</div></div>
     <div class="panel" id="rc-controls" style="position:sticky;bottom:0;z-index:5;margin-bottom:0;"></div>`;
 
   document.getElementById('rc-back').addEventListener('click', () => renderReadingsView(main));
@@ -555,7 +571,7 @@ async function renderListen(main, id) {
         </div>` : ''}
       ${d.can_review && d.status === 'submitted' && !canDecide ? '<p class="hint">Someone else has taken this. It comes back to the queue after 48 hours if they don\'t decide.</p>' : ''}
     </div>
-    <div class="panel"><div dir="auto" class="reading-text" style="font-size:22px;">${esc(d.source_body)}</div></div>`;
+    <div class="panel"><div dir="auto" class="${readingTextClass(d.language)}" style="font-size:22px;">${esc(d.source_body)}</div></div>`;
   if (d.path) mountAudioPlayer(document.getElementById('rl-player'), { path: d.path }, false);
   document.getElementById('rl-back').addEventListener('click', () => renderReadingsView(main));
   const reload = () => renderListen(main, id);
