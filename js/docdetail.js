@@ -8,9 +8,9 @@ import {
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
-  ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, videoLinkHtml, mountAudioPlayer, eraseMyAudioFiles,
+  ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, DRIVE_AUDIO_PREFIX, videoLinkHtml, mountAudioPlayer, eraseMyAudioFiles,
   textDir,
-} from './core.js?v=20261118221716';
+} from './core.js?v=20261122090600';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -250,6 +250,8 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
   const noPdf = doc.media_type === 'AUD' || (doc.media_type === 'VID' && doc.external_url);
   const langOf = m => esc(labelOf(State.langs, m.language) || '?');
   const ownReading = media.find(m => m.media_type === 'AUD' && String(m.document_id) === String(doc.document_id));
+  // With more than one recording (the parts of a video, say), each button says how long its recording is.
+  const severalAudios = media.filter(m => m.media_type === 'AUD').length > 1;
   // A version of a reserved document would have to be reserved too, and only Admin and Formation can add those.
   const canAddRelated = canWrite() && !HIDDEN_DOC_STATUSES.includes(doc.workflow_status) && (doc.access_level !== 'reserved' || canManageReserved());
   box.innerHTML = `
@@ -266,7 +268,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     <div class="btn-row" style="margin:0 0 8px;">
       ${media.map((m, i) => m === ownReading ? '' : m.media_type === 'VID'
         ? videoLinkHtml(m.external_url, `Watch video (${labelOf(State.langs, m.language) || '?'})`)
-        : `<button class="btn doc-listen" data-i="${i}" style="flex:0 0 auto;white-space:nowrap;">&#128266; Listen (${langOf(m)})</button>`).join('')}
+        : `<button class="btn doc-listen" data-i="${i}" style="flex:0 0 auto;white-space:nowrap;">&#128266; Listen (${langOf(m)}${severalAudios && m.duration ? `, ${esc(m.duration)}` : ''})</button>`).join('')}
       ${text ? '<button class="btn" id="doc-text-read" style="flex:0 0 auto;white-space:nowrap;">Read (large print)</button>' : ''}
       ${text ? '<button class="btn secondary" id="doc-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Open editable text</button>' : ''}
       ${originalText ? '<button class="btn secondary" id="doc-original-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Original text (Italian)</button>' : ''}
@@ -653,17 +655,20 @@ async function fetchDocMedia(doc, siblings) {
   const candidates = [doc, ...(siblings || []).filter(s => !isCurrent(s))]
     .filter(d => (d.media_type === 'AUD' || (d.media_type === 'VID' && d.external_url))
       && (isCurrent(d) || !HIDDEN_DOC_STATUSES.includes(d.workflow_status)))
-    .sort((a, b) => (isCurrent(b) - isCurrent(a)) || (!!b.is_preferred - !!a.is_preferred));
-  const picked = new Map();
-  candidates.forEach(d => { const key = `${d.language}|${d.media_type}`; if (!picked.has(key)) picked.set(key, d); });
-  const list = [...picked.values()];
-  const audioIds = list.filter(d => d.media_type === 'AUD').map(d => d.document_id);
-  if (!audioIds.length) return list;
-  const readings = await withStatus(sb.from('audio_readings').select('document_id,path,reader_name,source_document_id,source_text_at').in('document_id', audioIds));
+    .sort((a, b) => (isCurrent(b) - isCurrent(a)) || (!!b.is_preferred - !!a.is_preferred) || (a.document_id - b.document_id));
+  const audioIds = candidates.filter(d => d.media_type === 'AUD').map(d => d.document_id);
+  const readings = audioIds.length ? await withStatus(sb.from('audio_readings').select('document_id,path,reader_name,source_document_id,source_text_at').in('document_id', audioIds)) : [];
   const byDoc = new Map(readings.map(r => [String(r.document_id), r]));
-  return list
+  // The audio of a video (on Drive) is never a newer take of another: parts, short and long versions are all offered.
+  const picked = new Map();
+  candidates
     .map(d => (d.media_type === 'AUD' ? { ...d, ...byDoc.get(String(d.document_id)) } : d))
-    .filter(d => d.media_type !== 'AUD' || d.path);
+    .filter(d => d.media_type !== 'AUD' || d.path)
+    .forEach(d => {
+      const key = d.media_type === 'AUD' && d.path.startsWith(DRIVE_AUDIO_PREFIX) ? `drive|${d.document_id}` : `${d.language}|${d.media_type}`;
+      if (!picked.has(key)) picked.set(key, d);
+    });
+  return [...picked.values()];
 }
 
 // Downloads a specific version, preferring the app-managed Storage copy (signed URL) over the

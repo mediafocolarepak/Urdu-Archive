@@ -478,7 +478,21 @@ export function canManageReserved() { return isAdmin() || isDeptMember('FORM'); 
 // gives a clear message first. Statuses a reviewer may be able to read, but which aren't published:
 export const HIDDEN_DOC_STATUSES = ['proposed', 'revision', 'pending_publish', 'removed'];
 export function isMediaLinkOk(url) { return /^https:\/\/((www\.|m\.)?youtube\.com|youtu\.be|drive\.google\.com)\/\S+$/.test(url || ''); }
+// The audio of the Urdu videos (152_drive_audio.sql) is too large for the bucket: its mp3 files are in this Drive
+// folder, shared "anyone with the link" like the PDF folder above, and its readings have the path 'gdrive:<file name>'.
+const GDRIVE_AUDIO_FOLDER_ID = '1eRcdg9Ckka9u3rkgcM-nHW9q9ch7R9X2';
+export const DRIVE_AUDIO_PREFIX = 'gdrive:';
 export async function audioFileUrl(path) {
+  if (path.startsWith(DRIVE_AUDIO_PREFIX)) {
+    const name = path.slice(DRIVE_AUDIO_PREFIX.length);
+    const q = `name='${name.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}' and '${GDRIVE_AUDIO_FOLDER_ID}' in parents and trashed=false`;
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)&key=${GDRIVE_API_KEY}`);
+    const data = await res.json();
+    if (data.error) throw new Error('Google Drive: ' + data.error.message);
+    const id = data.files?.[0]?.id;
+    if (!id) throw new Error(`"${name}" is not in the Google Drive audio folder.`);
+    return `https://www.googleapis.com/drive/v3/files/${id}?alt=media&key=${GDRIVE_API_KEY}`;
+  }
   const { data, error } = await sb.storage.from(AUDIO_BUCKET).createSignedUrl(path, 3600);
   if (error) throw error;
   return data.signedUrl;
