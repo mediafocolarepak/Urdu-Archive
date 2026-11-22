@@ -10,7 +10,7 @@ import {
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, DRIVE_AUDIO_PREFIX, videoLinkHtml, mountAudioPlayer, eraseMyAudioFiles,
   textDir,
-} from './core.js?v=20261122090600';
+} from './core.js?v=20261122092332';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -644,7 +644,7 @@ function wireWorkSiblingsClicks(box, workId, navigate) {
 
 async function fetchWorkSiblings(workId) {
   if (!workId) return [];
-  return await withStatus(sb.from('documents').select('document_id,title,en_title,ur_title,it_title,original_title,category,author,language,source,media_type,file_name,is_preferred,storage_path,external_url,workflow_status').eq('work_id', workId));
+  return await withStatus(sb.from('documents').select('document_id,title,en_title,ur_title,it_title,original_title,category,author,language,source,media_type,file_name,is_preferred,storage_path,external_url,workflow_status,duration').eq('work_id', workId));
 }
 
 // The video links and readings to offer on this document: from its whole Work, one for each language

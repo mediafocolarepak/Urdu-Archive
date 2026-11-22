@@ -3,7 +3,7 @@
 // before signing in (landing.js). Home is a short set of large tiles to the sections of the app: in each, the English
 // in bold on the left and the Urdu in Nastaliq on the right (Owner's layout).
 
-import { esc } from './core.js?v=20261122090600';
+import { esc } from './core.js?v=20261122092332';
 
 // The Urdu names are the ones of the Urdu guides (Documentazione/guide-help/ur1.mjs, ur2.mjs, migration 119): Boards,
 // Formation Paths and Help have one there; the others are named in Latin letters there too, so they stand alone
