@@ -454,6 +454,8 @@ td.sibling-title.doc-title-ur { font-size: 1.05em; line-height: 2; }
   max-width: 40em; margin: 0 auto; white-space: pre-wrap; line-height: 2.1; text-align: start;
   font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif;
 }
+/* A text in Italian, English or another Latin-script language (154_readings_any_language.sql) */
+.reading-text.reading-text-latin { font-family: Georgia, "Times New Roman", serif; line-height: 1.7; }
 
 /* Help tab (userguide.js): guides by activity, one scroll, large enough to read on a phone */
 .help-panel { max-width: 760px; margin: 0 auto; }

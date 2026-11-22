@@ -10,7 +10,7 @@ import {
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, DRIVE_AUDIO_PREFIX, videoLinkHtml, mountAudioPlayer, eraseMyAudioFiles,
   textDir,
-} from './core.js?v=20261122092332';
+} from './core.js?v=20261122093352';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -162,7 +162,7 @@ export function openReadingView(doc, text) {
     <div class="reading-body" id="rv-scroll">
       <div class="reading-title">${esc(doc.en_title)}</div>
       ${doc.ur_title ? `<div class="reading-title" dir="rtl">${esc(doc.ur_title)}</div>` : ''}
-      <div id="rv-text" class="reading-text" dir="${textDir(text.body, doc.language)}">${esc(text.body)}</div>
+      <div id="rv-text" class="reading-text${doc.language && doc.language !== 'URD' ? ' reading-text-latin' : ''}" dir="${textDir(text.body, doc.language)}">${esc(text.body)}</div>
     </div>`;
   document.body.appendChild(view);
   const textEl = document.getElementById('rv-text');
@@ -274,6 +274,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
       ${originalText ? '<button class="btn secondary" id="doc-original-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Original text (Italian)</button>' : ''}
       <span id="doc-read-aloud" style="display:contents;"></span>
       ${canAddRelated ? '<button class="btn secondary" id="doc-add-related" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">+ Add a related version</button>' : ''}
+      ${canEdit && text && !text.reviewed && doc.source !== 'STE' ? '<button class="btn secondary" id="doc-mark-checked" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;" title="Once checked, the text can be read aloud">Mark the text as checked</button>' : ''}
       ${canWrite() ? '<button class="btn secondary" id="doc-translate" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Translate</button>' : ''}
       ${isAdmin() && ownReading ? '<button class="btn secondary" id="doc-reader-name" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Correct the name</button><button class="btn danger" id="doc-erase-reading" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Erase the recording</button>' : ''}
       <button class="btn secondary" id="doc-report-problem" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Report a problem</button>
@@ -334,6 +335,13 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
       });
     }, () => {});
   }
+  // 154_readings_any_language.sql: until now a text could only be marked as checked in SQL. Checked, it can be read aloud.
+  document.getElementById('doc-mark-checked')?.addEventListener('click', async () => {
+    if (!confirm('Has someone read this text against its source? Once marked as checked, it can be read aloud.')) return;
+    try { await withStatus(sb.rpc('mark_text_checked', { p_document_id: doc.document_id }), 'Saving...'); }
+    catch (e) { alert(e.message); return; }
+    await renderDocDetail(doc.document_id);
+  });
   document.getElementById('doc-add-related')?.addEventListener('click', () => addRelatedVersion(doc, workSiblings).catch(e => alert(e.message)));
   document.getElementById('doc-reader-name')?.addEventListener('click', async () => {
     const name = prompt('The name to show next to this recording:', ownReading.reader_name || '');
