@@ -4,7 +4,7 @@
 // (by title similarity against what's already catalogued) are still detected, but only
 // reported afterwards in the summary, not used to block or pre-exclude anything.
 
-import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob, nextDocumentId } from './core.js?v=20261123145620';
+import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob, nextDocumentId, confirmPopup } from './core.js?v=20261123161409';
 
 export function titleFromFilename(name) {
   const noExt = name.replace(/\.[a-z0-9]+$/i, '');
@@ -101,7 +101,7 @@ async function scanAndImport() {
   }
 
   // Asked before planning, so cancelling doesn't use up document numbers from the server.
-  if (!confirm(`Import ${files.length} file(s) and move renamed copies into a "renamed" subfolder? This cannot be easily undone.`)) {
+  if (!await confirmPopup(`Import ${files.length} file(s) and move renamed copies into a "renamed" subfolder? This cannot be easily undone.`)) {
     body.innerHTML = '';
     return;
   }

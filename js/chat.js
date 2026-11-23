@@ -3,7 +3,7 @@
 // admins see every message and can reply + dismiss. Everything stays in chat_messages
 // forever - "dismiss" is a soft flag hiding a row from the admin's default list, not a delete.
 
-import { sb, State, esc, canReviewApplications, withStatus, nameMapForEmails, labelOf } from './core.js?v=20261123145620';
+import { sb, State, esc, canReviewApplications, withStatus, nameMapForEmails, labelOf, confirmPopup } from './core.js?v=20261123161409';
 
 // Report types are admin-editable from Options ("Report type" list) - see OPTION_LIST_NAMES
 // in core.js and 55_report_types.sql for the seed. Read fresh each time rather than cached in
@@ -154,7 +154,7 @@ async function refreshAdminMessages() {
       await refreshAdminMessages();
     });
     tr.querySelector('.msg-corrected-btn')?.addEventListener('click', async () => {
-      if (!confirm('Did this report lead to a correction? Its author receives a token of appreciation.')) return;
+      if (!await confirmPopup('Did this report lead to a correction? Its author receives a token of appreciation.')) return;
       const { error } = await sb.rpc('token_give_for_report', { p_message_id: Number(id) });
       if (error) { alert(error.message); return; }
       await refreshAdminMessages();

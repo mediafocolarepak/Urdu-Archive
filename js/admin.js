@@ -1,5 +1,5 @@
-import { dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange } from './core.js?v=20261123145620';
-import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261123145620';
+import { dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261123161409';
+import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261123161409';
 
 // ---------- Users ----------
 
@@ -88,7 +88,7 @@ export async function renderUsersView(main) {
   main.querySelectorAll('.propose-exclusion-btn').forEach(btn => btn.addEventListener('click', async () => {
     const row = rows.find(r => r.user_id === btn.dataset.uid);
     if (row && row.role === 'admin' && adminCount <= 1) { alert('There must always be at least one Admin - promote someone else first before excluding this one.'); return; }
-    const reason = prompt(`Reason for proposing exclusion of ${btn.dataset.email}?\n(their account, credits and reputation are kept - only the role is removed, once approved)`);
+    const reason = await promptPopup(`Reason for proposing exclusion of ${btn.dataset.email}?\n(their account, credits and reputation are kept - only the role is removed, once approved)`);
     if (reason == null) return;
     if (!reason.trim()) { alert('A reason is required.'); return; }
     const { error } = await sb.rpc('propose_people_decision', { p_subject: btn.dataset.uid, p_type: 'exclude', p_reason: reason.trim() });
@@ -100,7 +100,7 @@ export async function renderUsersView(main) {
   // a reset link (Edge Function "phone-account", Admins only). The Admin tells the person, who can change it in My Profile.
   main.querySelectorAll('.set-password-btn').forEach(btn => btn.addEventListener('click', async () => {
     const suggested = String(Math.floor(10000000 + Math.random() * 90000000));
-    const pw = prompt(`New temporary password for ${btn.dataset.login} (at least 6 characters).
+    const pw = await promptPopup(`New temporary password for ${btn.dataset.login} (at least 6 characters).
 Tell it to the person: they can change it in My Profile.`, suggested);
     if (pw == null) return;
     if (pw.trim().length < 6) { alert('At least 6 characters.'); return; }
@@ -389,7 +389,7 @@ async function renderOptionsEditor() {
       await renderOptionsEditor();
     });
     tr.querySelector('.opt-delete').addEventListener('click', async () => {
-      if (!confirm(`Remove option "${originalCode}" from this list?`)) return;
+      if (!await confirmPopup(`Remove option "${originalCode}" from this list?`)) return;
       await withStatus(sb.from('option_lists').delete().eq('list_name', State.optionsSelectedList).eq('code', originalCode));
       await loadOptions();
       await renderOptionsEditor();

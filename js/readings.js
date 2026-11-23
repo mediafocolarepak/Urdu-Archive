@@ -6,8 +6,8 @@
 import {
   sb, State, esc, withStatus, labelOf, isAdmin, isCoordinator, isDeptMember, AUDIO_BUCKET, AUDIO_FORMATS,
   audioFileProblem, audioDurationOf, mountAudioPlayer, eraseMyAudioFiles,
-  helpLinkHtml,
-} from './core.js?v=20261123145620';
+  helpLinkHtml, confirmPopup, promptPopup
+} from './core.js?v=20261123161409';
 
 // AAC in MP4 first, the likeliest to play on every phone; plain 'audio/mp4' can hold Opus, as in Chrome.
 const RECORD_FORMATS = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
@@ -184,7 +184,7 @@ async function renderMine(main, body) {
     const id = parseInt(card.dataset.held, 10);
     card.querySelector('.rd-record').addEventListener('click', () => openReading(main, id));
     card.querySelector('.rd-release').addEventListener('click', async () => {
-      if (!confirm('Let this text go, so that someone else can read it?')) return;
+      if (!await confirmPopup('Let this text go, so that someone else can read it?')) return;
       await clearChunks(id);
       if (await act(() => withStatus(sb.rpc('release_reading', { p_document_id: id }), 'Saving...'))) renderReadingsView(main);
     });
@@ -197,7 +197,7 @@ async function renderMine(main, body) {
     row.querySelector('.rd-take').addEventListener('click', () => openReading(main, parseInt(row.dataset.wait, 10)));
   });
   document.getElementById('rd-withdraw')?.addEventListener('click', async () => {
-    if (!confirm('Withdraw your consent? All your readings are removed at once and their files erased. This cannot be undone.')) return;
+    if (!await confirmPopup('Withdraw your consent? All your readings are removed at once and their files erased. This cannot be undone.')) return;
     const ok = await act(async () => {
       await withStatus(sb.rpc('withdraw_reading_consent', { p_user_id: null }), 'Removing your readings...');
       await eraseMyAudioFiles();
@@ -234,7 +234,7 @@ async function openReading(main, documentId) {
 }
 
 function showNotice(main, message) {
-  main.innerHTML = `<div class="panel"><p>${esc(message)}</p><div class="btn-row"><button class="btn secondary" id="rd-back">Back</button></div></div>`;
+  main.innerHTML = `<div class="panel"><p>${esc(message)}</p><div class="btn-row"><button class="btn secondary back-btn" id="rd-back">&lsaquo; Back</button></div></div>`;
   document.getElementById('rd-back').addEventListener('click', () => renderReadingsView(main));
 }
 
@@ -291,10 +291,8 @@ async function renderRecorder(main, documentId, state) {
   scrollTop();
   main.innerHTML = `
     <div class="panel">
-      <div class="btn-row" style="justify-content:space-between;align-items:center;margin:0 0 8px;">
-        <h2 style="margin:0;" dir="auto">${esc(titleInOwnLanguage(doc))}</h2>
-        <button class="btn secondary" id="rc-back">Back</button>
-      </div>
+      <div class="btn-row start-back-row"><button class="btn secondary back-btn" id="rc-back">&lsaquo; Back</button></div>
+      <h2 style="margin:0 0 8px;" dir="auto">${esc(titleInOwnLanguage(doc))}</h2>
       <div class="hint">Document #${esc(documentId)}</div>
       ${state.note ? `<p style="white-space:pre-wrap;" dir="auto"><b>From who listened:</b> ${esc(state.note)}</p>` : ''}
       <div id="rc-recovered"></div>
@@ -335,7 +333,7 @@ async function renderRecorder(main, documentId, state) {
       </div>
       <div id="rc-status" class="hint" role="status"></div>`;
     document.getElementById('rc-redo')?.addEventListener('click', async () => {
-      if (!confirm('Delete this recording and start again?')) return;
+      if (!await confirmPopup('Delete this recording and start again?')) return;
       await clearChunks(documentId);
       URL.revokeObjectURL(url);
       showIdle();
@@ -554,10 +552,8 @@ async function renderListen(main, id) {
   scrollTop();
   main.innerHTML = `
     <div class="panel">
-      <div class="btn-row" style="justify-content:space-between;align-items:center;margin:0 0 8px;">
-        <h2 style="margin:0;" dir="auto">${esc(d.title)}</h2>
-        <button class="btn secondary" id="rl-back">Back</button>
-      </div>
+      <div class="btn-row start-back-row"><button class="btn secondary back-btn" id="rl-back">&lsaquo; Back</button></div>
+      <h2 style="margin:0 0 8px;" dir="auto">${esc(d.title)}</h2>
       <div class="hint">${docNumber(d.source_document_id ?? d.document_id)}${esc(labelOf(State.langs, d.language))}${d.duration ? ` &middot; ${esc(d.duration)}` : ''}${d.reader_name ? ` &middot; read by <span dir="auto">${esc(d.reader_name)}</span>` : ''}</div>
       ${d.text_changed ? '<p class="hint"><b>The text has been corrected since this was recorded.</b></p>' : ''}
       <div id="rl-player"></div>
@@ -583,21 +579,21 @@ async function renderListen(main, id) {
     if (await act(() => withStatus(sb.rpc('release_submission', { p_id: id }), 'Saving...'))) reload();
   });
   document.getElementById('rl-ok')?.addEventListener('click', async () => {
-    if (!confirm('Publish this reading? It becomes available to everyone who can see the text, with the reader\'s name.')) return;
+    if (!await confirmPopup('Publish this reading? It becomes available to everyone who can see the text, with the reader\'s name.')) return;
     if (await act(() => withStatus(sb.rpc('approve_submission', { p_id: id, p_read_document_ids: null, p_note: null }), 'Publishing...'))) toQueue();
   });
   document.getElementById('rl-ok-note')?.addEventListener('click', async () => {
-    const note = prompt('Your note for the person who read: a thank you, or something to keep in mind next time.');
+    const note = await promptPopup('Your note for the person who read: a thank you, or something to keep in mind next time.');
     if (note === null) return;
     if (await act(() => withStatus(sb.rpc('approve_submission', { p_id: id, p_read_document_ids: null, p_note: note }), 'Publishing...'))) toQueue();
   });
   document.getElementById('rl-again')?.addEventListener('click', async () => {
-    const note = prompt('What would help? This has no consequences for the person who read, so please say it kindly.');
+    const note = await promptPopup('What would help? This has no consequences for the person who read, so please say it kindly.');
     if (note === null) return;
     if (await act(() => withStatus(sb.rpc('send_back_submission', { p_id: id, p_note: note }), 'Sending...'))) toQueue();
   });
   document.getElementById('rl-reject')?.addEventListener('click', async () => {
-    const note = prompt('Why can\'t this be accepted? The person who read will see this, and the text becomes available again.');
+    const note = await promptPopup('Why can\'t this be accepted? The person who read will see this, and the text becomes available again.');
     if (note === null) return;
     if (await act(() => withStatus(sb.rpc('reject_submission', { p_id: id, p_note: note }), 'Saving...'))) toQueue();
   });
@@ -628,7 +624,7 @@ async function renderReaders(main, body) {
     </div>` : ''}`;
   body.querySelectorAll('.rd-admin-withdraw').forEach(btn => btn.addEventListener('click', async () => {
     const tr = btn.closest('tr');
-    if (!confirm('Withdraw this person\'s consent, as they asked? All their readings are removed at once and their files erased. This cannot be undone.')) return;
+    if (!await confirmPopup('Withdraw this person\'s consent, as they asked? All their readings are removed at once and their files erased. This cannot be undone.')) return;
     const ok = await act(async () => {
       await withStatus(sb.rpc('withdraw_reading_consent', { p_user_id: tr.dataset.user }), 'Removing...');
       await eraseMyAudioFiles();
@@ -636,7 +632,7 @@ async function renderReaders(main, body) {
     if (ok) renderReadingsView(main);
   }));
   document.getElementById('rd-erase-all')?.addEventListener('click', async () => {
-    if (!confirm('Erase these files for good? This cannot be undone.')) return;
+    if (!await confirmPopup('Erase these files for good? This cannot be undone.')) return;
     const ok = await act(async () => {
       await eraseMyAudioFiles();
       if (hk.orphans.length) {

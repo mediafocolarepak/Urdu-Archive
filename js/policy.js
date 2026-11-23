@@ -6,7 +6,7 @@
 // People: any department lead or Admin) and from admin.js (per-row "Propose..." buttons that
 // replace the old direct-edit inputs on the reputation-tiers/policy-values/task-category panels).
 
-import { sb, State, esc, withStatus, canProposePolicyChange, canApprovePolicyChange } from './core.js?v=20261123145620';
+import { sb, State, esc, withStatus, canProposePolicyChange, canApprovePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261123161409';
 
 // Who may propose a change to each policy_values key (GOVERNANCE.md §2.8 "who owns which
 // policy table"). task_category_rates and task_reputation_tiers are Reward's alone.
@@ -260,13 +260,13 @@ function renderPendingQueue(pending, myEmail, container, departmentFilter) {
     </table></div>`;
 
   box.querySelectorAll('.pp-withdraw-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('Withdraw this proposal?')) return;
+    if (!await confirmPopup('Withdraw this proposal?')) return;
     const { error } = await sb.rpc('decide_policy_change', { p_id: parseInt(btn.closest('tr').dataset.id, 10), p_outcome: 'withdrawn' });
     if (error) { alert(error.message); return; }
     renderPolicySection(container, { departmentFilter });
   }));
   box.querySelectorAll('.pp-approve-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('Approve this policy change? It becomes live immediately.')) return;
+    if (!await confirmPopup('Approve this policy change? It becomes live immediately.')) return;
     const { error } = await sb.rpc('decide_policy_change', { p_id: parseInt(btn.closest('tr').dataset.id, 10), p_outcome: 'approved' });
     if (error) { alert(error.message); return; }
     // Refresh the cached policy_values (read at boot, see core.js showApp()) so badges/thresholds
@@ -277,7 +277,7 @@ function renderPendingQueue(pending, myEmail, container, departmentFilter) {
     renderPolicySection(container, { departmentFilter });
   }));
   box.querySelectorAll('.pp-reject-btn').forEach(btn => btn.addEventListener('click', async () => {
-    const note = prompt('A note is required when rejecting - it will be visible to the proposer:');
+    const note = await promptPopup('A note is required when rejecting - it will be visible to the proposer:');
     if (note == null) return;
     if (!note.trim()) { alert('A note is required when rejecting.'); return; }
     const { error } = await sb.rpc('decide_policy_change', { p_id: parseInt(btn.closest('tr').dataset.id, 10), p_outcome: 'rejected', p_note: note.trim() });

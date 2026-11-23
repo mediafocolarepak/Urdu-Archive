@@ -6,8 +6,8 @@
 // the meantime), per the project's "don't pollute a fixed vocabulary with unreviewed values"
 // rule that also applies to Bulk Import and the rest of this session's schema changes.
 
-import { sb, State, esc, today, canWrite, isAdmin, withStatus, withStatusCount, labelOf, extractHayatRowToDocument, SessionCache } from './core.js?v=20261123145620';
-import { comboboxHtml, wireCombobox } from './combobox.js?v=20261123145620';
+import { sb, State, esc, today, canWrite, isAdmin, withStatus, withStatusCount, labelOf, extractHayatRowToDocument, SessionCache, confirmPopup } from './core.js?v=20261123161409';
+import { comboboxHtml, wireCombobox } from './combobox.js?v=20261123161409';
 
 let currentRows = [];
 
@@ -157,7 +157,7 @@ async function addRow() {
 async function deleteSelected() {
   const ids = selectedIds();
   if (!ids.length) { alert('Select at least one row first.'); return; }
-  if (!confirm(`Permanently delete ${ids.length} Hayat index row(s)? This cannot be undone.`)) return;
+  if (!await confirmPopup(`Permanently delete ${ids.length} Hayat index row(s)? This cannot be undone.`)) return;
   await withStatus(sb.from('hayat_indice').delete().in('id', ids), 'Deleting...');
   await refreshHayatEditorGrid();
 }
@@ -182,7 +182,7 @@ async function extractSelected() {
   if (!ids.length) { alert('Select at least one row first.'); return; }
   const toExtract = currentRows.filter(r => ids.includes(String(r.id)) && !r.estratto);
   if (!toExtract.length) { alert('All selected rows are already extracted.'); return; }
-  if (!confirm(`Extract ${toExtract.length} row(s) into new documents?`)) return;
+  if (!await confirmPopup(`Extract ${toExtract.length} row(s) into new documents?`)) return;
   let done = 0;
   for (const row of toExtract) {
     const tr = document.querySelector(`tr[data-id="${row.id}"]`);

@@ -345,6 +345,34 @@ export function docTitles(d) {
   add(orig);
   return out;
 }
+// The date of a document for its card and the Library: "June 28, 2004", or the month, or the period as written.
+export function docDateLabel(doc) {
+  if (doc.ref_date) {
+    const d = new Date(doc.ref_date + 'T00:00:00');
+    return isNaN(d) ? doc.ref_date : d.toLocaleDateString('en', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+  const m = /^(\d{4})-(\d{2})$/.exec(doc.ref_period || '');
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, 1).toLocaleDateString('en', { month: 'long', year: 'numeric' }) : (doc.ref_period || '');
+}
+// A document as a large card (Owner's request, 2026-11-23): the number, the English title, the Urdu title in Nastaliq,
+// then the author and the date. The whole card is one button. Used by the Library and My Space.
+export function docCardHtml(d, { selected = false, extra = '' } = {}) {
+  const urdu = (d.ur_title || '').trim() || (URDU_SCRIPT.test(d.original_title || '') ? d.original_title.trim() : '');
+  const english = (d.en_title || d.title || '').trim() || (d.it_title || '').trim() || (urdu ? '' : (d.original_title || '').trim());
+  const facts = [labelOf(State.authors, d.author), docDateLabel(d)].filter(Boolean).map(esc).join(' &middot; ');
+  return `
+    <div class="doc-card${selected ? ' selected' : ''}" data-id="${esc(d.document_id)}">
+      <button type="button" class="doc-card-open">
+        <span class="doc-card-num">#${esc(d.document_id)}</span>
+        ${english ? `<span class="doc-card-en" dir="auto">${esc(english)}</span>` : ''}
+        ${urdu ? `<span class="doc-card-ur" dir="rtl" lang="ur">${esc(urdu)}</span>` : ''}
+        ${!english && !urdu ? '<span class="doc-card-en hint">(no title)</span>' : ''}
+        ${facts ? `<span class="doc-card-facts">${facts}</span>` : ''}
+        <span class="doc-card-chevron" aria-hidden="true">&rsaquo;</span>
+      </button>
+      ${extra}
+    </div>`;
+}
 // marks: what goes before the first title, such as the star.
 export function docTitlesHtml(d, marks = '') {
   const titles = docTitles(d);
@@ -1270,28 +1298,94 @@ export function isDocPostable(doc) {
 // testing (PROJECT_HANDOFF_v18.md §3, v30.md §0.2 - the "residual, needs a human" item).
 // Started in Formation Paths (owner's request, session of 2026-09-18) since that's the area
 // meant to feel the least like "expert software"; other modules can adopt it the same way.
-export function confirmPopup(message, { title = 'Are you sure?', danger = false, confirmLabel = 'Confirm' } = {}) {
-  return new Promise(resolve => {
-    document.getElementById('confirm-popup')?.remove();
-    const backdrop = document.createElement('div');
-    backdrop.id = 'confirm-popup';
-    backdrop.className = 'overlay-backdrop';
-    backdrop.innerHTML = `
-      <div class="panel overlay-panel" style="max-width:420px;">
-        <h2 style="margin-top:0;">${esc(title)}</h2>
-        <p style="white-space:pre-wrap;">${esc(message)}</p>
-        <div class="btn-row" style="justify-content:flex-end;">
-          <button class="btn secondary" id="confirm-cancel">Cancel</button>
-          <button class="btn ${danger ? 'danger' : ''}" id="confirm-ok">${esc(confirmLabel)}</button>
-        </div>
-      </div>`;
-    document.body.appendChild(backdrop);
+// Since 2026-11-23 (Owner's request) the whole app uses these three instead of the browser's confirm(), prompt() and
+// alert(): large text, large buttons, the app's colours, and no web address at the top that could worry a reader.
+// They wait for each other, so two messages never cover one another.
+let dialogChain = Promise.resolve();
+function queueDialog(build) {
+  const shown = dialogChain.then(() => new Promise(build));
+  dialogChain = shown.then(() => {}, () => {});
+  return shown;
+}
+function dialogShell(id, title, message, extraHtml, buttonsHtml) {
+  document.getElementById(id)?.remove();
+  const backdrop = document.createElement('div');
+  backdrop.id = id;
+  backdrop.className = 'overlay-backdrop app-dialog';
+  backdrop.innerHTML = `
+    <div class="panel overlay-panel" role="dialog" aria-modal="true" style="max-width:460px;">
+      ${title ? `<h2 style="margin-top:0;">${esc(title)}</h2>` : ''}
+      <p class="app-dialog-text" dir="auto">${esc(message)}</p>
+      ${extraHtml}
+      <div class="btn-row app-dialog-buttons">${buttonsHtml}</div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  return backdrop;
+}
+export function confirmPopup(message, { title = '', danger = false, confirmLabel = 'Yes', cancelLabel } = {}) {
+  const noLabel = cancelLabel || (confirmLabel === 'Yes' ? 'No' : 'Cancel');
+  return queueDialog(resolve => {
+    const backdrop = dialogShell('confirm-popup', title, message, '',
+      `<button class="btn secondary" id="confirm-cancel">${esc(noLabel)}</button>
+       <button class="btn ${danger ? 'danger' : ''}" id="confirm-ok">${esc(confirmLabel)}</button>`);
     const finish = ok => { backdrop.remove(); resolve(ok); };
     backdrop.addEventListener('click', e => { if (e.target === backdrop) finish(false); });
     document.getElementById('confirm-cancel').addEventListener('click', () => finish(false));
     document.getElementById('confirm-ok').addEventListener('click', () => finish(true));
+    document.getElementById('confirm-ok').focus();
   });
 }
+// Like prompt(): the text typed, or null when the person cancels.
+export function promptPopup(message, defaultValue = '', { title = '', okLabel = 'OK' } = {}) {
+  return queueDialog(resolve => {
+    const backdrop = dialogShell('prompt-popup', title, message,
+      `<textarea id="prompt-input" rows="3" dir="auto" style="width:100%;">${esc(defaultValue ?? '')}</textarea>`,
+      `<button class="btn secondary" id="prompt-cancel">Cancel</button>
+       <button class="btn" id="prompt-ok">${esc(okLabel)}</button>`);
+    const input = document.getElementById('prompt-input');
+    const finish = value => { backdrop.remove(); resolve(value); };
+    backdrop.addEventListener('click', e => { if (e.target === backdrop) finish(null); });
+    document.getElementById('prompt-cancel').addEventListener('click', () => finish(null));
+    document.getElementById('prompt-ok').addEventListener('click', () => finish(input.value));
+    input.focus();
+  });
+}
+// Like alert(), but it doesn't stop the page: the code goes on, the message stays until OK.
+export function alertPopup(message, { title = '' } = {}) {
+  return queueDialog(resolve => {
+    const backdrop = dialogShell('alert-popup', title, String(message ?? ''), '', '<button class="btn" id="alert-ok">OK</button>');
+    const finish = () => { backdrop.remove(); resolve(); };
+    document.getElementById('alert-ok').addEventListener('click', finish);
+    document.getElementById('alert-ok').focus();
+  });
+}
+window.alert = message => { alertPopup(message); };
+
+// Text size and colours for this device (Owner's request, 2026-11-23), chosen in My Profile and kept in this browser
+// only. The size scales the content of the screen (style.css, --text-zoom); the colours follow the phone unless
+// light or dark is chosen. Applied as soon as the app loads, the landing page included.
+export const TEXT_SIZES = [['normal', 'Normal', 1], ['large', 'Large', 1.15], ['xlarge', 'Very large', 1.3]];
+export const COLOUR_CHOICES = [['auto', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']];
+export function displayPrefs() {
+  let p = {};
+  try { p = JSON.parse(localStorage.getItem('displayPrefs') || '{}') || {}; } catch { /* private mode: the defaults */ }
+  return {
+    size: TEXT_SIZES.some(([k]) => k === p.size) ? p.size : 'normal',
+    colours: COLOUR_CHOICES.some(([k]) => k === p.colours) ? p.colours : 'auto',
+  };
+}
+export function applyDisplayPrefs(p = displayPrefs()) {
+  const root = document.documentElement;
+  root.style.setProperty('--text-zoom', String((TEXT_SIZES.find(([k]) => k === p.size) || TEXT_SIZES[0])[2]));
+  if (p.colours === 'auto') delete root.dataset.theme; else root.dataset.theme = p.colours;
+}
+export function saveDisplayPrefs(changes) {
+  const p = { ...displayPrefs(), ...changes };
+  try { localStorage.setItem('displayPrefs', JSON.stringify(p)); } catch { /* not remembered, applied for now */ }
+  applyDisplayPrefs(p);
+  return p;
+}
+applyDisplayPrefs();
 
 // Shared popup for a board post - used by docdetail.js's "+ Board" (post with a document) and
 // boards.js's "+ New post" (free post). Lives here, not in either of them, because those two
@@ -1315,7 +1409,7 @@ export function openBoardPostPopup({ doc = null, boardCode = null, post = null, 
       <h2 style="margin-top:0;">${post ? 'Edit post' : 'New post'}</h2>
       <p class="hint" id="bp-pending-hint" style="display:${!post && !State.myBoards.has(preselect) ? 'block' : 'none'};">Your post will be held for review by that board's editors before it appears to others.</p>
       <div class="field"><label>Board</label><select id="bp-board">${optionsHtml(allBoards, preselect, false)}</select></div>
-      ${doc ? `<div class="field"><label>Document</label><div style="font-size:13px;padding:4px 0;">#${esc(doc.document_id)} &mdash; ${esc(doc.en_title) || '<span class="hint">(no title)</span>'}</div></div>` : ''}
+      ${doc ? `<div class="field"><label>Document</label><div style="font-size:16px;padding:4px 0;">#${esc(doc.document_id)} &mdash; ${esc(doc.en_title) || '<span class="hint">(no title)</span>'}</div></div>` : ''}
       <div class="field"><label>Title</label><input id="bp-title" value="${esc(post ? post.title : (doc ? doc.en_title || '' : ''))}"></div>
       <div class="field"><label>Text</label><textarea id="bp-body" dir="auto" rows="8">${esc(post ? post.body : '')}</textarea></div>
       <div class="field"><label>Link <span class="hint">(optional)</span></label><input id="bp-link" placeholder="https://..." value="${esc(post ? post.link_url : '')}"></div>
@@ -1469,7 +1563,7 @@ export function openFormationPostPopup({ doc = null, onSaved } = {}) {
   backdrop.innerHTML = `
     <div class="panel overlay-panel">
       <h2 style="margin-top:0;">Add to formation path</h2>
-      ${doc ? `<div class="field"><label>Document</label><div style="font-size:13px;padding:4px 0;">#${esc(doc.document_id)} &mdash; ${esc(doc.en_title) || '<span class="hint">(no title)</span>'}</div></div>` : ''}
+      ${doc ? `<div class="field"><label>Document</label><div style="font-size:16px;padding:4px 0;">#${esc(doc.document_id)} &mdash; ${esc(doc.en_title) || '<span class="hint">(no title)</span>'}</div></div>` : ''}
       <div class="field"><label>Path</label><select id="fap-path"><option value="">Loading...</option></select></div>
 
       <div class="field"><label>Module</label><select id="fap-module" disabled><option value="">Select a path first</option></select></div>

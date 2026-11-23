@@ -2,8 +2,11 @@
 // with_us.sql, redesigned 2026-11-06), whose Word of Life and three sections of cards moved to the landing page shown
 // before signing in (landing.js). Home is a short set of large tiles to the sections of the app: in each, the English
 // in bold on the left and the Urdu in Nastaliq on the right (Owner's layout).
+// Since 2026-11-23 (Owner's request) Home starts with the Word of Life of the month, as the landing page does, and with
+// "Continue" tiles: the last document opened on this device, and the formation path being read.
 
-import { esc } from './core.js?v=20261123145620';
+import { sb, State, esc } from './core.js?v=20261123161409';
+import { openReadingView } from './docdetail.js?v=20261123161409';
 
 // The Urdu names are the ones of the Urdu guides (Documentazione/guide-help/ur1.mjs, ur2.mjs, migration 119): Boards,
 // Formation Paths and Help have one there; the others are named in Latin letters there too, so they stand alone
@@ -19,6 +22,8 @@ const HOME_TILES = [
   ['profile', 'My Profile', ''],
 ];
 const HELP_UR = 'مدد';
+// From the Urdu guides (help "find-read"): the Word of Life of this month.
+const WORD_OF_MONTH_UR = 'اس مہینے کا کلامِ حیات';
 
 const NAV_PATHS = {
   dashboard: 'M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3zM4 17a3 3 0 0 1 3-3h12',
@@ -34,6 +39,7 @@ const NAV_PATHS = {
   how_to_use: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM15.5 8.5l-2 5-5 2 2-5z',
   how_to_collaborate: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20a6 6 0 0 1 12 0M17 11a3 3 0 1 0 0-6M17 14a6 6 0 0 1 4 6',
   signin: 'M10 17l5-5-5-5M15 12H3M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5',
+  continue: 'M7 4l12 8-12 8z',
 };
 export const navIcon = name => `<span class="start-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${NAV_PATHS[name]}"/></svg></span>`;
 export const CHEVRON = '<span class="start-chevron" aria-hidden="true">&rsaquo;</span>';
@@ -49,13 +55,89 @@ export function homeTileHtml(attrs, icon, english, urdu, extraClass = '') {
     </button>`;
 }
 
+function monthName(month) {
+  const [year, mon] = month.split('-').map(Number);
+  return new Date(year, mon - 1, 1).toLocaleDateString('en', { month: 'long', year: 'numeric' });
+}
+const thisMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+
+// The Word of Life tile, on Home and on the landing page. attrs: what the page uses to find it.
+export function wordTileHtml(w, attrs) {
+  const current = w.month === thisMonth();
+  const urTitle = w.ur_title || w.original_title || w.title;
+  const enTitle = w.en_title && w.en_title !== urTitle ? w.en_title : '';
+  return `
+    <button type="button" class="home-tile home-word" ${attrs}>
+      ${navIcon('word')}
+      <span class="home-word-text">
+        <span class="home-word-row">
+          <span class="home-tile-en">${current ? 'Word of Life of this month' : 'Latest Word of Life'}</span>
+          ${current ? `<span class="home-tile-ur" dir="rtl" lang="ur">${esc(WORD_OF_MONTH_UR)}</span>` : ''}
+        </span>
+        <span class="home-word-ur" dir="rtl" lang="ur">${esc(urTitle)}</span>
+        ${enTitle ? `<span class="home-word-en" dir="auto">${esc(enTitle)}</span>` : ''}
+        <span class="hint">${esc(monthName(w.month))}</span>
+      </span>
+      ${CHEVRON}
+    </button>`;
+}
+
+// The last document opened on this device, kept by docdetail.js (rememberLastDocument).
+function lastDocument() {
+  try { const d = JSON.parse(localStorage.getItem('lastDocument') || 'null'); return d && d.id ? d : null; } catch { return null; }
+}
+
+// A "Continue" tile: what to continue in bold, then its title.
+function continueTileHtml(attrs, what, title) {
+  return `
+    <button type="button" class="home-tile home-continue" ${attrs}>
+      ${navIcon('continue')}
+      <span class="home-word-text">
+        <span class="home-tile-en">${esc(what)}</span>
+        <span class="home-continue-title" dir="auto">${esc(title)}</span>
+      </span>
+      ${CHEVRON}
+    </button>`;
+}
+
 export function renderOnboardingView(main) {
   main.innerHTML = `
     <div class="start-home">
+      <div id="home-top" class="start-tiles" style="margin-bottom:10px;"></div>
       <div class="start-tiles">
         ${HOME_TILES.map(([tab, en, ur]) => homeTileHtml(`data-start-tab="${tab}"`, tab, en, ur)).join('')}
         ${homeTileHtml('data-help-home', 'help', 'Help', HELP_UR)}
       </div>
     </div>`;
   main.querySelectorAll('[data-start-tab]').forEach(b => b.addEventListener('click', () => window.__renderTab(b.dataset.startTab)));
+  fillHomeTop(main);
+}
+
+// The top of Home: the Word of Life, then what this person can continue. Each part on its own: Home works without them.
+async function fillHomeTop(main) {
+  const top = main.querySelector('#home-top');
+  const [word, bookmark] = await Promise.all([
+    sb.rpc('public_word_of_life').then(r => (r.data && r.data[0]) || null, () => null),
+    sb.from('formation_bookmarks').select('path_id,updated_at,formation_paths(title)').order('updated_at', { ascending: false }).limit(1)
+      .then(r => (r.data && r.data[0]) || null, () => null),
+  ]);
+  if (!top || !document.body.contains(top)) return;
+  const last = lastDocument();
+  top.innerHTML = [
+    word && word.body ? wordTileHtml(word, 'data-home-word') : '',
+    last ? continueTileHtml('data-home-last-doc', 'Continue reading', last.title || `Document #${last.id}`) : '',
+    bookmark && bookmark.formation_paths ? continueTileHtml('data-home-path', 'Continue your formation path', bookmark.formation_paths.title || '') : '',
+  ].join('');
+  if (!top.innerHTML.trim()) { top.remove(); return; }
+  top.querySelector('[data-home-word]')?.addEventListener('click', () =>
+    openReadingView({ en_title: word.en_title || '', ur_title: word.ur_title || word.original_title || '', language: word.language }, { body: word.body }));
+  top.querySelector('[data-home-last-doc]')?.addEventListener('click', () => {
+    State.selectedDocId = last.id;
+    State.dashOpenDetail = true;
+    window.__renderTab('dashboard');
+  });
+  top.querySelector('[data-home-path]')?.addEventListener('click', () => {
+    State.formationSelectedPathId = bookmark.path_id;
+    window.__renderTab('formation');
+  });
 }

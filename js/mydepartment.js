@@ -6,11 +6,11 @@
 import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
   nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved,
-  helpLinkHtml,
-} from './core.js?v=20261123145620';
-import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261123145620';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261123145620';
-import { renderApplicationsView } from './collaboration.js?v=20261123145620';
+  helpLinkHtml, confirmPopup, promptPopup
+} from './core.js?v=20261123161409';
+import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261123161409';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261123161409';
+import { renderApplicationsView } from './collaboration.js?v=20261123161409';
 
 // Each department's page opens its own guide from the "?" beside the title.
 const DEPT_GUIDES = { HR: 'dept-hr', COORD: 'dept-coordination', FORM: 'dept-formation', RF: 'dept-reward', COMM: 'dept-communication', ARCHIVE: 'dept-archive' };
@@ -190,7 +190,7 @@ async function renderDepartmentStatus(box, code) {
       renderDepartmentStatus(box, code);
     }));
     box.querySelectorAll('.dept-priority-delete').forEach(btn => btn.addEventListener('click', async () => {
-      if (!confirm('Remove this priority?')) return;
+      if (!await confirmPopup('Remove this priority?')) return;
       await withStatus(sb.from('department_priorities').delete().eq('id', btn.dataset.id), 'Removing...');
       renderDepartmentStatus(box, code);
     }));
@@ -286,7 +286,7 @@ export async function renderDepartmentsOverviewView(main) {
   // status/note back to the table default (on_track, no note) - e.g. after a trial run of Phase
   // 2, or to stop a stale color misleading members. Does not touch priorities, only status.
   document.getElementById('dept-overview-reset').addEventListener('click', async () => {
-    if (!confirm('Reset every department\'s status to "On track" with no note? This cannot be undone.')) return;
+    if (!await confirmPopup('Reset every department\'s status to "On track" with no note? This cannot be undone.')) return;
     const { data: { user } } = await sb.auth.getUser();
     const rows = depts.map(([code]) => ({
       department_code: code, status: 'on_track', note: null, updated_by_email: user.email, updated_at: new Date().toISOString(),
@@ -402,7 +402,7 @@ async function refreshReservedAccess(query) {
     </table></div>`;
   list.querySelectorAll('[data-reserved-user]').forEach(btn => btn.addEventListener('click', async () => {
     const enable = btn.dataset.reservedEnable === 'true';
-    const reason = prompt(enable ? 'Enable this person for reserved documents? A short reason (optional):' : 'Take away access to reserved documents? A short reason (optional):');
+    const reason = await promptPopup(enable ? 'Enable this person for reserved documents? A short reason (optional):' : 'Take away access to reserved documents? A short reason (optional):');
     if (reason === null) return;
     await withStatus(sb.rpc('set_reserved_access', { p_user_id: btn.dataset.reservedUser, p_enabled: enable, p_reason: reason }), 'Saving...');
     await refreshReservedAccess(document.getElementById('reserved-search').value);
@@ -663,7 +663,7 @@ async function renderCoordinationOverview(box) {
   }));
 
   box.querySelectorAll('.mydept-approve-extra-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('Approve these extra credits? This lets the task be given a passing review verdict.')) return;
+    if (!await confirmPopup('Approve these extra credits? This lets the task be given a passing review verdict.')) return;
     const { error } = await sb.rpc('approve_task_extra_credits', { p_task_id: parseInt(btn.dataset.id, 10) });
     if (error) { alert(error.message); return; }
     renderCoordinationOverview(box);
@@ -759,20 +759,20 @@ async function renderCompensationRuns(box) {
     row.style.display = row.style.display === 'none' ? '' : 'none';
   }));
   box.querySelectorAll('.mydept-comp-approve-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('Approve this compensation run? This records that these credits have been paid.')) return;
+    if (!await confirmPopup('Approve this compensation run? This records that these credits have been paid.')) return;
     const { error } = await sb.rpc('decide_compensation_run', { p_run_id: parseInt(btn.dataset.id, 10), p_outcome: 'approved' });
     if (error) { alert(error.message); return; }
     renderCompensationRuns(box);
   }));
   box.querySelectorAll('.mydept-comp-reject-btn').forEach(btn => btn.addEventListener('click', async () => {
-    const note = prompt('Reason for rejecting this compensation run?');
+    const note = await promptPopup('Reason for rejecting this compensation run?');
     if (!note || !note.trim()) return;
     const { error } = await sb.rpc('decide_compensation_run', { p_run_id: parseInt(btn.dataset.id, 10), p_outcome: 'rejected', p_note: note.trim() });
     if (error) { alert(error.message); return; }
     renderCompensationRuns(box);
   }));
   box.querySelectorAll('.mydept-comp-withdraw-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('Withdraw this compensation run?')) return;
+    if (!await confirmPopup('Withdraw this compensation run?')) return;
     const { error } = await sb.rpc('decide_compensation_run', { p_run_id: parseInt(btn.dataset.id, 10), p_outcome: 'withdrawn' });
     if (error) { alert(error.message); return; }
     renderCompensationRuns(box);
@@ -980,8 +980,8 @@ async function renderRewardTokens(box) {
     fields: [{ name: 'tokens', label: 'Tokens needed', type: 'number', value: tokens }, { name: 'label', label: 'Name of the milestone (optional)', type: 'text', value: label }],
     onSaved: again,
   });
-  box.querySelector('#tok-ms-add').addEventListener('click', () => {
-    const n = prompt('How many tokens for the new milestone?');
+  box.querySelector('#tok-ms-add').addEventListener('click', async () => {
+    const n = await promptPopup('How many tokens for the new milestone?');
     if (n == null) return;
     if (!/^[1-9][0-9]*$/.test(n.trim())) { alert('Please write a whole number above 0.'); return; }
     proposeMilestone(n.trim(), n.trim(), '');
@@ -1028,7 +1028,7 @@ async function renderRewardTokens(box) {
   });
 
   box.querySelectorAll('.tok-annul').forEach(b => b.addEventListener('click', async () => {
-    const note = prompt('Why are these tokens annulled? (for example: a copy of a text already in the archive)');
+    const note = await promptPopup('Why are these tokens annulled? (for example: a copy of a text already in the archive)');
     if (note == null) return;
     if (!note.trim()) { alert('Please say why.'); return; }
     const { error } = await sb.rpc('token_annul', { p_event_id: Number(b.dataset.id), p_note: note.trim() });
@@ -1107,7 +1107,7 @@ async function renderRoster(code) {
   });
 
   box.querySelectorAll('.mydept-remove-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('Remove this member from the department?')) return;
+    if (!await confirmPopup('Remove this member from the department?')) return;
     const { error } = await sb.from('department_members').delete().eq('department_code', code).eq('user_id', btn.dataset.uid);
     if (error) { alert(error.message); return; }
     renderRoster(code);
@@ -1223,7 +1223,7 @@ async function renderDeptChannel(box, code) {
   }));
 
   box.querySelectorAll('[data-delete-id]').forEach(el => el.addEventListener('click', async () => {
-    if (!confirm('Delete this message? This cannot be undone.')) return;
+    if (!await confirmPopup('Delete this message? This cannot be undone.')) return;
     await withStatus(sb.from('department_messages').delete().eq('id', el.dataset.deleteId), 'Deleting...');
     await renderDeptChannel(box, code);
   }));
@@ -1342,7 +1342,7 @@ async function renderOnboardingCardsManager(box) {
     openOnboardingCardPopup({ card, onSaved: () => renderOnboardingCardsManager(box) });
   }));
   box.querySelectorAll('.mydept-card-delete-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('Delete this card? This cannot be undone.')) return;
+    if (!await confirmPopup('Delete this card? This cannot be undone.')) return;
     await withStatus(sb.from('onboarding_cards').delete().eq('id', btn.dataset.id), 'Deleting...');
     renderOnboardingCardsManager(box);
   }));

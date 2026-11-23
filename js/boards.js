@@ -11,8 +11,8 @@ import {
   sb, State, esc, withStatus, canReviewApplications, getDisplayNameByEmail,
   openBoardPostPopup, likeSafe, DEFAULT_BOARD_FOR_MEMBERSHIP, BOARD_MEDIA_BUCKET, ackBoardPolicy,
   canWrite, isMediaLinkOk,
-  helpLinkHtml,
-} from './core.js?v=20261123145620';
+  helpLinkHtml, promptPopup
+} from './core.js?v=20261123161409';
 
 // Shown once, before a person's first post (84_boards_moderation.sql) - keep this in sync with
 // the Help guide "boards" (116_help_redesign.sql), which says the same thing in its own section.
@@ -346,7 +346,7 @@ function wirePostActions(posts, docById, myEmail, main) {
     openBoardPostPopup({ post, onSaved: () => renderBoardsView(main) });
   }));
   document.querySelectorAll('[data-delete]').forEach(btn => btn.addEventListener('click', async () => {
-    const reason = prompt('Delete this post - what is the reason?');
+    const reason = await promptPopup('Delete this post - what is the reason?');
     if (reason == null) return;
     if (!reason.trim()) { alert('A reason is required.'); return; }
     await withStatus(sb.from('board_posts').delete().eq('id', btn.dataset.delete), 'Deleting...');

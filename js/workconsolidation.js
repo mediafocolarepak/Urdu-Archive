@@ -9,7 +9,7 @@
 // management lives on the document detail page (Other Versions table) rather than duplicated
 // here.
 
-import { sb, esc, withStatus, labelOf, State, downloadFromGDrive, mergeWorks, titleOverlapScore } from './core.js?v=20261123145620';
+import { sb, esc, withStatus, labelOf, State, downloadFromGDrive, mergeWorks, titleOverlapScore, confirmPopup } from './core.js?v=20261123161409';
 
 const SIMILARITY_THRESHOLD = 0.6;
 const MAX_FOR_SUGGESTIONS = 1500; // guard against an O(n^2) scan over a very large catalogue
@@ -129,7 +129,7 @@ function renderSuggestions(singleDocs) {
   });
   box.querySelectorAll('.wc-merge-group').forEach(btn => btn.addEventListener('click', async () => {
     const g = groups[btn.dataset.gi];
-    if (!confirm(`Merge documents ${g.map(d => '#' + d.document_id).join(', ')} into one Document?`)) return;
+    if (!await confirmPopup(`Merge documents ${g.map(d => '#' + d.document_id).join(', ')} into one Document?`)) return;
     try {
       await mergeWorks(g[0].document_id, g.slice(1).map(d => d.document_id));
       await renderWorkConsolidationView(document.getElementById('main'));

@@ -2,21 +2,31 @@
 // PROJECT_HANDOFF_v15.md). Personal and private: each user only ever sees their own favorites,
 // enforced by RLS on user_favorites, not by anything in this module.
 
-import { sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup, openFormationPostPopup, canReviewApplications, canWrite, openTranslatePopup } from './core.js?v=20261123145620';
+import { sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup, openFormationPostPopup, canReviewApplications, canWrite, openTranslatePopup, docCardHtml } from './core.js?v=20261123161409';
 
+// Since 2026-11-23 (Owner's request) the saved documents are the same large cards as the Library: a tap opens the
+// document's card. Remove is small, under each one. The tokens of appreciation have a page of their own.
 export async function renderMySpaceView(main) {
-  const rows = await withStatus(sb.from('user_favorites')
-    .select('document_id,created_at,documents(document_id,en_title,ur_title,author,category,ref_date,place,language,workflow_status,recipient)')
-    .order('created_at', { ascending: false }));
+  const [rows, tokens] = await Promise.all([
+    withStatus(sb.from('user_favorites')
+      .select('document_id,created_at,documents(document_id,title,en_title,ur_title,it_title,original_title,author,category,ref_date,ref_period,place,language,workflow_status,recipient)')
+      .order('created_at', { ascending: false })),
+    sb.rpc('my_tokens').then(r => (r.error ? null : r.data), () => null),
+  ]);
+  const hasTokens = tokens && ((tokens.entries || []).length || (tokens.certificates || []).length);
 
   main.innerHTML = `
     <div class="panel">
-      <h2>My Space <span class="hint">— documents you saved</span> <span class="count-badge">${rows.length}</span></h2>
+      <h2>My Space <span class="count-badge">${rows.length}</span></h2>
+      <p class="hint" style="margin:-4px 0 12px;">The documents you saved with &#9734; Save.</p>
       ${canWrite() ? '<div class="btn-row" style="margin:0 0 8px;"><button class="btn secondary" id="myspace-translate">Translate a text</button></div>' : ''}
       <div id="myspace-cards"></div>
-    </div>
-    <div id="myspace-tokens"></div>`;
+      ${hasTokens ? `<button type="button" class="home-tile myspace-tokens-tile" id="myspace-tokens-open">
+        <span class="home-tile-en">Tokens of appreciation</span><span class="count-badge">${esc(tokens.total ?? 0)}</span>
+        <span class="start-chevron" aria-hidden="true">&rsaquo;</span></button>` : ''}
+    </div>`;
   document.getElementById('myspace-translate')?.addEventListener('click', () => openTranslatePopup());
+  document.getElementById('myspace-tokens-open')?.addEventListener('click', () => renderTokensPage(main));
 
   const cardsBox = document.getElementById('myspace-cards');
   const docsById = {};
@@ -24,25 +34,21 @@ export async function renderMySpaceView(main) {
     const doc = r.documents;
     if (!doc) return '';
     docsById[doc.document_id] = doc;
-    const title = esc(doc.en_title) || '<span class="hint">(no title)</span>';
     const canAddToBoard = State.myBoards.size > 0 && isDocPostable(doc);
     const canAddToPath = (State.isFormatore || canReviewApplications()) && isDocPostable(doc);
-    return `<div class="dash-card" data-id="${esc(doc.document_id)}">
-      <div class="dash-card-title">${title}</div>
-      ${doc.ur_title ? `<div dir="auto">${esc(doc.ur_title)}</div>` : ''}
-      <div class="dash-card-meta">#${esc(doc.document_id)} &middot; ${esc(labelOf(State.authors, doc.author))} &middot; ${esc(doc.place)} &middot; ${esc(labelOf(State.categories, doc.category))}</div>
-      <div class="btn-row" style="margin:6px 0 0;">
+    return docCardHtml(doc, { extra: `
+      <div class="btn-row doc-card-tools">
         <button class="btn secondary" data-remove="${esc(doc.document_id)}">Remove</button>
         ${canAddToBoard ? `<button class="btn secondary" data-addboard="${esc(doc.document_id)}">+ Board</button>` : ''}
         ${canAddToPath ? `<button class="btn secondary" data-addpath="${esc(doc.document_id)}">+ Path</button>` : ''}
-      </div>
-    </div>`;
-  }).join('') || `<div class="empty-msg">Nothing saved yet — use ☆ Save on any document in the ${State.currentRole === 'user' ? 'Library' : 'Dashboard'}.</div>`;
+      </div>` });
+  }).join('') || `<div class="empty-msg">Nothing saved yet. Open a document in the ${State.currentRole === 'user' ? 'Library' : 'Dashboard'} and press &#9734; Save.</div>`;
 
-  cardsBox.querySelectorAll('.dash-card').forEach(card => {
-    card.addEventListener('click', e => {
-      if (e.target.dataset.remove || e.target.dataset.addboard || e.target.dataset.addpath) return;
-      State.selectedDocId = card.dataset.id;
+  // A tap on the card opens the document itself, not the list (on a phone its card comes straight up).
+  cardsBox.querySelectorAll('.doc-card-open').forEach(btn => {
+    btn.addEventListener('click', () => {
+      State.selectedDocId = btn.closest('.doc-card').dataset.id;
+      State.dashOpenDetail = true;
       window.__renderTab('dashboard');
     });
   });
@@ -70,6 +76,14 @@ export async function renderMySpaceView(main) {
       openFormationPostPopup({ doc, onSaved: () => {} });
     });
   });
+}
+
+// The tokens of appreciation on a page of their own, with Back to My Space.
+async function renderTokensPage(main) {
+  main.innerHTML = `
+    <div class="btn-row start-back-row"><button class="btn secondary back-btn" id="tokens-back">&lsaquo; Back</button></div>
+    <div id="myspace-tokens"></div>`;
+  document.getElementById('tokens-back').addEventListener('click', () => renderMySpaceView(main));
   await renderMyTokens(document.getElementById('myspace-tokens'));
 }
 

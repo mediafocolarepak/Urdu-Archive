@@ -7,7 +7,7 @@
 // un'operazione tecnica). RLS impedisce di toccare un task preso da qualcun altro (vedi
 // 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel vincolo, non lo sostituiscono.
 
-import { helpLinkHtml, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId } from './core.js?v=20261123145620';
+import { helpLinkHtml, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup } from './core.js?v=20261123161409';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -143,7 +143,7 @@ async function renderStoreView(body, manage, admin) {
       btn.addEventListener('click', async () => {
         const id = btn.closest('tr').dataset.id;
         const t = filtered.find(x => String(x.id) === id);
-        if (!confirm(`Withdraw "${t.title}" from the Store? It moves to Withdrawn Tasks, where it can be re-enabled later.`)) return;
+        if (!await confirmPopup(`Withdraw "${t.title}" from the Store? It moves to Withdrawn Tasks, where it can be re-enabled later.`)) return;
         await withStatus(sb.from('tasks').update({ status: 'withdrawn' }).eq('id', id), 'Withdrawing...');
         await renderTasksView(document.getElementById('main'));
       });
@@ -497,12 +497,12 @@ function renderMineActiveList(rows, candidateByTaskId) {
       await renderTasksView(document.getElementById('main'));
     });
     card.querySelector('.task-mine-submit')?.addEventListener('click', async () => {
-      if (!confirm('Submit this task for review? You will not be able to make further changes.')) return;
+      if (!await confirmPopup('Submit this task for review? You will not be able to make further changes.')) return;
       await withStatus(sb.from('tasks').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', id), 'Submitting...');
       await renderTasksView(document.getElementById('main'));
     });
     card.querySelector('.task-mine-giveup')?.addEventListener('click', async () => {
-      const note = prompt('Why are you giving up this task? A short line is fine - this is logged, but does not affect your standing.');
+      const note = await promptPopup('Why are you giving up this task? A short line is fine - this is logged, but does not affect your standing.');
       if (note === null) return;
       if (!note.trim()) { alert('Please enter a reason.'); return; }
       await withStatus(sb.rpc('give_up_task', { p_task_id: parseInt(id, 10), p_note: note.trim() }), 'Giving up task...');
@@ -617,13 +617,13 @@ function renderTeamList(rows, operators, nameMap) {
       await renderTasksView(document.getElementById('main'));
     });
     card.querySelector('.task-team-free')?.addEventListener('click', async () => {
-      const note = prompt('Why are you freeing up this task? (overdue with no response, inappropriate conduct, ...) This lowers the operator\'s reputation score.');
+      const note = await promptPopup('Why are you freeing up this task? (overdue with no response, inappropriate conduct, ...) This lowers the operator\'s reputation score.');
       if (note === null) return;
       await withStatus(sb.rpc('reclaim_task', { p_task_id: parseInt(id, 10), p_note: note || null }), 'Freeing up...');
       await renderTasksView(document.getElementById('main'));
     });
     card.querySelector('.task-team-delete')?.addEventListener('click', async () => {
-      if (!confirm('Delete this task permanently?')) return;
+      if (!await confirmPopup('Delete this task permanently?')) return;
       await withStatus(sb.from('tasks').delete().eq('id', id), 'Deleting...');
       await renderTasksView(document.getElementById('main'));
     });
@@ -637,7 +637,7 @@ function renderTeamList(rows, operators, nameMap) {
       await renderTasksView(document.getElementById('main'));
     });
     card.querySelector('.task-done-delete')?.addEventListener('click', async () => {
-      if (!confirm('Delete this completed task permanently?')) return;
+      if (!await confirmPopup('Delete this completed task permanently?')) return;
       await withStatus(sb.from('tasks').delete().eq('id', id), 'Deleting...');
       await renderTasksView(document.getElementById('main'));
     });
@@ -681,7 +681,7 @@ async function refreshReviewQueue() {
       if (data?.signedUrl) window.open(data.signedUrl, '_blank');
     });
     const submitVerdict = async (verdict, confirmMsg) => {
-      if (confirmMsg && !confirm(confirmMsg)) return;
+      if (confirmMsg && !await confirmPopup(confirmMsg)) return;
       await withStatus(sb.rpc('submit_task_review', { p_task_id: id, p_verdict: verdict, p_notes: notes() }), 'Submitting review...');
       await renderTasksView(document.getElementById('main'));
     };
@@ -727,12 +727,12 @@ async function refreshPublishQueue() {
     const id = parseInt(card.dataset.id, 10);
     card.querySelector('.task-publish-open-file')?.addEventListener('click', () => downloadDraftFile(candidateByTaskId[id]));
     card.querySelector('.task-publish-btn').addEventListener('click', async () => {
-      if (!confirm('Close this task? The operator gets the credits/reputation the Revisor\'s verdict implied. The document itself isn\'t live yet - you\'ll prepare the final PDF and publish it separately, from "Documents ready to publish" below.')) return;
+      if (!await confirmPopup('Close this task? The operator gets the credits/reputation the Revisor\'s verdict implied. The document itself isn\'t live yet - you\'ll prepare the final PDF and publish it separately, from "Documents ready to publish" below.')) return;
       await withStatus(sb.rpc('admin_decide_task', { p_task_id: id, p_decision: 'publish', p_note: null }), 'Closing task...');
       await renderTasksView(document.getElementById('main'));
     });
     card.querySelector('.task-reject-btn').addEventListener('click', async () => {
-      const note = prompt('Why are you rejecting this, despite the Revisor\'s verdict? This closes the task with the same penalty as a fail - you can create a fresh task on the same document afterward from Team overview.');
+      const note = await promptPopup('Why are you rejecting this, despite the Revisor\'s verdict? This closes the task with the same penalty as a fail - you can create a fresh task on the same document afterward from Team overview.');
       if (note === null) return;
       if (!note.trim()) { alert('Please enter a reason.'); return; }
       await withStatus(sb.rpc('admin_decide_task', { p_task_id: id, p_decision: 'reject', p_note: note.trim() }), 'Rejecting...');
@@ -787,7 +787,7 @@ async function refreshFinalizeQueue() {
       }
     });
     card.querySelector('.finalize-publish-btn').addEventListener('click', async () => {
-      if (!d.storage_path) { if (!confirm('No final PDF uploaded yet - publish anyway?')) return; }
+      if (!d.storage_path) { if (!await confirmPopup('No final PDF uploaded yet - publish anyway?')) return; }
       await withStatus(sb.rpc('finalize_document_publish', { p_document_id: id }), 'Publishing document...');
       await renderTasksView(document.getElementById('main'));
     });
