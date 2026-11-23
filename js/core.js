@@ -1387,6 +1387,90 @@ export function saveDisplayPrefs(changes) {
 }
 applyDisplayPrefs();
 
+// ---------- Voice messages (Share with us, Report a problem) ----------
+// One recorder for both (Owner's request, 2026-11-23: speaking is easier than typing): a large red "Record" button, a
+// clock while recording, then the recording to listen to, with "Record again". Plain MediaRecorder, no library; not
+// offered where the browser can't record. Moved here from sharewithus.js (96_share_with_us_audio.sql).
+const VOICE_MIME_CANDIDATES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+export function canRecordAudio() { return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder); }
+export function voiceFileEnding(mime) {
+  if (!mime) return 'webm';
+  if (mime.includes('mp4')) return 'm4a';
+  if (mime.includes('ogg')) return 'ogg';
+  return 'webm';
+}
+// box: where the recorder goes. Returns { audio (null, or { blob, mimeType }), reset() }.
+export function mountVoiceRecorder(box, { label = 'Record a voice message', maxMs = 3 * 60 * 1000 } = {}) {
+  const state = { audio: null, url: null, recorder: null, stream: null, timer: null };
+  const stopStream = () => {
+    if (state.stream) { state.stream.getTracks().forEach(t => t.stop()); state.stream = null; }
+    clearInterval(state.timer); state.timer = null;
+  };
+  const showStart = () => {
+    box.innerHTML = `<button type="button" class="btn voice-btn" data-voice="start">&#127908; ${esc(label)}</button>`;
+    box.querySelector('[data-voice="start"]').addEventListener('click', start);
+  };
+  const showDone = () => {
+    box.innerHTML = `
+      <div class="voice-done">
+        <div class="voice-done-title">&#10004; Your voice message</div>
+        <audio controls src="${state.url}"></audio>
+        <button type="button" class="btn secondary" data-voice="again">Delete it and record again</button>
+      </div>`;
+    box.querySelector('[data-voice="again"]').addEventListener('click', () => { reset(); });
+  };
+  const reset = () => {
+    if (state.recorder && state.recorder.state === 'recording') { state.recorder.onstop = null; state.recorder.stop(); }
+    stopStream();
+    if (state.url) URL.revokeObjectURL(state.url);
+    state.audio = null; state.url = null; state.recorder = null;
+    showStart();
+  };
+  async function start() {
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch { alert('The microphone could not be used. Please allow it for this site, or write your message instead.'); return; }
+    state.stream = stream;
+    const chunks = [];
+    const mimeType = VOICE_MIME_CANDIDATES.find(t => MediaRecorder.isTypeSupported(t)) || '';
+    const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    state.recorder = recorder;
+    recorder.addEventListener('dataavailable', e => { if (e.data.size > 0) chunks.push(e.data); });
+    recorder.onstop = () => {
+      stopStream();
+      const blob = new Blob(chunks, { type: mimeType || (chunks[0] && chunks[0].type) || 'audio/webm' });
+      state.audio = { blob, mimeType: blob.type };
+      state.url = URL.createObjectURL(blob);
+      if (document.body.contains(box)) showDone();
+    };
+    const startedAt = Date.now();
+    recorder.start();
+    box.innerHTML = `
+      <div class="voice-recording">
+        <div class="voice-clock" role="status"><span class="voice-dot" aria-hidden="true"></span> Recording&hellip; <span data-voice="clock">0:00</span></div>
+        <button type="button" class="btn voice-btn" data-voice="stop">&#9209; Stop</button>
+      </div>`;
+    box.querySelector('[data-voice="stop"]').addEventListener('click', () => recorder.stop());
+    state.timer = setInterval(() => {
+      // Left the page while recording: the microphone is let go.
+      if (!document.body.contains(box)) { recorder.onstop = null; if (recorder.state === 'recording') recorder.stop(); stopStream(); return; }
+      const s = Math.floor((Date.now() - startedAt) / 1000);
+      const clock = box.querySelector('[data-voice="clock"]');
+      if (clock) clock.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+      if (Date.now() - startedAt >= maxMs && recorder.state === 'recording') recorder.stop();
+    }, 500);
+  }
+  showStart();
+  return { get audio() { return state.audio; }, reset };
+}
+// Sends a recording into the person's own folder of a private bucket; returns { path, mimeType }.
+export async function uploadVoice(bucket, userId, audio) {
+  const path = `${userId}/${Date.now()}.${voiceFileEnding(audio.mimeType)}`;
+  const { error } = await busyWhile(sb.storage.from(bucket).upload(path, audio.blob, { contentType: audio.mimeType || undefined }), 'Sending...');
+  if (error) throw error;
+  return { path, mimeType: audio.mimeType || null };
+}
+
 // Shared popup for a board post - used by docdetail.js's "+ Board" (post with a document) and
 // boards.js's "+ New post" (free post). Lives here, not in either of them, because those two
 // modules can't import each other (project convention: modules import only from core.js).

@@ -7,138 +7,61 @@
 // dispatched in app.js exactly like chat.js already splits admin/user - see renderTab('chat')
 // there for the precedent this follows.
 
-import { sb, esc, withStatus, nameMapForEmails, isAdmin, isAnyDeptLead } from './core.js?v=20261123161409';
+import { sb, State, esc, withStatus, nameMapForEmails, isAdmin, isAnyDeptLead, canRecordAudio, mountVoiceRecorder, uploadVoice } from './core.js?v=20261123162443';
 
 function formatDateTime(iso) { return esc((iso || '').slice(0, 16).replace('T', ' ')); }
 
 // ---------- Voice messages (96_share_with_us_audio.sql, phase 1b) ----------
-// For someone who struggles typing a second script on a phone - the whole reason this feature
-// exists. Plain MediaRecorder/getUserMedia, no library: feature-detected once, and simply not
-// offered at all when unsupported (old browser, or a non-secure context) rather than showing a
-// broken button.
+// For someone who struggles typing a second script on a phone - the whole reason this feature exists. The recorder is
+// core.js mountVoiceRecorder (shared with Report a problem since 2026-11-23); not offered where the browser can't record.
 const SHARE_AUDIO_BUCKET = 'share-with-us-audio';
-const RECORDING_MAX_MS = 3 * 60 * 1000;
-const AUDIO_MIME_CANDIDATES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
-
-function canRecordAudio() { return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder); }
-function pickAudioMime() { return AUDIO_MIME_CANDIDATES.find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || ''; }
-function extFromMime(mime) {
-  if (!mime) return 'webm';
-  if (mime.includes('mp4')) return 'm4a';
-  if (mime.includes('ogg')) return 'ogg';
-  return 'webm';
-}
-
-// One recorder "session" at a time, scoped to the compose view currently on screen - same
-// module-level-state style formation.js already uses for its own transient UI state (chatOpen,
-// quizManageOpen etc).
-let recorder = null;
-let recordedChunks = [];
-let recordingStartedAt = 0;
-let recordingTimer = null;
-let recordingStream = null;
-let pendingAudio = null; // { blob, mimeType } once a recording is stopped, until sent or discarded
-
-function stopRecordingStream() {
-  if (recordingStream) { recordingStream.getTracks().forEach(t => t.stop()); recordingStream = null; }
-  if (recordingTimer) { clearInterval(recordingTimer); recordingTimer = null; }
-  recorder = null;
-}
 
 // ---------- Compose view (anyone without a lead/admin role) ----------
+// Since 2026-11-23 (Owner's request): speaking comes first, with a large Record button, writing second; after sending,
+// a large "Thank you" with the way back to Home.
 
 export async function renderShareComposeView(main) {
   const { data: { user } } = await sb.auth.getUser();
   markShareSeen('sharer_' + user.id);
-  discardPendingAudio();
-  stopRecordingStream();
+  const voice = canRecordAudio();
   main.innerHTML = `
     <div class="panel">
       <h2>Share with us</h2>
-      <p class="hint">Tell us about your experience with the archive, the paths, or the community - a feeling, an idea, a difficulty, anything you'd like us to hear. This isn't for reporting a technical problem (use "Report a Problem or Suggestion" for that) - every team lead reads this, and may thank you or write back.</p>
-      <div class="field"><textarea id="swu-text" dir="auto" rows="4" placeholder="Share what's on your mind..."></textarea></div>
-      <div id="swu-recording-box"></div>
-      <div class="btn-row">
-        <button class="btn" id="swu-send">Send</button>
-        ${canRecordAudio() ? '<button type="button" class="btn secondary" id="swu-record">&#127908; Record a voice message</button>' : ''}
-      </div>
-      <div class="chat-thread" id="swu-thread" style="margin-top:16px;"></div>
+      <p class="hint">Tell us about your experience with the archive, the paths or the community: a feeling, an idea, a difficulty, anything you'd like us to hear. For a technical problem, please use "Report a problem".</p>
+      ${voice ? '<label>Say it</label><div id="swu-voice" class="field"></div>' : ''}
+      <div class="field"><label for="swu-text">${voice ? 'Or write it' : 'Write it'}</label><textarea id="swu-text" dir="auto" rows="4" placeholder="Share what's on your mind..."></textarea></div>
+      <div class="btn-row"><button class="btn big-btn" id="swu-send">Send</button></div>
+      <h3 style="margin-top:20px;">What you shared</h3>
+      <div class="chat-thread" id="swu-thread"></div>
     </div>`;
+  const recorder = voice ? mountVoiceRecorder(document.getElementById('swu-voice')) : null;
   await refreshOwnThread();
 
   document.getElementById('swu-send').addEventListener('click', async () => {
     const body = document.getElementById('swu-text').value.trim();
-    if (!body && !pendingAudio) { alert('Please write something or record a voice message first.'); return; }
+    const audio = recorder && recorder.audio;
+    if (!body && !audio) { alert(voice ? 'Please record or write something first.' : 'Please write something first.'); return; }
     let audio_path = null, audio_mime_type = null;
-    if (pendingAudio) {
-      const path = `${user.id}/${Date.now()}.${extFromMime(pendingAudio.mimeType)}`;
-      const { error } = await sb.storage.from(SHARE_AUDIO_BUCKET).upload(path, pendingAudio.blob, { contentType: pendingAudio.mimeType || undefined });
-      if (error) { alert('Could not upload the voice message: ' + error.message); return; }
-      audio_path = path;
-      audio_mime_type = pendingAudio.mimeType || null;
+    if (audio) {
+      try { ({ path: audio_path, mimeType: audio_mime_type } = await uploadVoice(SHARE_AUDIO_BUCKET, user.id, audio)); }
+      catch (err) { alert('Could not send the voice message: ' + err.message); return; }
     }
     await withStatus(sb.from('share_with_us_messages').insert({
       user_id: user.id, user_email: user.email, body: body || null, audio_path, audio_mime_type,
     }), 'Sending...');
-    document.getElementById('swu-text').value = '';
-    discardPendingAudio();
-    await refreshOwnThread();
-  });
-
-  if (canRecordAudio()) {
-    document.getElementById('swu-record').addEventListener('click', toggleRecording);
-  }
-}
-
-let pendingAudioUrl = null;
-function discardPendingAudio() {
-  pendingAudio = null;
-  if (pendingAudioUrl) { URL.revokeObjectURL(pendingAudioUrl); pendingAudioUrl = null; }
-  const box = document.getElementById('swu-recording-box');
-  if (box) box.innerHTML = '';
-}
-
-async function toggleRecording() {
-  const btn = document.getElementById('swu-record');
-  const box = document.getElementById('swu-recording-box');
-  if (recorder && recorder.state === 'recording') { recorder.stop(); return; } // onstop handles the rest
-
-  let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-  catch { alert('Microphone access was denied or unavailable - you can still write your message.'); return; }
-
-  recordingStream = stream;
-  recordedChunks = [];
-  const mimeType = pickAudioMime();
-  recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-  recorder.addEventListener('dataavailable', e => { if (e.data.size > 0) recordedChunks.push(e.data); });
-  recorder.addEventListener('stop', () => {
-    stopRecordingStream();
-    const blob = new Blob(recordedChunks, { type: mimeType || (recordedChunks[0] && recordedChunks[0].type) || 'audio/webm' });
-    pendingAudio = { blob, mimeType: blob.type };
-    pendingAudioUrl = URL.createObjectURL(blob);
-    box.innerHTML = `
-      <div class="field" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <audio controls src="${pendingAudioUrl}"></audio>
-        <button type="button" class="btn secondary" id="swu-discard-audio" style="padding:4px 10px;">Discard</button>
+    main.innerHTML = `
+      <div class="panel thank-you">
+        <div class="thank-you-mark" aria-hidden="true">&#10004;</div>
+        <h2>Thank you</h2>
+        <p>What you shared has reached the team. An answer, if there is one, will appear under "What you shared".</p>
+        <div class="btn-row" style="justify-content:center;">
+          <button class="btn big-btn" id="ty-home">Back to Home</button>
+          <button class="btn secondary" id="ty-again">See what I shared</button>
+        </div>
       </div>`;
-    document.getElementById('swu-discard-audio').addEventListener('click', discardPendingAudio);
-    if (btn) { btn.textContent = '\u{1F3A4} Record a voice message'; btn.classList.add('secondary'); }
+    document.getElementById('ty-home').addEventListener('click', () => window.__renderTab(State.currentRole === 'user' ? 'onboarding' : 'dashboard'));
+    document.getElementById('ty-again').addEventListener('click', () => renderShareComposeView(main));
   });
-
-  recordingStartedAt = Date.now();
-  recorder.start();
-  box.innerHTML = '<p class="hint" id="swu-recording-timer">Recording... 0:00</p>';
-  btn.textContent = '⏹ Stop recording';
-  recordingTimer = setInterval(() => {
-    const elapsedMs = Date.now() - recordingStartedAt;
-    const timerEl = document.getElementById('swu-recording-timer');
-    if (timerEl) {
-      const s = Math.floor(elapsedMs / 1000);
-      timerEl.textContent = `Recording... ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-    }
-    if (elapsedMs >= RECORDING_MAX_MS && recorder && recorder.state === 'recording') recorder.stop();
-  }, 500);
 }
 
 async function refreshOwnThread() {
@@ -147,7 +70,7 @@ async function refreshOwnThread() {
   // No explicit .eq('user_id', ...) - RLS already limits a non-lead/admin caller to their own
   // rows (same convention chat.js's renderChatView uses for chat_messages).
   const messages = await withStatus(sb.from('share_with_us_messages').select('*').order('created_at'));
-  if (!messages.length) { box.innerHTML = '<div class="empty-msg">Nothing shared yet - write the first one above.</div>'; return; }
+  if (!messages.length) { box.innerHTML = '<div class="empty-msg">Nothing shared yet.</div>'; return; }
   const ids = messages.map(m => m.id);
   const [reactions, replies] = await Promise.all([
     withStatus(sb.from('share_with_us_reactions').select('*').in('message_id', ids)),

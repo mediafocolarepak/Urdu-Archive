@@ -3,7 +3,7 @@
 // admins see every message and can reply + dismiss. Everything stays in chat_messages
 // forever - "dismiss" is a soft flag hiding a row from the admin's default list, not a delete.
 
-import { sb, State, esc, canReviewApplications, withStatus, nameMapForEmails, labelOf, confirmPopup } from './core.js?v=20261123161409';
+import { sb, State, esc, canReviewApplications, withStatus, nameMapForEmails, labelOf, confirmPopup, canRecordAudio, mountVoiceRecorder, uploadVoice } from './core.js?v=20261123162443';
 
 // Report types are admin-editable from Options ("Report type" list) - see OPTION_LIST_NAMES
 // in core.js and 55_report_types.sql for the seed. Read fresh each time rather than cached in
@@ -16,50 +16,101 @@ function formatDateTime(iso) {
 
 // ---------- User-facing chat ----------
 
+// "Report a problem" (Owner's request, 2026-11-23): three large tiles say what it is about, instead of a menu; the
+// report can be spoken (160_report_voice.sql) or written; after sending, a "Thank you" screen. The codes are the
+// ones chat_messages accepts (16_signup_chat_splash.sql); "Download error" stays for the reports already sent.
+const REPORT_KINDS = [
+  ['REVISION', '&#128214;', 'A mistake in a text'],
+  ['BUG', '&#9888;&#65039;', "Something doesn't work"],
+  ['SUGGESTION', '&#128161;', 'An idea'],
+];
+const REPORT_AUDIO_BUCKET = 'report-audio';
+
 export async function renderChatView(main) {
   const { data: { user } } = await sb.auth.getUser();
   markChatSeen('user_' + user.id);
+  const fromDocument = !!State.chatMessagePrefill || !!State.selectedDocId;
+  let kind = State.chatMessagePrefill ? 'REVISION' : '';
+  const voice = canRecordAudio();
   main.innerHTML = `
     <div class="panel">
-      <h2>Report a Problem or Suggestion to the Team</h2>
-      <div class="chat-thread" id="chat-thread"></div>
-      <div class="field-grid">
-        <div class="field"><label>Report type</label>
-          <select id="chat-report-type">${reportTypes().map(([c, l]) => `<option value="${c}">${l}</option>`).join('')}</select>
-        </div>
-        <div class="field"><label>Document ID <span class="hint">(optional)</span></label><input id="chat-document-id" type="number" min="1" value="${State.selectedDocId ? esc(State.selectedDocId) : ''}"></div>
+      <h2>Report a problem</h2>
+      <label>What is it about?</label>
+      <div class="report-kinds" role="group" aria-label="What is it about?">
+        ${REPORT_KINDS.map(([code, icon, label]) => `<button type="button" class="report-kind" data-kind="${code}" aria-pressed="${code === kind}"><span class="report-kind-icon" aria-hidden="true">${icon}</span>${label}</button>`).join('')}
       </div>
-      <div class="field"><label>Tell us in detail about the problem, and any suggestions or thoughts you have</label><textarea id="chat-message-text" rows="3">${State.chatMessagePrefill ? esc(State.chatMessagePrefill) : ''}</textarea></div>
-      <div class="btn-row"><button class="btn" id="chat-send-btn">Send</button></div>
+      <div class="field"><label>Document number <span class="hint">(if it is about a document)</span></label><input id="chat-document-id" type="number" min="1" inputmode="numeric" value="${fromDocument && State.selectedDocId ? esc(State.selectedDocId) : ''}"></div>
+      ${voice ? '<label>Say it</label><div id="chat-voice" class="field"></div>' : ''}
+      <div class="field"><label for="chat-message-text">${voice ? 'Or write it' : 'Write it'}</label><textarea id="chat-message-text" rows="4" dir="auto">${State.chatMessagePrefill ? esc(State.chatMessagePrefill) : ''}</textarea></div>
+      <div class="btn-row"><button class="btn big-btn" id="chat-send-btn">Send</button></div>
+      <h3 style="margin-top:20px;">Your reports and our answers</h3>
+      <div class="chat-thread" id="chat-thread"></div>
     </div>`;
   State.chatMessagePrefill = null;
+  const recorder = voice ? mountVoiceRecorder(document.getElementById('chat-voice')) : null;
+  main.querySelectorAll('.report-kind').forEach(b => b.addEventListener('click', () => {
+    kind = b.dataset.kind;
+    main.querySelectorAll('.report-kind').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  }));
   await refreshChatThread();
 
   document.getElementById('chat-send-btn').addEventListener('click', async () => {
-    const report_type = document.getElementById('chat-report-type').value;
     const document_id = document.getElementById('chat-document-id').value.trim();
     const message_text = document.getElementById('chat-message-text').value.trim();
-    if (!message_text) { alert('Please enter a message.'); return; }
+    const audio = recorder && recorder.audio;
+    if (!kind) { alert('Please choose first what it is about: a mistake in a text, something that doesn\'t work, or an idea.'); return; }
+    if (!message_text && !audio) { alert(voice ? 'Please record or write your message first.' : 'Please write your message first.'); return; }
+    let audio_path = null, audio_mime_type = null;
+    if (audio) {
+      try { ({ path: audio_path, mimeType: audio_mime_type } = await uploadVoice(REPORT_AUDIO_BUCKET, user.id, audio)); }
+      catch (e) { alert('The voice message could not be sent. Please write your message instead. (' + e.message + ')'); return; }
+    }
     await withStatus(sb.from('chat_messages').insert({
-      user_id: user.id, user_email: user.email, report_type,
+      user_id: user.id, user_email: user.email, report_type: kind,
       document_id: document_id ? parseInt(document_id, 10) : null,
-      message_text,
+      message_text: message_text || null,
+      ...(audio_path ? { audio_path, audio_mime_type } : {}),
     }), 'Sending...');
-    document.getElementById('chat-message-text').value = '';
-    document.getElementById('chat-document-id').value = '';
-    await refreshChatThread();
+    showThankYou(main, 'Your report has reached the team. Our answer will appear here, under "Your reports and our answers".', () => renderChatView(main));
   });
 }
+
+// A large "Thank you" after sending, with the way back to Home (Owner's request, 2026-11-23).
+function showThankYou(main, text, again) {
+  main.innerHTML = `
+    <div class="panel thank-you">
+      <div class="thank-you-mark" aria-hidden="true">&#10004;</div>
+      <h2>Thank you</h2>
+      <p>${esc(text)}</p>
+      <div class="btn-row" style="justify-content:center;">
+        <button class="btn big-btn" id="ty-home">Back to Home</button>
+        <button class="btn secondary" id="ty-again">See my reports</button>
+      </div>
+    </div>`;
+  document.getElementById('ty-home').addEventListener('click', () => window.__renderTab(State.currentRole === 'user' ? 'onboarding' : 'dashboard'));
+  document.getElementById('ty-again').addEventListener('click', again);
+}
+
+// The recordings of these reports, to listen to (private bucket: a short-lived link for each).
+async function reportAudioUrls(rows) {
+  const paths = rows.filter(r => r.audio_path).map(r => r.audio_path);
+  if (!paths.length) return {};
+  const { data } = await sb.storage.from(REPORT_AUDIO_BUCKET).createSignedUrls(paths, 3600);
+  return Object.fromEntries((data || []).filter(d => d.signedUrl).map(d => [d.path, d.signedUrl]));
+}
+const reportAudioHtml = (r, urls) => (r.audio_path && urls[r.audio_path] ? `<div style="margin-top:6px;"><audio controls preload="none" src="${esc(urls[r.audio_path])}"></audio></div>` : '');
 
 async function refreshChatThread() {
   const rows = await withStatus(sb.from('chat_messages').select('*').order('created_at'));
   const box = document.getElementById('chat-thread');
-  if (!rows.length) { box.innerHTML = '<div class="empty-msg">No messages yet - send one below.</div>'; return; }
+  if (!rows.length) { box.innerHTML = '<div class="empty-msg">You haven\'t sent a report yet.</div>'; return; }
+  const audioUrls = await reportAudioUrls(rows);
   box.innerHTML = rows.map(r => {
     const userBubble = `
       <div class="chat-bubble from-user">
         <div class="chat-meta"><span class="chat-tag">${esc(labelOf(reportTypes(), r.report_type) || r.report_type)}</span>${r.document_id ? `Doc #${esc(r.document_id)} · ` : ''}${formatDateTime(r.created_at)}</div>
-        ${esc(r.message_text)}
+        ${esc(r.message_text || '')}
+        ${reportAudioHtml(r, audioUrls)}
       </div>`;
     const replyBubble = r.reply_text ? `
       <div class="chat-bubble from-admin">
@@ -114,6 +165,7 @@ async function refreshAdminMessages() {
   const rows = await withStatus(query);
   const filtered = emailFilter ? rows.filter(r => (r.user_email || '').toLowerCase().includes(emailFilter)) : rows;
   const nameMap = await nameMapForEmails(filtered.map(r => r.user_email));
+  const audioUrls = await reportAudioUrls(filtered);
   // A report that led to a correction gives its author a token of appreciation (docs/TOKEN_POLICY.md, migration 129).
   const { data: markedRows } = await sb.rpc('token_marked_reports');
   const marked = new Set((markedRows || []).map(m => String(m.chat_message_id)));
@@ -126,7 +178,7 @@ async function refreshAdminMessages() {
       <td>${esc(nameMap[r.user_email] || r.user_email)}</td>
       <td>${esc(labelOf(reportTypes(), r.report_type) || r.report_type)}</td>
       <td>${r.document_id ? esc(r.document_id) : '—'}</td>
-      <td style="white-space:normal;max-width:260px;">${esc(r.message_text)}</td>
+      <td style="white-space:normal;max-width:260px;">${esc(r.message_text || '')}${reportAudioHtml(r, audioUrls)}</td>
       <td><textarea class="msg-reply-input" rows="2" style="min-width:180px;">${esc(r.reply_text)}</textarea></td>
       <td>
         <button class="btn secondary msg-reply-btn" style="padding:4px 10px;">Send</button>
