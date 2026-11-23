@@ -11,7 +11,7 @@
 //   qual:<CODE>                     holds that qualification
 //   board_editor                    looks after at least one board
 
-import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20261123161409';
+import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20261123162443';
 
 const SECTIONS = [
   ['use', { en: 'Use the archive', it: 'Usare l\'archivio', ur: 'آرکائیو کا استعمال' }],
@@ -184,7 +184,7 @@ async function renderGuide(main, rows) {
         <textarea id="help-editor" spellcheck="false" class="help-editor">${esc(body.html_content)}</textarea>
       ` : `
         <article class="help-guide" ${rtl}>
-          ${row.draft ? '<p class="note" dir="ltr">Draft translation, not yet reviewed. If something is wrong, please write in Report a Problem or Suggestion.</p>' : ''}
+          ${row.draft ? '<p class="note" dir="ltr">Draft translation, not yet reviewed. If something is wrong, please write in Report a problem.</p>' : ''}
           <h1>${esc(row.title)}</h1>
           ${cleanGuideHtml(body.html_content)}
         </article>

@@ -1,28 +1,28 @@
-import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20261123161409';
-import { renderDashboardView } from './dashboard.js?v=20261123161409';
-import { renderReportsView } from './reports.js?v=20261123161409';
-import { renderHayatView } from './hayatindex.js?v=20261123161409';
-import { renderMatchReviewView } from './matchreview.js?v=20261123161409';
-import { renderBulkImportView } from './bulkimport.js?v=20261123161409';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20261123161409';
-import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20261123161409';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20261123161409';
-import { renderHayatEditorView } from './hayateditor.js?v=20261123161409';
-import { renderInPageConverterView } from './inpageconverter.js?v=20261123161409';
-import { renderUserGuideView } from './userguide.js?v=20261123161409';
-import { renderJoinTeamView } from './collaboration.js?v=20261123161409';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20261123161409';
-import { renderMyProfileView } from './profile.js?v=20261123161409';
-import { renderMySpaceView } from './myspace.js?v=20261123161409';
-import { renderBoardsView } from './boards.js?v=20261123161409';
-import { renderFormationView } from './formation.js?v=20261123161409';
-import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261123161409';
-import { renderOnboardingView } from './onboarding.js?v=20261123161409';
-import { renderLanding } from './landing.js?v=20261123161409';
-import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20261123161409';
-import { renderProposalsView, initProposalNotifications } from './proposals.js?v=20261123161409';
-import { renderReadingsView, initReadingNotifications } from './readings.js?v=20261123161409';
-import { registerServiceWorker, initInstallBanner } from './pwa-register.js?v=20261123161409';
+import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons } from './core.js?v=20261123162443';
+import { renderDashboardView } from './dashboard.js?v=20261123162443';
+import { renderReportsView } from './reports.js?v=20261123162443';
+import { renderHayatView } from './hayatindex.js?v=20261123162443';
+import { renderMatchReviewView } from './matchreview.js?v=20261123162443';
+import { renderBulkImportView } from './bulkimport.js?v=20261123162443';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20261123162443';
+import { renderChatView, renderAdminMessagesView, initChatNotifications } from './chat.js?v=20261123162443';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20261123162443';
+import { renderHayatEditorView } from './hayateditor.js?v=20261123162443';
+import { renderInPageConverterView } from './inpageconverter.js?v=20261123162443';
+import { renderUserGuideView } from './userguide.js?v=20261123162443';
+import { renderJoinTeamView } from './collaboration.js?v=20261123162443';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20261123162443';
+import { renderMyProfileView } from './profile.js?v=20261123162443';
+import { renderMySpaceView } from './myspace.js?v=20261123162443';
+import { renderBoardsView } from './boards.js?v=20261123162443';
+import { renderFormationView } from './formation.js?v=20261123162443';
+import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261123162443';
+import { renderOnboardingView } from './onboarding.js?v=20261123162443';
+import { renderLanding } from './landing.js?v=20261123162443';
+import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20261123162443';
+import { renderProposalsView, initProposalNotifications } from './proposals.js?v=20261123162443';
+import { renderReadingsView, initReadingNotifications } from './readings.js?v=20261123162443';
+import { registerServiceWorker, initInstallBanner } from './pwa-register.js?v=20261123162443';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -42,7 +42,7 @@ function getTabs() {
       { id: 'formation', label: 'Formation Paths' },
       { id: 'sharewithus', label: 'Share with us' },
       { id: 'readings', label: 'Read aloud' },
-      { id: 'chat', label: 'Report a Problem or Suggestion' },
+      { id: 'chat', label: 'Report a problem' },
       { id: 'jointeam', label: 'Join the Team' },
       { id: 'profile', label: 'My Profile' },
     ];
@@ -66,7 +66,7 @@ function getTabs() {
     tabs.push({ id: 'proposals', label: 'Proposals' });
     tabs.push({ id: 'readings', label: 'Read aloud' });
     tabs.push({ id: 'inpageconverter', label: 'InPage Converter' });
-    tabs.push({ id: 'chat', label: 'Report a Problem or Suggestion' });
+    tabs.push({ id: 'chat', label: 'Report a problem' });
     // Share with us: Operators can now give their own feedback to the team leads/Admin the same
     // way Users do, from the compose view (owner's request 2026-09-20) - see sharewithus.js.
     tabs.push({ id: 'sharewithus', label: 'Share with us' });

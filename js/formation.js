@@ -10,9 +10,9 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, confirmPopup } from './core.js?v=20261123161409';
+import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, confirmPopup } from './core.js?v=20261123162443';
 // The reader (a path read like a book) shows the same document card as the Library, as dashboard.js and matchreview.js do.
-import { renderDocDetail } from './docdetail.js?v=20261123161409';
+import { renderDocDetail } from './docdetail.js?v=20261123162443';
 
 // Thumbnails (migration 93, owner's request to make the catalog "look like Coursera") - a public
 // bucket, same shape as board post images (BOARD_MEDIA_BUCKET in core.js), but not shared outside
@@ -461,6 +461,10 @@ async function renderPathDetail(main, pathId) {
         ${path.course_starts_at ? ` &middot; ${esc(path.course_starts_at)} &rarr; ${esc(path.course_ends_at)}` : ''}
         ${path.enrollment_deadline ? ` &middot; Enroll by ${esc(path.enrollment_deadline)}` : ''}
       </div>
+      ${bookItems.length ? `<div class="fp-main-action">
+        <button class="btn big-btn" id="fp-start-reading">&#128214; ${bookmarkItem ? 'Continue reading' : 'Start reading'}</button>
+        ${bookmarkItem ? `<div class="fp-bookmark-note" dir="auto">&#128278; Your bookmark: ${esc(bookmarkItem.post.title)} &middot; Chapter ${esc(bookmarkItem.chapterLabel)}</div>` : ''}
+      </div>` : ''}
       ${path.status === 'published' ? `
       <div class="hint" style="margin-top:10px;">
         ${enrolledCount} enrolled${canSeeEnrollees ? ` &middot; <span style="cursor:pointer;text-decoration:underline;" id="fp-toggle-enrollees">Who?</span>` : ''}
@@ -471,7 +475,7 @@ async function renderPathDetail(main, pathId) {
           ? '<span class="hint">You are enrolled ✓</span><button class="btn secondary" id="fp-withdraw">Withdraw</button>'
           : (deadlinePassed
             ? '<span class="hint">Enrollment is closed for this path.</span>'
-            : '<button class="btn" id="fp-enroll">Enroll</button>')}
+            : '<button class="btn big-btn" id="fp-enroll">Enroll</button>')}
       </div>` : ''}
       ${canEdit ? `<div class="btn-row" style="margin-top:10px;">
         <button class="btn secondary" id="fp-edit-details">Edit details</button>
@@ -489,10 +493,7 @@ async function renderPathDetail(main, pathId) {
       <hr style="margin:16px 0;">
       <div id="fp-tree">
         ${canEdit ? '<div class="btn-row" style="margin-bottom:10px;"><button class="btn" id="fp-add-module">+ Add module</button></div>' : ''}
-        ${bookItems.length ? `<div class="fp-read-row">
-          <button class="btn" id="fp-start-reading">&#128214; ${bookmarkItem ? 'Continue reading' : 'Start reading'}</button>
-          ${bookmarkItem ? `<span class="hint" dir="auto">&#128278; ${esc(bookmarkItem.post.title)} &middot; Chapter ${esc(bookmarkItem.chapterLabel)}</span>` : ''}
-        </div>` : ''}
+
         ${renderPathContentsHtml(modules)}
         ${modules.length ? modules.map((m, i) => partHeadingHtml(m, partNumbers) + renderModuleBlock(m, i + 1, chaptersOf(m.id), postsOf, canEdit, quizCtx, docById, textById)).join('') : '<div class="empty-msg">No modules yet.</div>'}
       </div>
@@ -595,10 +596,11 @@ function openReader(index) {
             <div class="fp-reader-path" dir="auto">${esc(reader.pathTitle)}</div>
             <div class="fp-reader-pos" id="fp-reader-pos"></div>
           </div>
-          <button type="button" class="btn secondary" id="fp-reader-bookmark"></button>
+          <button type="button" class="btn fp-bookmark-btn" id="fp-reader-bookmark"></button>
           <button type="button" class="btn secondary" id="fp-reader-toc-btn" aria-label="Contents">&#9776;<span class="fp-btn-label"> Contents</span></button>
         </div>
         <div class="fp-reader-toc" id="fp-reader-toc" hidden></div>
+        <div class="fp-bookmark-ribbon" id="fp-bookmark-ribbon" hidden>&#128278; Your bookmark is on this page</div>
         <div class="fp-reader-body" id="fp-reader-body"></div>
         <div class="fp-reader-nav">
           <button type="button" class="btn secondary" id="fp-reader-prev">&lsaquo; Previous</button>
@@ -648,11 +650,15 @@ async function showReaderPage(index) {
 function updateBookmarkButton() {
   const btn = document.getElementById('fp-reader-bookmark');
   if (!btn) return;
+  // The two states look nothing alike (Owner's request, 2026-11-23): an empty outline "Bookmark", or a filled gold
+  // "Bookmarked ✓" with a ribbon on the page itself.
   const here = reader.bookmarkPostId === reader.items[reader.index].post.id;
-  btn.innerHTML = `&#128278;<span class="fp-btn-label"> ${here ? 'Bookmarked' : 'Bookmark'}</span>`;
-  btn.setAttribute('aria-label', here ? 'Bookmarked' : 'Bookmark');
+  btn.innerHTML = here ? '&#128278; Bookmarked &#10004;' : '&#9734; Bookmark';
+  btn.setAttribute('aria-pressed', String(here));
   btn.classList.toggle('fp-bookmark-on', here);
   btn.title = here ? 'Remove the bookmark' : 'Keep my place here';
+  const ribbon = document.getElementById('fp-bookmark-ribbon');
+  if (ribbon) ribbon.hidden = !here;
 }
 
 async function toggleBookmark() {
@@ -681,7 +687,7 @@ function readerTocHtml() {
       lastChapter = it.chapter.id;
       html += `<div class="fp-toc-chapter" dir="auto">${esc(it.chapterLabel)} &middot; ${esc(it.chapter.title)}</div>`;
     }
-    const mark = it.post.id === reader.bookmarkPostId ? ' &#128278;' : '';
+    const mark = it.post.id === reader.bookmarkPostId ? ' <span class="fp-toc-bookmark">&#128278; your bookmark</span>' : '';
     html += `<button type="button" class="fp-toc-post${it === current ? ' current' : ''}" data-reader-go="${i}" dir="auto">${esc(it.post.title)}${mark}</button>`;
   });
   return html;

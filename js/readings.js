@@ -7,7 +7,7 @@ import {
   sb, State, esc, withStatus, labelOf, isAdmin, isCoordinator, isDeptMember, AUDIO_BUCKET, AUDIO_FORMATS,
   audioFileProblem, audioDurationOf, mountAudioPlayer, eraseMyAudioFiles,
   helpLinkHtml, confirmPopup, promptPopup
-} from './core.js?v=20261123161409';
+} from './core.js?v=20261123162443';
 
 // AAC in MP4 first, the likeliest to play on every phone; plain 'audio/mp4' can hold Opus, as in Chrome.
 const RECORD_FORMATS = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
@@ -158,10 +158,10 @@ async function renderMine(main, body) {
           ${languages.map(([code, n]) => `<option value="${esc(code)}" ${code === waitingLanguage ? 'selected' : ''}>${esc(labelOf(State.langs, code) || code)} (${esc(n)})</option>`).join('')}
         </select></div>` : ''}
       ${d.waiting.length ? d.waiting.map(w => `
-        <div class="btn-row" data-wait="${esc(w.document_id)}" style="justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding:6px 0;margin:0;">
-          <div style="min-width:0;"><div dir="auto">${esc(w.title) || '<span class="hint">(no title)</span>'}</div>
+        <div class="wait-card" data-wait="${esc(w.document_id)}">
+          <div style="min-width:0;"><div class="wait-card-title" dir="auto">${esc(w.title) || '<span class="hint">(no title)</span>'}</div>
             <div class="hint">${docNumber(w.document_id)}${esc(labelOf(State.langs, w.language))} &middot; about ${esc(Math.max(1, Math.round(w.chars / 900)))} min</div></div>
-          <button class="btn secondary rd-take" style="padding:3px 10px;white-space:nowrap;">Read this</button>
+          <button class="btn rd-take">&#127908; Read this</button>
         </div>`).join('') : '<div class="empty-msg">No texts are waiting right now.</div>'}
     </div>
     ${d.consented ? `<div class="panel"><h3 style="margin-top:0;">Your consent</h3>
@@ -297,7 +297,7 @@ async function renderRecorder(main, documentId, state) {
       ${state.note ? `<p style="white-space:pre-wrap;" dir="auto"><b>From who listened:</b> ${esc(state.note)}</p>` : ''}
       <div id="rc-recovered"></div>
       <div id="rc-trial" class="subpanel" ${format ? '' : 'hidden'}>
-        <b>First, try ${TRIAL_SECONDS} seconds</b>
+        <div class="rd-step"><span class="rd-step-num">1</span> Try your voice (${TRIAL_SECONDS} seconds)</div>
         <div class="hint">Read a line at your normal distance from the phone, then listen: is the voice clear? Is it a quiet room?</div>
         <div class="btn-row"><button class="btn secondary" id="rc-trial-start">Try now</button></div>
         <div id="rc-trial-result"></div>
@@ -317,7 +317,7 @@ async function renderRecorder(main, documentId, state) {
 
   const showIdle = () => {
     controls.innerHTML = format
-      ? '<div class="btn-row" style="margin:0;"><button class="btn" id="rc-start">&#127908; Start recording</button></div><div class="hint">You can pause between paragraphs. Please keep this screen on.</div>'
+      ? '<div class="rd-step"><span class="rd-step-num">2</span> Record</div><div class="record-row"><button class="record-round" id="rc-start" aria-label="Start recording"><span aria-hidden="true">&#127908;</span>Record</button><div class="hint">You can pause between paragraphs. Please keep this screen on.</div></div>'
       : '';
     document.getElementById('rc-start')?.addEventListener('click', startTake);
   };
@@ -325,10 +325,11 @@ async function renderRecorder(main, documentId, state) {
   const showTake = take => {
     const url = URL.createObjectURL(take.blob);
     controls.innerHTML = `
+      <div class="rd-step"><span class="rd-step-num">3</span> Listen, then send</div>
       <audio controls src="${esc(url)}" style="width:100%;"></audio>
       <div class="hint">${esc(mmss(take.seconds))} &middot; ${esc((take.blob.size / 1024 / 1024).toFixed(1))} MB. Please listen before sending. It stays on this phone until it has arrived.</div>
       <div class="btn-row" style="margin-bottom:0;">
-        <button class="btn" id="rc-send">Send to be heard</button>
+        <button class="btn big-btn" id="rc-send">Send to be heard</button>
         ${format ? '<button class="btn secondary" id="rc-redo">Record again</button>' : ''}
       </div>
       <div id="rc-status" class="hint" role="status"></div>`;
@@ -367,8 +368,9 @@ async function renderRecorder(main, documentId, state) {
     controls.innerHTML = `
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
         <span id="rc-timer" style="font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;">0:00</span>
-        <button class="btn secondary" id="rc-pause">Pause</button>
-        <button class="btn" id="rc-stop">Finish</button>
+        <span class="voice-dot" aria-hidden="true"></span>
+        <button class="btn secondary big-btn" id="rc-pause">Pause</button>
+        <button class="btn big-btn" id="rc-stop">&#9209; Finish</button>
       </div>
       <div id="rc-rec-note" class="hint" role="status">Recording.</div>`;
     document.getElementById('rc-pause').addEventListener('click', e => {

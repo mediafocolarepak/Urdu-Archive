@@ -10,9 +10,9 @@ import {
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, DRIVE_AUDIO_PREFIX, mountAudioPlayer, eraseMyAudioFiles,
   textDir, readerChoices, confirmPopup, promptPopup
-} from './core.js?v=20261123161409';
+} from './core.js?v=20261123162443';
 
-function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
+function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved ✓' : '☆ Save'; }
 
 // Categories that gate visibility/assignment to a specific qualification - duplicated from the
 // same constant in tasks.js (project convention: modules only import from core.js, never each
@@ -273,7 +273,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
         <h3 style="margin:0;">Document #${esc(doc.document_id)}</h3>
         <div class="btn-row" style="margin:0;">
           ${canEdit ? '<button class="btn secondary" id="doc-open-editor">Edit</button>' : ''}
-          <button class="btn secondary" id="doc-fav">${favLabel(doc.document_id)}</button>
+          <button class="btn fav-btn${State.myFavorites.has(doc.document_id) ? ' fav-on' : ''}" id="doc-fav" aria-pressed="${State.myFavorites.has(doc.document_id)}">${favLabel(doc.document_id)}</button>
           ${State.myBoards.size > 0 && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-board">+ Board</button>' : ''}
           ${(State.isFormatore || canReviewApplications()) && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-path">+ Path</button>' : ''}
         </div>
@@ -427,6 +427,8 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
       State.myFavorites.add(doc.document_id);
     }
     btn.textContent = favLabel(doc.document_id);
+    btn.classList.toggle('fav-on', State.myFavorites.has(doc.document_id));
+    btn.setAttribute('aria-pressed', String(State.myFavorites.has(doc.document_id)));
   });
   if (State.myBoards.size > 0 && isDocPostable(doc)) {
     document.getElementById('doc-add-board').addEventListener('click', () => openBoardPostPopup({ doc, onSaved: () => {} }));

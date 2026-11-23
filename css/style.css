@@ -609,7 +609,7 @@ td.sibling-title.doc-title-ur { font-size: 1.05em; line-height: 2; }
 .start-word-title { margin-top: 4px; font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-size: 18px; line-height: 2; overflow-wrap: anywhere; }
 /* Text size chosen in My Profile (core.js applyDisplayPrefs): each block of the screen is scaled, so it still fills the width. */
 #main > *, #landing-screen > *, .overlay-backdrop > .overlay-panel { zoom: var(--text-zoom, 1); }
-.display-choices .btn { min-width: 104px; }
+.display-choices .btn { flex: 1 1 0; min-width: 0; }
 .start-back-row { margin: 0 0 12px; }
 /* One Back button everywhere (Owner's request, 2026-11-23): "‹ Back", large, at the top left of the screen it leaves. */
 .btn.back-btn { font-size: 17px; padding: 10px 18px; min-height: 48px; }
@@ -680,3 +680,87 @@ input.switch:disabled { opacity: .6; cursor: wait; }
 /* Sign-up: Male / Female as two large buttons (2026-11-18). */
 .gender-choice { display: flex; gap: 10px; }
 .gender-btn { flex: 1 1 0; min-height: 48px; font-size: 16px; justify-content: center; }
+
+/* ---------- Groups D and E of the review (Owner's request, 2026-11-23) ---------- */
+/* A large main button: Send, Sign out, Start reading, Enroll. */
+.btn.big-btn { font-size: 18px; padding: 12px 24px; min-height: 52px; border-radius: 10px; }
+/* Report a problem: what it is about, as three large tiles. */
+.report-kinds { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 4px 0 16px; }
+.report-kind { display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 16px; font: inherit; font-size: 17px; font-weight: 700; text-align: left; color: var(--ink); background: var(--panel); border: 2px solid var(--line); border-radius: 12px; cursor: pointer; box-shadow: var(--shadow); }
+.report-kind-icon { font-size: 30px; line-height: 1; }
+.report-kind[aria-pressed="true"] { border-color: var(--sec, var(--accent)); background: var(--accent-soft); outline: 3px solid var(--sec, var(--accent)); outline-offset: 1px; }
+/* Voice messages (core.js mountVoiceRecorder): a large red button, a clock, then the recording. */
+.btn.voice-btn { background: #b3261e; color: #fff; font-size: 18px; min-height: 56px; padding: 12px 24px; border-radius: 28px; }
+.voice-recording { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.voice-clock { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 8px; }
+.voice-dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; background: #d93025; animation: voice-blink 1s ease-in-out infinite; }
+@keyframes voice-blink { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .voice-dot { animation: none; } }
+.voice-done { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.voice-done-title { font-weight: 700; font-size: 16px; }
+.voice-done audio { width: 100%; max-width: 420px; }
+/* "Thank you" after sending. */
+.thank-you { text-align: center; padding: 28px 18px; }
+.thank-you-mark { width: 72px; height: 72px; margin: 0 auto 10px; border-radius: 50%; background: var(--sec, var(--accent)); color: var(--sec-ink, var(--accent-ink)); font-size: 40px; line-height: 72px; }
+.panel.thank-you > h2 { display: block; font-size: 26px; }
+.panel.thank-you > h2::before { display: none; }
+.thank-you p { font-size: 18px; line-height: 1.5; max-width: 32em; margin: 8px auto 18px; }
+/* My Profile: who, then sections closed under clear headings. */
+.profile-who { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin: 0 0 16px; }
+.profile-name { font-size: 22px; font-weight: 700; }
+.profile-login { font-size: 16px; color: var(--ink-soft); margin-bottom: 8px; }
+details.profile-section { margin-top: 12px; padding: 0; }
+details.profile-section > summary { cursor: pointer; list-style: none; padding: 14px 16px; font-size: 18px; font-weight: 700; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+details.profile-section > summary::-webkit-details-marker { display: none; }
+details.profile-section > summary::after { content: '\203A'; font-size: 28px; line-height: 1; color: var(--sec, var(--accent)); transition: transform .15s; }
+details.profile-section[open] > summary::after { transform: rotate(90deg); }
+details.profile-section > :not(summary) { margin-left: 16px; margin-right: 16px; }
+details.profile-section[open] { padding-bottom: 12px; }
+details.profile-section > div > h3:first-child, details.profile-section .btn-row > h3:first-child { display: none; }
+.thanks-box { margin-top: 16px; border-left: 5px solid var(--sec, var(--accent)); }
+.thanks-box h3 .count-badge { font-weight: 600; }
+.thanks-cert { font-size: 16px; padding: 4px 0; }
+.thanks-gave { border: 1px solid var(--line); border-radius: 10px; margin-top: 12px; }
+/* Boards: larger tabs and post titles. */
+.board-pill { font-size: 16px; padding: 10px 18px; min-height: 44px; }
+.board-pill.active { background: var(--sec, var(--accent)); border-color: var(--sec, var(--accent)); color: var(--sec-ink, var(--accent-ink)); }
+.board-post { border-left: 5px solid var(--sec, var(--accent)); }
+.board-post-title { font-size: 19px; font-weight: 700; line-height: 1.35; color: var(--ink); overflow-wrap: anywhere; }
+.board-post-body { font-size: 16px; }
+/* Formation: one large main button on a path's page; a larger reader. */
+.fp-main-action { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 14px 0 6px; }
+.fp-reader-path { font-size: 16px; }
+.fp-reader-pos { font-size: 14px; }
+.fp-reader-chapter { font-size: 14px; }
+.fp-reader-nav { padding: 10px 12px; }
+.fp-reader-nav .btn { flex: 1 1 0; max-width: 260px; min-height: 54px; font-size: 18px; }
+/* Read aloud: numbered steps, a large round red Record button, texts waiting as cards. */
+.rd-step { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; margin: 4px 0 10px; }
+.rd-step-num { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--sec, var(--accent)); color: var(--sec-ink, var(--accent-ink)); display: flex; align-items: center; justify-content: center; font-size: 17px; }
+.record-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.record-round { flex: none; width: 104px; height: 104px; border-radius: 50%; border: 0; background: #b3261e; color: #fff; font: inherit; font-size: 17px; font-weight: 700; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; box-shadow: 0 4px 14px rgba(179, 38, 30, .35); }
+.record-round span { font-size: 34px; line-height: 1; }
+.record-round:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.wait-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; margin: 0 0 10px; background: var(--panel); border: 1px solid var(--line); border-left: 5px solid var(--sec, var(--accent)); border-radius: 12px; box-shadow: var(--shadow); }
+.wait-card-title { font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
+.wait-card .rd-take { flex: none; }
+/* Help: the guides as large tiles, like Home. */
+.help-panel .help-section { font-size: 17px; color: var(--ink); }
+.help-list { gap: 10px; }
+.help-row { position: relative; min-height: 64px; padding: 12px 40px 12px 16px; background: var(--panel); border-left: 5px solid var(--sec, var(--accent)); border-radius: 12px; box-shadow: var(--shadow); }
+.help-row::after { content: '\203A'; position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 28px; color: var(--sec, var(--accent)); }
+.help-row[dir="rtl"] { padding: 12px 16px 12px 40px; border-left: 1px solid var(--line); border-right: 5px solid var(--sec, var(--accent)); }
+.help-row[dir="rtl"]::after { right: auto; left: 14px; content: '\2039'; }
+.help-row-title { font-size: 18px; font-weight: 700; }
+.help-row-summary { font-size: 15px; }
+.help-head h2 { font-size: 23px; color: var(--sec, var(--accent)); }
+/* Bookmarks in the formation reader (Owner's request, 2026-11-23): easy to find, and on/off very different. */
+.btn.fp-bookmark-btn { background: transparent; color: var(--ink); border: 2px dashed var(--ink-soft); font-size: 16px; }
+.btn.fp-bookmark-btn.fp-bookmark-on { background: #f2b705; color: #1a150d; border: 2px solid #b58500; box-shadow: 0 2px 8px rgba(181, 133, 0, .45); }
+.fp-bookmark-ribbon { margin: 0; padding: 8px 16px; background: #f2b705; color: #1a150d; font-weight: 700; font-size: 16px; text-align: center; }
+.fp-bookmark-ribbon[hidden] { display: none; }
+.fp-toc-bookmark { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: #f2b705; color: #1a150d; font-size: 13px; font-weight: 700; }
+.fp-bookmark-note { font-size: 16px; font-weight: 600; padding: 6px 12px; border-left: 5px solid #f2b705; background: var(--accent-soft); border-radius: 6px; }
+/* "Save" on a document's card: an outline when not saved, filled gold when saved (Owner's request, 2026-11-23). */
+.btn.fav-btn { background: transparent; color: var(--ink); border: 2px dashed var(--ink-soft); }
+.btn.fav-btn.fav-on { background: #f2b705; color: #1a150d; border: 2px solid #b58500; box-shadow: 0 2px 8px rgba(181, 133, 0, .45); }

@@ -12,7 +12,7 @@ import {
   openBoardPostPopup, likeSafe, DEFAULT_BOARD_FOR_MEMBERSHIP, BOARD_MEDIA_BUCKET, ackBoardPolicy,
   canWrite, isMediaLinkOk,
   helpLinkHtml, promptPopup
-} from './core.js?v=20261123161409';
+} from './core.js?v=20261123162443';
 
 // Shown once, before a person's first post (84_boards_moderation.sql) - keep this in sync with
 // the Help guide "boards" (116_help_redesign.sql), which says the same thing in its own section.
@@ -296,7 +296,7 @@ function renderPostCard(p, doc, text, myEmail, iRead, readCount, alreadyPromoted
   return `
     <div class="panel board-post" data-id="${p.id}">
       <div class="btn-row" style="justify-content:space-between;align-items:flex-start;margin:0 0 4px;">
-        <div style="font-weight:600;" dir="auto">${p.pinned ? '📌 ' : ''}${esc(p.title)}</div>
+        <div class="board-post-title" dir="auto">${p.pinned ? '📌 ' : ''}${esc(p.title)}</div>
         ${STATUS_BADGE[p.status] || ''}
       </div>
       <div class="hint">posted by <span class="board-post-author">…</span> &middot; ${esc((p.created_at || '').slice(0, 10))}</div>
