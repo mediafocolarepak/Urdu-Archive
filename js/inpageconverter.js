@@ -8,7 +8,7 @@
 // raw .inp binary directly (locates the content block via fixed byte markers, then maps
 // each InPage glyph code to its Unicode Arabic/Urdu codepoint), so no InPage clipboard
 // step is needed. Rewritten here as a pure function instead of relying on globals.
-import { sb, canWrite, isAdmin, esc, withStatus, getDriveAccessToken, driveUploadOrReplace } from './core.js?v=20261123145620';
+import { sb, canWrite, isAdmin, esc, withStatus, getDriveAccessToken, driveUploadOrReplace, confirmPopup } from './core.js?v=20261123161409';
 
 const DEFAULT_OPTIONS = {
   urdu: true,          // Urdu glyph variants (ک ی ہ ھ ں...) vs. plain Arabic ones
@@ -765,7 +765,7 @@ function renderBulkAnalysis() {
 async function runBulkTextImport() {
   const planned = plannedBulkRows();
   if (!planned.length) return;
-  if (!confirm(`Store the Urdu text of ${planned.length} document(s)?\n\nText already reviewed by hand is never touched.`)) return;
+  if (!await confirmPopup(`Store the Urdu text of ${planned.length} document(s)?\n\nText already reviewed by hand is never touched.`)) return;
 
   btiStopRequested = false;
   const importBtn = document.getElementById('bti-import');

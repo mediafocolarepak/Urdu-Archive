@@ -5,46 +5,19 @@
 // department (My Department -> Communication); a card that points into the app ("tab:<id>") is shown without a link
 // here, since the app needs signing in.
 
-import { sb, esc, ONBOARDING_MEDIA_BUCKET, showSignIn } from './core.js?v=20261123145620';
-import { openReadingView } from './docdetail.js?v=20261123145620';
-import { homeTileHtml, navIcon, CHEVRON } from './onboarding.js?v=20261123145620';
+import { sb, esc, ONBOARDING_MEDIA_BUCKET, showSignIn } from './core.js?v=20261123161409';
+import { openReadingView } from './docdetail.js?v=20261123161409';
+import { homeTileHtml, wordTileHtml } from './onboarding.js?v=20261123161409';
 
 const SECTIONS = [
   ['about', 'یہ آپ کا گھر ہے', 'This is your home'],
   ['how_to_use', 'اسے کیسے استعمال کریں؟', 'How to use it'],
   ['how_to_collaborate', 'تعاون کیسے کریں؟', 'How to collaborate'],
 ];
-// From the Urdu guides (help "find-read"): the Word of Life of this month.
-const WORD_OF_MONTH_UR = 'اس مہینے کا کلامِ حیات';
 
 const view = { box: null, word: null, cards: [], page: null, scroll: 0 };
 const thumbnailUrl = path => path ? sb.storage.from(ONBOARDING_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl : null;
 
-function monthName(month) {
-  const [year, mon] = month.split('-').map(Number);
-  return new Date(year, mon - 1, 1).toLocaleDateString('en', { month: 'long', year: 'numeric' });
-}
-const thisMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
-
-function wordTileHtml(w) {
-  const current = w.month === thisMonth();
-  const urTitle = w.ur_title || w.original_title || w.title;
-  const enTitle = w.en_title && w.en_title !== urTitle ? w.en_title : '';
-  return `
-    <button type="button" class="home-tile home-word" data-landing-word>
-      ${navIcon('word')}
-      <span class="home-word-text">
-        <span class="home-word-row">
-          <span class="home-tile-en">${current ? 'Word of Life of this month' : 'Latest Word of Life'}</span>
-          ${current ? `<span class="home-tile-ur" dir="rtl" lang="ur">${esc(WORD_OF_MONTH_UR)}</span>` : ''}
-        </span>
-        <span class="home-word-ur" dir="rtl" lang="ur">${esc(urTitle)}</span>
-        ${enTitle ? `<span class="home-word-en" dir="auto">${esc(enTitle)}</span>` : ''}
-        <span class="hint">${esc(monthName(w.month))}</span>
-      </span>
-      ${CHEVRON}
-    </button>`;
-}
 
 function cardHtml(c) {
   const url = thumbnailUrl(c.thumbnail_path);
@@ -68,7 +41,7 @@ function renderHome() {
   box.innerHTML = `
     <div class="start-home landing-home">
       <h1 class="landing-title">Digital Urdu Archive</h1>
-      <div id="landing-word">${view.word ? wordTileHtml(view.word) : ''}</div>
+      <div id="landing-word">${view.word ? wordTileHtml(view.word, 'data-landing-word') : ''}</div>
       <div class="start-tiles">
         ${sections.map(([code, ur, en]) => homeTileHtml(`data-landing-page="${code}"`, code, en, ur)).join('')}
         ${homeTileHtml('data-landing-signin', 'signin', 'Sign in', '', 'home-signin')}
@@ -98,7 +71,7 @@ function renderPage() {
   const [code, ur, en] = section;
   view.box.innerHTML = `
     <div class="start-home landing-home">
-      <div class="btn-row start-back-row"><button type="button" class="btn secondary" id="landing-back">&larr; Back</button></div>
+      <div class="btn-row start-back-row"><button type="button" class="btn secondary back-btn" id="landing-back">&lsaquo; Back</button></div>
       <div class="panel">
         <h2 class="start-page-ur" dir="auto">${esc(ur)}</h2>
         <h2 class="start-page-en">${esc(en)}</h2>

@@ -10,6 +10,7 @@
   --danger: #a13a2e;
   --shadow: 0 1px 3px rgba(43,38,32,0.12);
   --c-start: #955600; --c-library: #3B6B38; --c-myspace: #38489A; --c-share: #7A3868; --c-formation: #1D6A70; --sec-ink: #ffffff;
+  --c-boards: #9A3B2F; --c-readings: #6B4FA0; --c-report: #7A5F12; --c-profile: #4A5A6A;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -24,6 +25,7 @@
     --danger: #e07a68;
     --shadow: 0 1px 3px rgba(0,0,0,0.4);
     --c-start: #E9AB3C; --c-library: #8FC487; --c-myspace: #A3B2F2; --c-share: #DA9DCB; --c-formation: #7ECBCB; --sec-ink: #1a150d;
+    --c-boards: #F0A091; --c-readings: #C4B0F0; --c-report: #E0C56A; --c-profile: #AEBBC8;
   }
 }
 :root[data-theme="dark"] {
@@ -31,12 +33,14 @@
   --line: #3c372f; --accent: #c99a5f; --accent-ink: #201a10; --accent-soft: #34291a;
   --danger: #e07a68; --shadow: 0 1px 3px rgba(0,0,0,0.4);
   --c-start: #E9AB3C; --c-library: #8FC487; --c-myspace: #A3B2F2; --c-share: #DA9DCB; --c-formation: #7ECBCB; --sec-ink: #1a150d;
+  --c-boards: #F0A091; --c-readings: #C4B0F0; --c-report: #E0C56A; --c-profile: #AEBBC8;
 }
 :root[data-theme="light"] {
   --bg: #f4f1ea; --panel: #ffffff; --ink: #2b2620; --ink-soft: #6b6255;
   --line: #d8d0c0; --accent: #7a5230; --accent-ink: #ffffff; --accent-soft: #efe3d0;
   --danger: #a13a2e; --shadow: 0 1px 3px rgba(43,38,32,0.12);
   --c-start: #955600; --c-library: #3B6B38; --c-myspace: #38489A; --c-share: #7A3868; --c-formation: #1D6A70; --sec-ink: #ffffff;
+  --c-boards: #9A3B2F; --c-readings: #6B4FA0; --c-report: #7A5F12; --c-profile: #4A5A6A;
 }
 /* Noto Nastaliq Urdu (Google Fonts, OFL) - self-hosted rather than loaded from fonts.gstatic.com
    so the service worker (sw.js) can precache it like every other same-origin asset and it still
@@ -59,7 +63,8 @@ body {
   font-family: "Segoe UI", Tahoma, Arial, sans-serif;
   background: var(--bg);
   color: var(--ink);
-  font-size: 14px;
+  /* 16 px (Owner's request, 2026-11-23): many readers are older and not at ease with phones. */
+  font-size: 16px;
 }
 #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
 
@@ -102,6 +107,8 @@ body {
   gap: 10px;
 }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #4a8f4a; display: inline-block; }
+.reader-topbar #user-email, .reader-topbar #logout-btn, .reader-topbar #dirty-dot, .reader-topbar #dirty-label { display: none; }
+.reader-topbar #topbar h1 { font-size: 19px; }
 .dot.dirty { background: #d19a2e; }
 
 /* ---------- Standing widget (credits + reputation, topbar) ---------- */
@@ -134,19 +141,22 @@ body {
   padding: 16px;
   margin-bottom: 16px;
 }
-.panel h2 { margin: 0 0 12px 0; font-size: 16px; color: var(--accent); }
-.panel h3 { margin: 0 0 10px 0; font-size: 13.5px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .03em; }
+.panel h2 { margin: 0 0 12px 0; font-size: 20px; color: var(--accent); }
+.panel h3 { margin: 0 0 10px 0; font-size: 17px; color: var(--ink); font-weight: 700; }
 
 .btn {
   background: var(--accent);
   color: var(--accent-ink);
   border: none;
-  padding: 7px 14px;
-  border-radius: 6px;
+  padding: 9px 16px;
+  min-height: 44px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
 }
+/* Inside a table a button stays the size of its row. */
+table .btn { min-height: 0; }
 .btn:hover { filter: brightness(1.08); }
 .btn.secondary { background: var(--accent-soft); color: var(--ink); }
 .btn.danger { background: var(--danger); color: #fff; }
@@ -157,14 +167,14 @@ input, select, textarea {
   background: var(--bg);
   border: 1px solid var(--line);
   color: var(--ink);
-  border-radius: 5px;
-  padding: 6px 8px;
-  font-size: 13px;
+  border-radius: 6px;
+  padding: 9px 10px;
+  font-size: 16px;
   font-family: inherit;
   width: 100%;
 }
 textarea { resize: vertical; min-height: 50px; }
-label { font-size: 11.5px; color: var(--ink-soft); display: block; margin-bottom: 2px; text-transform: uppercase; letter-spacing: .02em; }
+label { font-size: 15px; font-weight: 600; color: var(--ink); display: block; margin-bottom: 4px; }
 .field { margin-bottom: 10px; }
 .field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px 14px; }
 .field-grid.wide { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
@@ -176,7 +186,7 @@ label { font-size: 11.5px; color: var(--ink-soft); display: block; margin-bottom
 .skill-chip {
   display: inline-flex; align-items: center; gap: 6px;
   border: 1px solid var(--line); border-radius: 20px; padding: 7px 14px;
-  font-size: 12.5px; cursor: pointer; background: var(--panel);
+  font-size: 15px; cursor: pointer; background: var(--panel);
   transition: background .15s, border-color .15s;
 }
 .skill-chip:hover { border-color: var(--accent); }
@@ -185,7 +195,7 @@ label { font-size: 11.5px; color: var(--ink-soft); display: block; margin-bottom
 .skill-chip.skill-chip-other { flex-basis: 100%; }
 .skill-chip.skill-chip-other input[type="text"] { width: auto; flex: 1; min-width: 160px; margin: 0; }
 
-table.grid { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.grid { width: 100%; border-collapse: collapse; font-size: 14px; }
 table.grid th, table.grid td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
 table.grid th { position: sticky; top: 0; background: var(--panel); color: var(--ink-soft); cursor: pointer; user-select: none; font-weight: 600; }
 table.grid th:hover { color: var(--accent); }
@@ -245,6 +255,34 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
 /* Dashboard cards: only the title and the Details button open a text - the rest of the card
    (meta line, empty space) is just there to be scrolled past. Scoped by id: My Space reuses
    .dash-card and still opens on a tap anywhere. */
+/* A document as a large card (core.js docCardHtml, Owner's request 2026-11-23): one button, number, titles, author, date. */
+.doc-card { margin: 0 0 10px; }
+.doc-card-open { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; width: 100%; text-align: left; font: inherit; color: var(--ink);
+  background: var(--panel); border: 1px solid var(--line); border-left: 5px solid var(--sec, var(--accent)); border-radius: 12px; padding: 12px 14px; cursor: pointer; box-shadow: var(--shadow); }
+.doc-card-open > span { grid-column: 1; display: block; }
+.doc-card-open:hover, .doc-card-open:focus-visible { border-color: var(--sec, var(--accent)); }
+.doc-card.selected .doc-card-open { background: var(--accent-soft); }
+.doc-card-num { font-size: 14px; font-weight: 600; color: var(--ink-soft); }
+.doc-card-en { font-size: 18px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; margin-top: 2px; }
+.doc-card-ur { font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-size: 21px; line-height: 2.1; text-align: right; overflow-wrap: anywhere; }
+.doc-card-facts { font-size: 15px; color: var(--ink-soft); margin-top: 2px; }
+.doc-card-open > .doc-card-chevron { grid-column: 2; grid-row: 1 / span 5; align-self: center; font-size: 30px; line-height: 1; color: var(--sec, var(--accent)); }
+.doc-card .count-badge { display: inline-block; margin: 4px 6px 0 0; }
+.doc-card-tools { margin: 6px 0 0; }
+.doc-card-tools .btn { font-size: 14px; min-height: 38px; padding: 6px 12px; }
+.myspace-tokens-tile { margin-top: 16px; min-height: 64px; border-left: 5px solid var(--sec, var(--accent)); }
+/* Readers see the cards on every screen, not the table (Owner's request, 2026-11-23). */
+.dash-user .dash-grid-wrap, .dash-user .dash-scroll-hint { display: none; }
+.dash-user .dash-cards { display: block; }
+.dash-user .dash-filters-toggle { display: inline-block; }
+.dash-user .dash-filters:not(.open) { display: none; }
+/* The search: a large box and button, then the two large choices. */
+.searchbar { flex-wrap: wrap; }
+.searchbar input { flex: 1 1 220px; font-size: 17px; min-height: 48px; }
+.searchbar .btn { min-height: 48px; font-size: 16px; }
+@media (max-width: 700px) { .searchbar input { flex-basis: 100%; } .searchbar .btn { flex: 1 1 auto; } }
+.dash-media-choice { margin-top: 0; }
+.dash-media-choice .btn { flex: 1 1 0; min-height: 48px; font-size: 16px; }
 #dash-cards .dash-card { cursor: default; }
 #dash-cards .dash-card:hover { background: none; }
 #dash-cards .dash-card.selected { background: var(--accent-soft); }
@@ -285,10 +323,10 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
 }
 
 .searchbar { display: flex; gap: 8px; margin-bottom: 10px; }
-.searchbar input { flex: 1; }
 
-.hint { font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
-.count-badge { background: var(--accent-soft); color: var(--ink); border-radius: 12px; padding: 2px 9px; font-size: 11.5px; margin-left: 6px; }
+
+.hint { font-size: 14px; color: var(--ink-soft); margin-top: 4px; }
+.count-badge { background: var(--accent-soft); color: var(--ink); border-radius: 12px; padding: 2px 9px; font-size: 13px; margin-left: 6px; }
 
 .report-view { background: #fff; color: #1a1a1a; padding: 20px; border-radius: 6px; }
 .report-view h2 { color: #1a1a1a; border-bottom: 2px solid #333; padding-bottom: 6px; }
@@ -302,7 +340,7 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
   .report-view { box-shadow: none; }
 }
 
-.empty-msg { color: var(--ink-soft); font-style: italic; padding: 20px; text-align: center; }
+.empty-msg { color: var(--ink-soft); font-size: 16px; padding: 20px; text-align: center; }
 
 /* ---------- Splash-screen overlay ---------- */
 .overlay-backdrop {
@@ -311,6 +349,13 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
   z-index: 1000; padding: 20px;
 }
 .overlay-panel { max-width: 480px; width: 100%; max-height: 90vh; overflow-y: auto; }
+/* The app's own messages and questions (core.js confirmPopup, promptPopup, alertPopup): above everything but the wheel. */
+.overlay-backdrop.app-dialog { z-index: 4000; }
+.app-dialog .panel { border-top: 5px solid var(--accent); }
+.app-dialog-text { font-size: 18px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0 14px; }
+.app-dialog-buttons { justify-content: flex-end; margin-bottom: 0; }
+.app-dialog-buttons .btn { min-width: 96px; min-height: 50px; font-size: 17px; }
+.app-dialog textarea { font-size: 17px; }
 /* Document detail on a phone: only what helps to read (Owner's request, 2026-11-08). */
 .doc-phone-only { display: none; }
 .doc-phone-facts { font-size: 14px; margin: 2px 0 4px; }
@@ -402,7 +447,7 @@ td.sibling-title.doc-title-ur { font-size: 1.05em; line-height: 2; }
 
 /* ---------- Chat / messages ---------- */
 .chat-thread { display: flex; flex-direction: column; gap: 10px; max-height: 55vh; overflow: auto; margin-bottom: 14px; }
-.chat-bubble { max-width: 78%; padding: 8px 12px; border-radius: 10px; font-size: 13px; line-height: 1.5; }
+.chat-bubble { max-width: 78%; padding: 8px 12px; border-radius: 10px; font-size: 15px; line-height: 1.5; }
 .chat-bubble .chat-meta { font-size: 11px; color: var(--ink-soft); margin-bottom: 3px; }
 .chat-bubble.from-user, .chat-bubble.from-me { align-self: flex-end; background: var(--accent); color: var(--accent-ink); }
 .chat-bubble.from-user .chat-meta, .chat-bubble.from-me .chat-meta { color: var(--accent-ink); opacity: .8; }
@@ -417,8 +462,8 @@ td.sibling-title.doc-title-ur { font-size: 1.05em; line-height: 2; }
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   box-shadow: var(--shadow); padding: 12px 14px; z-index: 1100;
 }
-.toast-title { font-weight: 700; color: var(--accent); font-size: 13px; margin-bottom: 4px; }
-.toast-body { font-size: 12.5px; color: var(--ink); }
+.toast-title { font-weight: 700; color: var(--accent); font-size: 16px; margin-bottom: 4px; }
+.toast-body { font-size: 15px; color: var(--ink); }
 
 /* Library on a phone: the filters open from the Search button, and the detail is its own screen with a Back bar. */
 .dash-search-tools { margin-top: 0; }
@@ -435,13 +480,38 @@ td.sibling-title.doc-title-ur { font-size: 1.05em; line-height: 2; }
   .split.detail-open .dash-back .btn { padding: 10px 16px; }
 }
 
-/* One colour per main section (palette A, chosen by the owner 2026-10-23): the active tab and the
-   top edge of the section's first panel. Sections without a colour keep the brown accent. */
-.tab-btn[data-tab="onboarding"], .bn-btn[data-tab="onboarding"], #main[data-section="onboarding"] { --sec: var(--c-start); }
-.tab-btn[data-tab="dashboard"], .bn-btn[data-tab="dashboard"], #main[data-section="dashboard"] { --sec: var(--c-library); }
-.tab-btn[data-tab="myspace"], .bn-btn[data-tab="myspace"], #main[data-section="myspace"] { --sec: var(--c-myspace); }
-.tab-btn[data-tab="sharewithus"], .bn-btn[data-tab="sharewithus"], #main[data-section="sharewithus"] { --sec: var(--c-share); }
-.tab-btn[data-tab="formation"], #main[data-section="formation"] { --sec: var(--c-formation); }
+/* Every section has its colour (palette A, 2026-10-23, five more chosen 2026-11-23): on its tab, on the top edge of its
+   first panel, on its Home tile and on its page title, which is large and starts with the section's icon. */
+.tab-btn[data-tab="onboarding"], .bn-btn[data-tab="onboarding"], .home-tile[data-start-tab="onboarding"], #main[data-section="onboarding"] { --sec: var(--c-start); }
+.tab-btn[data-tab="dashboard"], .bn-btn[data-tab="dashboard"], .home-tile[data-start-tab="dashboard"], #main[data-section="dashboard"] { --sec: var(--c-library); }
+.tab-btn[data-tab="myspace"], .bn-btn[data-tab="myspace"], .home-tile[data-start-tab="myspace"], #main[data-section="myspace"] { --sec: var(--c-myspace); }
+.tab-btn[data-tab="boards"], .bn-btn[data-tab="boards"], .home-tile[data-start-tab="boards"], #main[data-section="boards"] { --sec: var(--c-boards); }
+.tab-btn[data-tab="formation"], .bn-btn[data-tab="formation"], .home-tile[data-start-tab="formation"], #main[data-section="formation"] { --sec: var(--c-formation); }
+.tab-btn[data-tab="sharewithus"], .bn-btn[data-tab="sharewithus"], .home-tile[data-start-tab="sharewithus"], #main[data-section="sharewithus"] { --sec: var(--c-share); }
+.tab-btn[data-tab="jointeam"], .bn-btn[data-tab="jointeam"], .home-tile[data-start-tab="jointeam"], #main[data-section="jointeam"] { --sec: var(--c-share); }
+.tab-btn[data-tab="profile"], .bn-btn[data-tab="profile"], .home-tile[data-start-tab="profile"], #main[data-section="profile"] { --sec: var(--c-profile); }
+.tab-btn[data-tab="help"], .bn-btn[data-tab="help"], .home-tile[data-start-tab="help"], #main[data-section="help"] { --sec: var(--c-start); }
+.tab-btn[data-tab="readings"], .bn-btn[data-tab="readings"], .home-tile[data-start-tab="readings"], #main[data-section="readings"] { --sec: var(--c-readings); }
+.tab-btn[data-tab="chat"], .bn-btn[data-tab="chat"], .home-tile[data-start-tab="chat"], #main[data-section="chat"] { --sec: var(--c-report); }
+.home-tile[data-help-home] { --sec: var(--c-start); }
+#main[data-section] > .panel:first-child > .btn-row:first-child > h2:first-child,
+#main[data-section] > .panel:first-child > h2:first-child { display: flex; align-items: center; gap: 10px; font-size: 23px; color: var(--sec, var(--accent)); }
+#main[data-section] > .panel:first-child > .btn-row:first-child > h2:first-child::before,
+#main[data-section] > .panel:first-child > h2:first-child::before { content: ""; flex: 0 0 30px; width: 30px; height: 30px; background: currentColor; -webkit-mask: var(--sec-icon) center / contain no-repeat; mask: var(--sec-icon) center / contain no-repeat; }
+#main[data-section="onboarding"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M3%2011l9-8%209%208M5%2010v10h14V10%22%2F%3E%3C%2Fsvg%3E"); }
+#main[data-section="dashboard"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%204h12a3%203%200%200%201%203%203v13H7a3%203%200%200%201-3-3zM4%2017a3%203%200%200%201%203-3h12%22%2F%3E%3C%2Fsvg%3E"); }
+#main[data-section="myspace"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%2012a4%204%200%201%200%200-8%204%204%200%200%200%200%208zM4%2021a8%208%200%200%201%2016%200%22%2F%3E%3C%2Fsvg%3E"); }
+#main[data-section="boards"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%204h16v11H4zM8%2020l4-5%204%205M8%208h8M8%2011h5%22%2F%3E%3C%2Fsvg%3E"); }
+#main[data-section="formation"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%206C10%204.5%207%204%204%204v15c3%200%206%20.5%208%202%202-1.5%205-2%208-2V4c-3%200-6%20.5-8%202zM12%206v15%22%2F%3E%3C%2Fsvg%3E"); }
+#main[data-section="sharewithus"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%205h16v11H9l-5%204z%22%2F%3E%3C%2Fsvg%3E"); }
+#main[data-section="jointeam"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%2011a3%203%200%201%200%200-6%203%203%200%200%200%200%206zM3%2020a6%206%200%200%201%2012%200M19%208v6M16%2011h6%22%2F%3E%3C%2Fsvg%3E"); }
+#main[data-section="profile"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%205h16v14H4zM9%2012a2%202%200%201%200%200-4%202%202%200%200%200%200%204zM6%2016a3%203%200%200%201%206%200M14%209h4M14%2013h4%22%2F%3E%3C%2Fsvg%3E"); }
+#main[data-section="help"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203a9%209%200%201%200%200%2018%209%209%200%200%200%200-18zM9.5%209.5a2.5%202.5%200%201%201%203.4%202.3c-.6.3-.9.8-.9%201.4v.6M12%2017h.01%22%2F%3E%3C%2Fsvg%3E"); }
+#main[data-section="readings"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203a3%203%200%200%200-3%203v6a3%203%200%200%200%206%200V6a3%203%200%200%200-3-3zM5%2011a7%207%200%200%200%2014%200M12%2018v3%22%2F%3E%3C%2Fsvg%3E"); }
+#main[data-section="chat"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%205h16v11H9l-5%204zM12%208v3M12%2013.5h.01%22%2F%3E%3C%2Fsvg%3E"); }
+/* Home tiles: the icon on a disc of the section's colour, and the colour along the left edge. */
+.home-tile[data-start-tab], .home-tile[data-help-home] { border-left: 5px solid var(--sec, var(--accent)); }
+.home-tile[data-start-tab] .start-icon, .home-tile[data-help-home] .start-icon { background: var(--sec, var(--accent)); color: var(--sec-ink, var(--accent-ink)); }
 #main[data-section] > .panel:first-child { border-top: 4px solid var(--sec, var(--line)); }
 
 /* Bottom navigation bar (phones, Users and Operators): see initBottomNav in app.js. */
@@ -453,8 +523,8 @@ td.sibling-title.doc-title-ur { font-size: 1.05em; line-height: 2; }
     box-shadow: 0 -1px 3px rgba(0,0,0,0.08); padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .bn-btn {
-    flex: 1; min-width: 0; min-height: 56px; background: none; border: 0; border-top: 3px solid transparent;
-    color: var(--ink-soft); font: inherit; font-size: 11px; line-height: 1.15; cursor: pointer;
+    flex: 1; min-width: 0; min-height: 64px; background: none; border: 0; border-top: 3px solid transparent;
+    color: var(--ink-soft); font: inherit; font-size: 13px; line-height: 1.15; cursor: pointer;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 6px 2px;
   }
   .bn-btn span { text-align: center; overflow-wrap: anywhere; }
@@ -537,7 +607,14 @@ td.sibling-title.doc-title-ur { font-size: 1.05em; line-height: 2; }
 .start-word-heading { font-size: 17.5px; }
 .start-word-en { margin-top: 2px; font-size: 15px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
 .start-word-title { margin-top: 4px; font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-size: 18px; line-height: 2; overflow-wrap: anywhere; }
+/* Text size chosen in My Profile (core.js applyDisplayPrefs): each block of the screen is scaled, so it still fills the width. */
+#main > *, #landing-screen > *, .overlay-backdrop > .overlay-panel { zoom: var(--text-zoom, 1); }
+.display-choices .btn { min-width: 104px; }
 .start-back-row { margin: 0 0 12px; }
+/* One Back button everywhere (Owner's request, 2026-11-23): "‹ Back", large, at the top left of the screen it leaves. */
+.btn.back-btn { font-size: 17px; padding: 10px 18px; min-height: 48px; }
+.split.detail-open .dash-back .btn.back-btn { padding: 10px 18px; }
+.fp-reader-bar .btn.back-btn { padding: 8px 14px; font-size: 16px; }
 .start-page-ur { margin: 0 0 4px; font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-size: 24px; line-height: 2; text-align: left; border: 0; }
 .start-page-en { margin: 0 0 12px; font-size: 20px; line-height: 1.3; border: 0; }
 

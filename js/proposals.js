@@ -7,8 +7,8 @@ import {
   sb, State, esc, withStatus, optionsHtml, labelOf, isAdmin, isCoordinator, canManageReserved, canWrite, BUCKET, likeSafe,
   titleOverlapScore, ACCESS_LEVELS, readPdfPageCountFromBlob, getDriveAccessToken, uploadPdfToGDrive,
   AUDIO_BUCKET, AUDIO_FORMATS, audioFileProblem, audioDurationOf, HIDDEN_DOC_STATUSES, isMediaLinkOk, videoLinkHtml, mountAudioPlayer,
-  helpLinkHtml, textDir,
-} from './core.js?v=20261123145620';
+  helpLinkHtml, textDir, confirmPopup, promptPopup
+} from './core.js?v=20261123161409';
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // the Supabase Free plan's limit per file
 const FORMATS = [['DOC', 'Text or PDF'], ['AUD', 'Audio'], ['VID', 'Video']];
@@ -147,7 +147,7 @@ async function renderMine(main, body) {
     card.querySelector('.prop-edit')?.addEventListener('click', () => renderForm(main, id));
     card.querySelector('.prop-open')?.addEventListener('click', () => renderDetail(main, id));
     card.querySelector('.prop-discard')?.addEventListener('click', async () => {
-      if (!confirm('Discard this proposal?')) return;
+      if (!await confirmPopup('Discard this proposal?')) return;
       if (await act(() => withStatus(sb.rpc('discard_submission', { p_id: id }), 'Discarding...'))) renderProposalsView(main);
     });
     card.querySelector('.prop-withdraw')?.addEventListener('click', async () => {
@@ -258,7 +258,7 @@ async function renderMonth(main, body) {
     window.__renderTab('dashboard');
   }));
   body.querySelectorAll('.pm-link').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('Link this document, and any versions already linked to it, to this month?')) return;
+    if (!await confirmPopup('Link this document, and any versions already linked to it, to this month?')) return;
     if (await act(() => withStatus(sb.rpc('link_document_to_month', { p_document_id: parseInt(btn.dataset.doc, 10), p_period: monthPeriod }), 'Linking...'))) renderMonth(main, body);
   }));
 }
@@ -306,10 +306,8 @@ async function renderForm(main, id, prefill) {
   scrollTop();
   main.innerHTML = `
     <div class="panel">
-      <div class="btn-row" style="justify-content:space-between;align-items:center;margin:0 0 8px;">
-        <h2 style="margin:0;">${id ? 'Edit proposal' : 'New proposal'}</h2>
-        <button class="btn secondary" id="pf-back">Back</button>
-      </div>
+      <div class="btn-row start-back-row"><button class="btn secondary back-btn" id="pf-back">&lsaquo; Back</button></div>
+      <h2 style="margin:0 0 8px;">${id ? 'Edit proposal' : 'New proposal'}</h2>
       <p class="hint">Proposing earns no credits by itself. If you would like a compensation, agree with the team first: they will create a task for it.</p>
       ${prefill?.note ? `<p class="hint">${esc(prefill.note)}${(prefill.links || []).map(([label, url]) => ` <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>.`).join('')}</p>` : ''}
       ${form.decisionNote ? `<p style="white-space:pre-wrap;" dir="auto"><b>Reviewer's note:</b> ${esc(form.decisionNote)}</p>` : ''}
@@ -364,7 +362,7 @@ async function renderForm(main, id, prefill) {
     if (ok) { currentTab = 'mine'; renderProposalsView(main); }
   });
   document.getElementById('pf-publish')?.addEventListener('click', async () => {
-    if (!confirm('Publish this directly, without review? It becomes visible at once, and your action is recorded.')) return;
+    if (!await confirmPopup('Publish this directly, without review? It becomes visible at once, and your action is recorded.')) return;
     const ok = await act(async () => {
       await persist();
       await withStatus(sb.rpc('approve_submission', { p_id: form.id, p_read_document_ids: null, p_note: null }), 'Publishing...');
@@ -449,7 +447,7 @@ function renderVersions() {
       e.target.value = '';
       if (!file) return;
       const body = card.querySelector('.pv-body');
-      if (body.value.trim() && !confirm('Replace the text already in this box with the text of the file?')) return;
+      if (body.value.trim() && !await confirmPopup('Replace the text already in this box with the text of the file?')) return;
       const status = card.querySelector('.pv-word-status');
       status.textContent = 'Reading the file...';
       const ok = await act(async () => {
@@ -668,10 +666,8 @@ async function renderDetail(main, id) {
   scrollTop();
   main.innerHTML = `
     <div class="panel">
-      <div class="btn-row" style="justify-content:space-between;align-items:center;margin:0 0 8px;">
-        <h2 style="margin:0;" dir="auto">${esc(d.title) || '(no title)'}</h2>
-        <button class="btn secondary" id="pd-back">Back</button>
-      </div>
+      <div class="btn-row start-back-row"><button class="btn secondary back-btn" id="pd-back">&lsaquo; Back</button></div>
+      <h2 style="margin:0 0 8px;" dir="auto">${esc(d.title) || '(no title)'}</h2>
       <div class="hint">${esc(STATUS_LABELS[d.status] || d.status)}${d.is_reserved ? ' &middot; Reserved' : ''}${d.proposer_email ? ' &middot; proposed by ' + esc(d.proposer_email) : ''}</div>
       ${d.decision_note ? `<p style="white-space:pre-wrap;" dir="auto"><b>Reviewer's note:</b> ${esc(d.decision_note)}</p>` : ''}
       <div class="field" style="font-size:13px;line-height:1.7;margin-top:10px;">
@@ -724,17 +720,17 @@ async function renderDetail(main, id) {
     if (await act(() => withStatus(sb.rpc('release_submission', { p_id: id }), 'Saving...'))) reload();
   });
   document.getElementById('pd-approve')?.addEventListener('click', async () => {
-    if (!confirm('Approve and publish? Every version becomes visible at once, according to its access level.')) return;
+    if (!await confirmPopup('Approve and publish? Every version becomes visible at once, according to its access level.')) return;
     const read = [...main.querySelectorAll('.pd-read:checked')].map(cb => parseInt(cb.value, 10));
     if (await act(() => withStatus(sb.rpc('approve_submission', { p_id: id, p_read_document_ids: read, p_note: null }), 'Publishing...'))) closeToQueue();
   });
   document.getElementById('pd-back-correct')?.addEventListener('click', async () => {
-    const note = prompt('What needs correcting? The person who proposed it will read this.');
+    const note = await promptPopup('What needs correcting? The person who proposed it will read this.');
     if (note === null) return;
     if (await act(() => withStatus(sb.rpc('send_back_submission', { p_id: id, p_note: note }), 'Sending back...'))) closeToQueue();
   });
   document.getElementById('pd-reject')?.addEventListener('click', async () => {
-    const note = prompt('Why are you rejecting this? The person who proposed it will read this.');
+    const note = await promptPopup('Why are you rejecting this? The person who proposed it will read this.');
     if (note === null) return;
     if (await act(() => withStatus(sb.rpc('reject_submission', { p_id: id, p_note: note }), 'Rejecting...'))) closeToQueue();
   });
@@ -758,7 +754,7 @@ async function renderDriveList(body) {
     </div>`;
   body.querySelectorAll('[data-doc]').forEach(row => row.querySelector('.pdr-send').addEventListener('click', async () => {
     const r = rows.find(x => String(x.document_id) === row.dataset.doc);
-    if (r.access_level === 'reserved' && !confirm('This document is reserved, and anyone with the link can open a file on Drive. Copy it anyway?')) return;
+    if (r.access_level === 'reserved' && !await confirmPopup('This document is reserved, and anyone with the link can open a file on Drive. Copy it anyway?')) return;
     const ok = await act(async () => {
       const token = await getDriveAccessToken();
       const { data, error } = await sb.storage.from(BUCKET).download(r.storage_path);

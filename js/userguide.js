@@ -11,7 +11,7 @@
 //   qual:<CODE>                     holds that qualification
 //   board_editor                    looks after at least one board
 
-import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20261123145620';
+import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20261123161409';
 
 const SECTIONS = [
   ['use', { en: 'Use the archive', it: 'Usare l\'archivio', ur: 'آرکائیو کا استعمال' }],
@@ -129,7 +129,7 @@ function renderList(main, rows, quals) {
   }).join('');
   main.innerHTML = `
     <div class="panel help-panel">
-      ${State.currentRole === 'user' ? '<div class="btn-row start-back-row"><button type="button" class="btn secondary" id="help-to-start">&larr; Start Here</button></div>' : ''}
+      ${State.currentRole === 'user' ? '<div class="btn-row start-back-row"><button type="button" class="btn secondary back-btn" id="help-to-start">&lsaquo; Back</button></div>' : ''}
       <div class="help-head"><h2>${esc(ui().help)}</h2>${langSwitchHtml(languages)}</div>
       ${groups || `<div class="empty-msg">${esc(ui().empty)}</div>`}
     </div>`;
@@ -159,7 +159,7 @@ function cleanGuideHtml(raw) {
 async function renderGuide(main, rows) {
   const row = rowFor(rows, helpView.key, helpView.lang);
   if (!row) {
-    main.innerHTML = `<div class="panel help-panel"><button class="btn secondary" id="help-back" type="button">&larr; ${esc(ui().guides)}</button><div class="empty-msg">${esc(ui().missing)}</div></div>`;
+    main.innerHTML = `<div class="panel help-panel"><button class="btn secondary back-btn" id="help-back" type="button">&lsaquo; ${esc(ui().guides)}</button><div class="empty-msg">${esc(ui().missing)}</div></div>`;
     document.getElementById('help-back').addEventListener('click', goBackToList);
     return;
   }
@@ -175,7 +175,7 @@ async function renderGuide(main, rows) {
   main.innerHTML = `
     <div class="panel help-panel">
       <div class="help-head">
-        <button class="btn secondary" id="help-back" type="button">&larr; ${esc(ui().guides)}</button>
+        <button class="btn secondary back-btn" id="help-back" type="button">&lsaquo; ${esc(ui().guides)}</button>
         ${langSwitchHtml(languages)}
       </div>
       ${helpView.editing ? `

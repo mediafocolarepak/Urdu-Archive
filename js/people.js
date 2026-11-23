@@ -7,8 +7,8 @@
 // anyone outside HR/a department lead/Admin, so that's still the real gate either way.
 
 import {
-  sb, State, esc, withStatus, isAdmin, isDeptMember, isDeptLead, labelOf, optionsHtml, logEntriesHtml,
-} from './core.js?v=20261123145620';
+  sb, State, esc, withStatus, isAdmin, isDeptMember, isDeptLead, labelOf, optionsHtml, logEntriesHtml, confirmPopup, promptPopup
+} from './core.js?v=20261123161409';
 
 const STANDING_BADGE = {
   active: '',
@@ -325,19 +325,19 @@ export async function renderPendingDecisions(main) {
     </table></div>`;
 
   box.querySelectorAll('.pd-withdraw-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('Withdraw this proposal?')) return;
+    if (!await confirmPopup('Withdraw this proposal?')) return;
     const { error } = await sb.rpc('decide_people_decision', { p_id: parseInt(btn.closest('tr').dataset.id, 10), p_outcome: 'withdrawn' });
     if (error) { alert(error.message); return; }
     await renderPendingDecisions(main);
   }));
   box.querySelectorAll('.pd-approve-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('Approve this decision?')) return;
+    if (!await confirmPopup('Approve this decision?')) return;
     const { error } = await sb.rpc('decide_people_decision', { p_id: parseInt(btn.closest('tr').dataset.id, 10), p_outcome: 'approved' });
     if (error) { alert(error.message); return; }
     await renderPendingDecisions(main);
   }));
   box.querySelectorAll('.pd-reject-btn').forEach(btn => btn.addEventListener('click', async () => {
-    const note = prompt('A note is required when rejecting - it will be visible to the proposer:');
+    const note = await promptPopup('A note is required when rejecting - it will be visible to the proposer:');
     if (note == null) return;
     if (!note.trim()) { alert('A note is required when rejecting.'); return; }
     const { error } = await sb.rpc('decide_people_decision', { p_id: parseInt(btn.closest('tr').dataset.id, 10), p_outcome: 'rejected', p_note: note.trim() });

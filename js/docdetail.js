@@ -3,14 +3,14 @@
 // `documents` table's full field set.
 
 import {
-  sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete, isCoordinator, isAdmin, docTitlesHtml, URDU_SCRIPT,
+  sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete, isCoordinator, isAdmin, docTitlesHtml, URDU_SCRIPT, docDateLabel,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, DRIVE_AUDIO_PREFIX, mountAudioPlayer, eraseMyAudioFiles,
-  textDir, readerChoices,
-} from './core.js?v=20261123145620';
+  textDir, readerChoices, confirmPopup, promptPopup
+} from './core.js?v=20261123161409';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -22,15 +22,7 @@ const TASK_STATUS_LABEL = { open: 'Open', claimed: 'Claimed', submitted: 'Submit
 
 // Builds the "riassunto" text block that replaces the old grid of disabled input fields -
 // one line per group of related info, empty groups dropped entirely so the block stays short.
-// The date of a document for its card: "June 28, 2004", or the month, or the period as written.
-function docDateLabel(doc) {
-  if (doc.ref_date) {
-    const d = new Date(doc.ref_date + 'T00:00:00');
-    return isNaN(d) ? doc.ref_date : d.toLocaleDateString('en', { day: 'numeric', month: 'long', year: 'numeric' });
-  }
-  const m = /^(\d{4})-(\d{2})$/.exec(doc.ref_period || '');
-  return m ? new Date(Number(m[1]), Number(m[2]) - 1, 1).toLocaleDateString('en', { month: 'long', year: 'numeric' }) : (doc.ref_period || '');
-}
+
 
 function renderDocSummary(doc) {
   const line = (...parts) => parts.filter(Boolean).join(' · ');
@@ -296,14 +288,14 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     ${readerChoicesHtml(choices, media)}
     ${media.some(m => m.media_type === 'AUD' && String(m.source_document_id) === String(doc.document_id) && m.source_text_at && text?.updated_at > m.source_text_at) ? '<div class="hint">The text has been corrected since it was read aloud, so the two may differ.</div>' : ''}
     <div class="btn-row" style="margin:0 0 8px;">
-      ${text && canWrite() ? '<button class="btn secondary" id="doc-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Open editable text</button>' : ''}
-      ${originalText && canWrite() ? '<button class="btn secondary" id="doc-original-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Original text (Italian)</button>' : ''}
+      ${text && canWrite() ? '<button class="btn secondary" id="doc-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Open editable text</button>' : ''}
+      ${originalText && canWrite() ? '<button class="btn secondary" id="doc-original-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Original text (Italian)</button>' : ''}
       <span id="doc-read-aloud" style="display:contents;"></span>
-      ${canAddRelated ? '<button class="btn secondary" id="doc-add-related" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">+ Add a related version</button>' : ''}
-      ${canEdit && text && !text.reviewed && doc.source !== 'STE' ? '<button class="btn secondary" id="doc-mark-checked" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;" title="Once checked, the text can be read aloud">Mark the text as checked</button>' : ''}
-      ${canWrite() ? '<button class="btn secondary" id="doc-translate" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Translate</button>' : ''}
-      ${isAdmin() && ownReading ? '<button class="btn secondary" id="doc-reader-name" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Correct the name</button><button class="btn danger" id="doc-erase-reading" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Erase the recording</button>' : ''}
-      <button class="btn secondary" id="doc-report-problem" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Report a problem</button>
+      ${canAddRelated ? '<button class="btn secondary" id="doc-add-related" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">+ Add a related version</button>' : ''}
+      ${canEdit && text && !text.reviewed && doc.source !== 'STE' ? '<button class="btn secondary" id="doc-mark-checked" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;" title="Once checked, the text can be read aloud">Mark the text as checked</button>' : ''}
+      ${canWrite() ? '<button class="btn secondary" id="doc-translate" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Translate</button>' : ''}
+      ${isAdmin() && ownReading ? '<button class="btn secondary" id="doc-reader-name" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Correct the name</button><button class="btn danger" id="doc-erase-reading" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Erase the recording</button>' : ''}
+      <button class="btn secondary" id="doc-report-problem" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Report a problem</button>
     </div>
     ${canEdit ? `
     <div class="field doc-wide-only" style="font-size:13px;line-height:1.7;">${renderDocSummary(doc)}</div>
@@ -368,7 +360,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     sb.rpc('reading_state', { p_document_id: doc.document_id }).then(({ data }) => {
       const slot = document.getElementById('doc-read-aloud');
       if (!slot || !data || !['available', 'mine', 'rerecord'].includes(data.state)) return;
-      slot.innerHTML = `<button class="btn secondary" id="doc-read-aloud-btn" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">&#127908; ${data.state === 'rerecord' ? 'Record again' : 'Read aloud'}</button>`;
+      slot.innerHTML = `<button class="btn secondary" id="doc-read-aloud-btn" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">&#127908; ${data.state === 'rerecord' ? 'Record again' : 'Read aloud'}</button>`;
       document.getElementById('doc-read-aloud-btn').addEventListener('click', () => {
         State.readingTarget = doc.document_id;
         window.__renderTab('readings');
@@ -377,20 +369,20 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
   }
   // 154_readings_any_language.sql: until now a text could only be marked as checked in SQL. Checked, it can be read aloud.
   document.getElementById('doc-mark-checked')?.addEventListener('click', async () => {
-    if (!confirm('Has someone read this text against its source? Once marked as checked, it can be read aloud.')) return;
+    if (!await confirmPopup('Has someone read this text against its source? Once marked as checked, it can be read aloud.')) return;
     try { await withStatus(sb.rpc('mark_text_checked', { p_document_id: doc.document_id }), 'Saving...'); }
     catch (e) { alert(e.message); return; }
     await renderDocDetail(doc.document_id);
   });
   document.getElementById('doc-add-related')?.addEventListener('click', () => addRelatedVersion(doc, workSiblings).catch(e => alert(e.message)));
   document.getElementById('doc-reader-name')?.addEventListener('click', async () => {
-    const name = prompt('The name to show next to this recording:', ownReading.reader_name || '');
+    const name = await promptPopup('The name to show next to this recording:', ownReading.reader_name || '');
     if (name === null) return;
     await withStatus(sb.rpc('set_reading_reader', { p_document_id: doc.document_id, p_name: name }), 'Saving...');
     await renderDocDetail(doc.document_id);
   });
   document.getElementById('doc-erase-reading')?.addEventListener('click', async () => {
-    const reason = prompt('Why is this recording being erased? It disappears at once and the file cannot be recovered.');
+    const reason = await promptPopup('Why is this recording being erased? It disappears at once and the file cannot be recovered.');
     if (reason === null) return;
     await withStatus(sb.rpc('erase_reading', { p_document_id: doc.document_id, p_reason: reason }), 'Erasing...');
     await eraseMyAudioFiles();
@@ -808,6 +800,8 @@ export async function renderDocDetail(id, opts = {}) {
 
   const canEdit = isCoordinator() || isAdmin();
   renderDocDetailConsultation(box, doc, siblings, docCollections, canEdit, text, originalText, media, textIds);
+  // For "Continue reading" on Home (onboarding.js): the last document opened on this device, kept only here.
+  try { localStorage.setItem('lastDocument', JSON.stringify({ id: doc.document_id, title: (doc.en_title || doc.title || doc.ur_title || doc.original_title || '').trim() })); } catch { /* not remembered */ }
   // Counted anonymously, once per opening, for whoever gave the text (migration 129): never who opened it.
   if (lastCountedOpen !== doc.document_id && (doc.media_type || 'DOC') === 'DOC') {
     lastCountedOpen = doc.document_id;
@@ -1052,7 +1046,7 @@ async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
 
   if (!canDelete()) return;
   document.getElementById('doc-delete').addEventListener('click', async () => {
-    const reason = prompt(`Why are you deleting document #${id}? It leaves the archive, but nothing is erased: Admin can restore it from My Department -> Archive & Data.`);
+    const reason = await promptPopup(`Why are you deleting document #${id}? It leaves the archive, but nothing is erased: Admin can restore it from My Department -> Archive & Data.`);
     if (reason === null) return;
     if (!reason.trim()) { alert('Please enter a reason.'); return; }
     await withStatus(sb.rpc('soft_delete_document', { p_document_id: parseInt(id, 10), p_reason: reason.trim() }), 'Deleting...');
@@ -1109,7 +1103,7 @@ async function refreshProcessHistoryLog(documentId, refreshSelf) {
         <td>${canWrite() ? '<button class="btn danger ph-delete" style="padding:2px 8px;">Delete</button>' : ''}</td></tr>`).join('')}</tbody>
     </table></div>`;
   box.querySelectorAll('.ph-delete').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('Delete this process step? The document\'s current step will be recalculated from what remains.')) return;
+    if (!await confirmPopup('Delete this process step? The document\'s current step will be recalculated from what remains.')) return;
     const stepRowId = btn.closest('tr').dataset.phId;
     await withStatus(sb.from('process_history').delete().eq('id', stepRowId), 'Deleting step...');
     const remaining = await withStatus(sb.from('process_history').select('step').eq('document_id', documentId).order('step_date', { ascending: false }).order('created_at', { ascending: false }).limit(1));
@@ -1163,7 +1157,7 @@ export async function renderTrackingSheet(id) {
   const doneSteps = new Set(historyRows.map(r => r.step));
   main.innerHTML = `
     <div class="btn-row no-print">
-      <button class="btn secondary" id="back-to-dash">&larr; Back</button>
+      <button class="btn secondary back-btn" id="back-to-dash">&lsaquo; Back</button>
       <button class="btn" id="print-tracking">Print / Export PDF</button>
     </div>
     <div class="report-view" style="max-width:800px;margin:0 auto;">

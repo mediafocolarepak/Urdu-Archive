@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml } from './core.js?v=20261123145620';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261123145620';
+import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml, docCardHtml } from './core.js?v=20261123161409';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261123161409';
 
 // The "From the boards" section (84_boards_moderation.sql) was removed on the Owner's request, 2026-11-18: the
 // Library shows only the archive; board posts are in the Boards tab.
@@ -17,8 +17,6 @@ async function loadMediaWorks() {
 const AUDIO_ICON = '<span title="Audio" aria-label="Audio">&#128266;</span> ';
 const VIDEO_ICON = '<span title="Video" aria-label="Video">&#9654;</span> ';
 const mediaIcons = r => (mediaWorks.aud.has(r.work_id) ? AUDIO_ICON : '') + (mediaWorks.vid.has(r.work_id) ? VIDEO_ICON : '');
-const mediaBadges = r => (mediaWorks.aud.has(r.work_id) ? '<span class="count-badge" style="padding:1px 6px;">&#128266; Audio</span>' : '')
-  + (mediaWorks.vid.has(r.work_id) ? '<span class="count-badge" style="padding:1px 6px;">&#9654; Video</span>' : '');
 
 export async function renderDashboardView(main) {
   // Operator shares the simplified read/search-only Dashboard layout with User - their write
@@ -37,18 +35,26 @@ export async function renderDashboardView(main) {
     State.dashUserDefaultsApplied = true;
   }
 
+  // Search for readers (Owner's request, 2026-11-23): a large box with a Search button, two large choices (everything,
+  // or what can be heard or watched), and the other options closed under "More search options". Urdu stays the
+  // language chosen at first; it is not counted as a search the reader made.
+  const media = State.dashFilters.withMedia;
   main.innerHTML = `
-    <div class="panel">
+    <div class="panel${isUser ? ' dash-user' : ''}">
       <h2>${heading} <span class="count-badge" id="dash-count"></span></h2>
       <div class="searchbar">
-        <input id="dash-search" placeholder="Search by title, tags, or Urdu text..." value="${esc(State.dashFilters.search)}">
+        <input id="dash-search" type="search" enterkeyhint="search" placeholder="A title or a word" value="${esc(State.dashFilters.search)}">
+        <button class="btn" id="dash-search-go">&#128269; Search</button>
         ${isAdmin() ? '<button class="btn" id="dash-new">+ New document</button>' : ''}
         ${canWrite() ? '<button class="btn secondary" id="dash-propose">+ Propose content</button>' : ''}
       </div>
-      <div class="btn-row" style="margin-top:0;"><button class="btn ${State.dashFilters.withMedia ? '' : 'secondary'}" id="dash-media" aria-pressed="${State.dashFilters.withMedia}">&#128266; &#9654; Audio and video only</button></div>
+      <div class="btn-row dash-media-choice" role="group" aria-label="What to show">
+        <button class="btn ${media ? 'secondary' : ''}" data-media="all" aria-pressed="${!media}">Everything</button>
+        <button class="btn ${media ? '' : 'secondary'}" data-media="media" aria-pressed="${media}">&#128266; To listen or watch</button>
+      </div>
       <div class="btn-row dash-search-tools">
-        <button type="button" class="btn dash-filters-toggle" id="dash-filters-toggle" aria-expanded="false" aria-controls="dash-filters"><span id="dash-filters-label">Search</span> <span id="dash-filters-arrow" aria-hidden="true">&#9662;</span></button>
-        <button type="button" class="btn secondary" id="dash-clear-filters">Clear all search</button>
+        <button type="button" class="btn secondary dash-filters-toggle" id="dash-filters-toggle" aria-expanded="false" aria-controls="dash-filters"><span id="dash-filters-label">More search options</span> <span id="dash-filters-arrow" aria-hidden="true">&#9662;</span></button>
+        <button type="button" class="btn secondary" id="dash-clear-filters">Clear the search</button>
       </div>
       <div class="dash-filters" id="dash-filters">
       <div class="field-grid" style="margin-bottom:10px;">
@@ -81,7 +87,7 @@ export async function renderDashboardView(main) {
           <div class="dash-cards" id="dash-cards"></div>
         </div>
         <div class="dash-detail-col">
-          <div class="dash-back"><button class="btn secondary" id="dash-back">&lsaquo; Back to list</button></div>
+          <div class="dash-back"><button class="btn secondary back-btn" id="dash-back">&lsaquo; Back to list</button></div>
           <div class="panel" id="doc-detail" style="margin:0;"></div>
         </div>
       </div>
@@ -103,14 +109,17 @@ export async function renderDashboardView(main) {
   document.getElementById('dash-search-id').addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); closeFiltersOnPhone(); }
   });
-  document.getElementById('dash-clear-filters').addEventListener('click', () => {
-    Object.assign(State.dashFilters, { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', access_level: '', collection: '', recipient: '', source: '', language: '', legacyOnly: false, pendingOnly: false, withMedia: false });
-    renderDashboardView(main);
-  });
+  document.getElementById('dash-clear-filters').addEventListener('click', () => clearDashSearch(main, isUser));
   document.getElementById('dash-back').addEventListener('click', () => { if (history.state && history.state.dashDetail) history.back(); else closeDocDetailScreen(); });
   window.removeEventListener('popstate', closeDocDetailScreen);
   window.addEventListener('popstate', closeDocDetailScreen);
-  document.getElementById('dash-search').addEventListener('input', e => { State.dashFilters.search = e.target.value; refreshDashGrid(); });
+  // The list follows the typing after a short pause, so a slow phone doesn't search for every letter; Search or Enter at once.
+  const searchBox = document.getElementById('dash-search');
+  let searchTimer = null;
+  const searchNow = () => { clearTimeout(searchTimer); State.dashFilters.search = searchBox.value; refreshDashGrid(); };
+  searchBox.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(searchNow, 600); });
+  searchBox.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); searchBox.blur(); searchNow(); } });
+  document.getElementById('dash-search-go').addEventListener('click', () => { searchBox.blur(); searchNow(); });
   document.getElementById('dash-search-id').addEventListener('input', e => { State.dashFilters.idSearch = e.target.value; refreshDashGrid(); });
   document.getElementById('dash-propose')?.addEventListener('click', () => window.__renderTab('proposals'));
   const sortSelect = document.getElementById('dash-sort');
@@ -120,12 +129,15 @@ export async function renderDashboardView(main) {
     State.dashSort = { col, asc: dir === 'asc' };
     refreshDashGrid();
   });
-  document.getElementById('dash-media').addEventListener('click', e => {
-    State.dashFilters.withMedia = !State.dashFilters.withMedia;
-    e.currentTarget.className = `btn ${State.dashFilters.withMedia ? '' : 'secondary'}`;
-    e.currentTarget.setAttribute('aria-pressed', State.dashFilters.withMedia);
+  main.querySelectorAll('[data-media]').forEach(b => b.addEventListener('click', () => {
+    State.dashFilters.withMedia = b.dataset.media === 'media';
+    main.querySelectorAll('[data-media]').forEach(x => {
+      const on = (x.dataset.media === 'media') === State.dashFilters.withMedia;
+      x.className = `btn ${on ? '' : 'secondary'}`;
+      x.setAttribute('aria-pressed', String(on));
+    });
     refreshDashGrid();
-  });
+  }));
   if (isAdmin()) document.getElementById('dash-new').addEventListener('click', () => createNewDocument(refreshDashGrid));
   document.getElementById('f-category').addEventListener('change', e => { State.dashFilters.category = e.target.value; refreshDashGrid(); });
   document.getElementById('f-author').addEventListener('change', e => { State.dashFilters.author = e.target.value; refreshDashGrid(); });
@@ -163,7 +175,7 @@ export async function renderDashboardView(main) {
 // .or() as the title/tag ilike below because it reads a different table, so it runs first as a
 // separate query and its document_ids are added as one more branch of that same .or().
 async function buildDashQuery(selectAll) {
-  let q = sb.from('documents').select(selectAll ? '*' : 'document_id,category,author,main_topic,recipient,title,original_title,en_title,ur_title,it_title,it_title_translated,place,ref_date,pending_deletion,is_preferred,access_level,work_id,media_type');
+  let q = sb.from('documents').select(selectAll ? '*' : 'document_id,category,author,main_topic,recipient,title,original_title,en_title,ur_title,it_title,it_title_translated,place,ref_date,ref_period,pending_deletion,is_preferred,access_level,work_id,media_type');
   const f = State.dashFilters;
   if (f.search && f.search.trim()) {
     const term = f.search.trim();
@@ -230,6 +242,16 @@ const DASH_SORT_OPTIONS = [
 ];
 function dashSortValue() { return `${State.dashSort.col}:${State.dashSort.asc ? 'asc' : 'desc'}`; }
 
+// Empty list: say so plainly, and offer to start again (Owner's request, 2026-11-23).
+function emptyListHtml() {
+  return `<div class="empty-msg"><p style="margin:0 0 12px;">Nothing found. Try another word.</p><button class="btn" id="dash-empty-clear">Clear the search</button></div>`;
+}
+// Back to the list as it is at first: everything, and for readers in Urdu, the language chosen for them.
+function clearDashSearch(main, isUser) {
+  Object.assign(State.dashFilters, { search: '', idSearch: '', category: '', author: '', main_topic: '', workflow_status: '', access_level: '', collection: '', recipient: '', source: '', language: isUser ? 'URD' : '', legacyOnly: false, pendingOnly: false, withMedia: false });
+  renderDashboardView(main);
+}
+
 function openDocDetailScreen() {
   const split = document.querySelector('.split.split-wide-left');
   if (!split || split.classList.contains('detail-open')) { scrollMainTo(0); return; }
@@ -259,9 +281,14 @@ export async function refreshDashGrid() {
   rows = await filterByCollection(rows);
   document.getElementById('dash-count').textContent = rows.length;
   const f = State.dashFilters;
-  const activeFilters = [f.idSearch, f.category, f.author, f.main_topic, f.workflow_status, f.access_level, f.recipient, f.source, f.collection, f.language, f.legacyOnly, f.pendingOnly].filter(Boolean).length;
+  const isUser = State.currentRole === 'user' || State.currentRole === 'operator';
+  const languageChanged = f.language !== (isUser ? 'URD' : '');
+  const activeFilters = [f.idSearch, f.category, f.author, f.main_topic, f.workflow_status, f.access_level, f.recipient, f.source, f.collection, languageChanged, f.legacyOnly, f.pendingOnly].filter(Boolean).length;
   const sum = document.getElementById('dash-filters-label');
-  if (sum) sum.textContent = activeFilters ? `Search (${activeFilters} active)` : 'Search';
+  if (sum) sum.textContent = activeFilters ? `More search options (${activeFilters} chosen)` : 'More search options';
+  // "Clear the search" only when there is something to clear.
+  const clearBtn = document.getElementById('dash-clear-filters');
+  if (clearBtn) clearBtn.hidden = !(activeFilters || f.search || f.withMedia);
   const arrow = (col) => col !== State.dashSort.col ? '' : (State.dashSort.asc ? ' &uarr;' : ' &darr;');
   grid.innerHTML = `<colgroup>${Object.keys(cols).map(col => `<col style="width:${colWidths[col]}%">`).join('')}</colgroup>
     <thead><tr>${Object.entries(cols).map(([col, label]) =>
@@ -275,7 +302,8 @@ export async function refreshDashGrid() {
       <td>${esc(r.place)}</td>
       <td>${esc(labelOf(State.categories, r.category))}</td>
       </tr>`;
-    }).join('')}</tbody>`;
+    }).join('') || `<tr><td colspan="${Object.keys(cols).length}" style="cursor:default;">${emptyListHtml()}</td></tr>`}</tbody>`;
+  grid.querySelector('#dash-empty-clear')?.addEventListener('click', () => clearDashSearch(document.getElementById('main'), isUser));
   grid.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', () => {
     const col = th.dataset.sort;
     if (State.dashSort.col === col) State.dashSort.asc = !State.dashSort.asc; else State.dashSort = { col, asc: true };
@@ -288,29 +316,24 @@ export async function refreshDashGrid() {
   // gesture, return to the list at the same place).
   const selectDoc = async id => {
     State.selectedDocId = id;
-    document.querySelectorAll('#dash-grid tbody tr, #dash-cards .dash-card').forEach(el => el.classList.toggle('selected', el.dataset.id === String(id)));
+    document.querySelectorAll('#dash-grid tbody tr, #dash-cards .doc-card').forEach(el => el.classList.toggle('selected', el.dataset.id === String(id)));
     await renderDocDetail(State.selectedDocId);
     if (window.matchMedia('(max-width: 900px)').matches) openDocDetailScreen();
   };
-  grid.querySelectorAll('tbody tr').forEach(tr => tr.addEventListener('click', () => selectDoc(tr.dataset.id)));
+  grid.querySelectorAll('tbody tr[data-id]').forEach(tr => tr.addEventListener('click', () => selectDoc(tr.dataset.id)));
 
   // Card list is the mobile-friendly alternative to the wide, horizontally-scrolling table
   // above - same rows, same click behaviour, just stacked instead of columnar. Both are
   // always in the DOM; a CSS media query (css/style.css) picks one per screen width.
   const cardsBox = document.getElementById('dash-cards');
   if (cardsBox) {
-    cardsBox.innerHTML = rows.map(r => {
-      const star = r.is_preferred ? '&#9733; ' : '';
-      return `<div class="dash-card ${String(r.document_id) === String(State.selectedDocId) ? 'selected' : ''}" data-id="${esc(r.document_id)}">
-        <div class="dash-card-title dash-card-open">${docTitlesHtml(r, star)}</div>
-        <div class="dash-card-meta">#${esc(r.document_id)} &middot; ${esc(labelOf(State.authors, r.author))} &middot; ${esc(r.place)} &middot; ${esc(labelOf(State.categories, r.category))}</div>
-        ${r.pending_deletion ? '<span class="count-badge" style="padding:1px 6px;background:var(--danger);color:#fff;">pending deletion</span>' : ''}
-        ${r.access_level === 'reserved' ? '<span class="count-badge" style="padding:1px 6px;">Reserved</span>' : ''}
-        ${mediaBadges(r)}
-        <div class="dash-card-actions"><button class="btn secondary dash-card-open">Details &rsaquo;</button></div>
-      </div>`;
-    }).join('') || '<div class="empty-msg">No documents match the current filters.</div>';
-    cardsBox.querySelectorAll('.dash-card-open').forEach(el => el.addEventListener('click', () => selectDoc(el.closest('.dash-card').dataset.id)));
+    // One large card per document: the number, the titles, the author and the date (Owner's request, 2026-11-23).
+    cardsBox.innerHTML = rows.map(r => docCardHtml(r, {
+      selected: String(r.document_id) === String(State.selectedDocId),
+      extra: `${r.pending_deletion ? '<span class="count-badge" style="background:var(--danger);color:#fff;">pending deletion</span>' : ''}${r.access_level === 'reserved' ? '<span class="count-badge">Reserved</span>' : ''}`,
+    })).join('') || emptyListHtml();
+    cardsBox.querySelectorAll('.doc-card-open').forEach(el => el.addEventListener('click', () => selectDoc(el.closest('.doc-card').dataset.id)));
+    cardsBox.querySelector('#dash-empty-clear')?.addEventListener('click', () => clearDashSearch(document.getElementById('main'), isUser));
   }
 }
 

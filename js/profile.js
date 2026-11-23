@@ -5,7 +5,7 @@
 // reviewed. Deliberately does not import from collaboration.js (project convention: modules
 // only import from core.js), so the skill-chip rendering is duplicated here in small form.
 
-import { sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml, dateOfBirthFieldsHtml, readDateOfBirth, displayLogin, PHONE_LOGIN_DOMAIN } from './core.js?v=20261123145620';
+import { sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml, dateOfBirthFieldsHtml, readDateOfBirth, displayLogin, PHONE_LOGIN_DOMAIN, TEXT_SIZES, COLOUR_CHOICES, displayPrefs, saveDisplayPrefs } from './core.js?v=20261123161409';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -48,12 +48,13 @@ export async function renderMyProfileView(main) {
         <button class="btn secondary" id="profile-signout">Sign out</button>
       </div>
       <div class="field-grid wide" style="margin-bottom:16px;">
-        <div class="field"><label>Full name</label><div style="font-size:13.5px;padding:4px 0;">${esc(profile.full_name) || '—'}</div></div>
-        <div class="field"><label>${String(user.email || '').endsWith('@' + PHONE_LOGIN_DOMAIN) ? 'Mobile phone (to sign in)' : 'Email'}</label><div style="font-size:13.5px;padding:4px 0;">${esc(displayLogin(user.email))}</div></div>
-        <div class="field"><label>Role</label><div style="font-size:13.5px;padding:4px 0;">${esc(ROLE_LABEL[role] || role)}</div></div>
-        <div class="field"><label>Qualifications</label><div style="font-size:13.5px;padding:4px 0;">${myQualLabels.map(esc).join(', ') || '—'}</div></div>
-        ${reservedAccess ? '<div class="field"><label>Reserved documents</label><div style="font-size:13.5px;padding:4px 0;">You can read them</div></div>' : ''}
+        <div class="field"><label>Full name</label><div style="font-size:16px;padding:4px 0;">${esc(profile.full_name) || '—'}</div></div>
+        <div class="field"><label>${String(user.email || '').endsWith('@' + PHONE_LOGIN_DOMAIN) ? 'Mobile phone (to sign in)' : 'Email'}</label><div style="font-size:16px;padding:4px 0;">${esc(displayLogin(user.email))}</div></div>
+        <div class="field"><label>Role</label><div style="font-size:16px;padding:4px 0;">${esc(ROLE_LABEL[role] || role)}</div></div>
+        <div class="field"><label>Qualifications</label><div style="font-size:16px;padding:4px 0;">${myQualLabels.map(esc).join(', ') || '—'}</div></div>
+        ${reservedAccess ? '<div class="field"><label>Reserved documents</label><div style="font-size:16px;padding:4px 0;">You can read them</div></div>' : ''}
       </div>
+      <div class="subpanel" id="profile-display"></div>
       ${certRows.length ? `<div class="subpanel" style="margin-top:16px;">
         <h3>My Certificates</h3>
         ${certRows.map(c => `<div class="hint" style="padding:2px 0;">&#127891; <span dir="auto">${esc(c.formation_paths?.title) || 'Formation path'}</span> &middot; ${esc((c.issued_at || '').slice(0, 10))} &middot; code ${esc(c.certificate_code)}</div>`).join('')}
@@ -78,6 +79,7 @@ export async function renderMyProfileView(main) {
   // Sign out is also in the top bar, which on a phone is easy to miss (owner's report 2026-10-27);
   // this clicks that same button so there is one sign-out routine (core.js), not two.
   document.getElementById('profile-signout').addEventListener('click', () => document.getElementById('logout-btn').click());
+  renderDisplayChoices(document.getElementById('profile-display'));
   renderDemographics(document.getElementById('profile-demographics'), profile, birthRows[0]?.date_of_birth || '', main);
   if (role === 'operator') {
     renderEditable(document.getElementById('profile-editable'), profile, skillList, storedSkills, otherSkills, user.id, main);
@@ -144,11 +146,11 @@ function renderEditable(box, profile, skillList, storedSkills, otherSkills, user
         <button class="btn secondary" id="profile-edit-btn">Edit</button>
       </div>
       <div class="field-grid wide">
-        <div class="field"><label>Academic level</label><div style="font-size:13.5px;padding:4px 0;">${esc(labelOf(ACADEMIC_LEVELS, profile.academic_level)) || '—'}</div></div>
-        <div class="field"><label>Availability</label><div style="font-size:13.5px;padding:4px 0;">${esc(profile.availability) || '—'}</div></div>
-        <div class="field" style="grid-column:1/-1;"><label>Relevant experience</label><div style="font-size:13.5px;padding:4px 0;white-space:pre-wrap;">${esc(profile.experience) || '—'}</div></div>
-        <div class="field" style="grid-column:1/-1;"><label>Skills</label><div style="font-size:13.5px;padding:4px 0;">${storedSkills.map(esc).join(', ') || '—'}</div></div>
-        <div class="field" style="grid-column:1/-1;"><label>Why do you like to be part of our team?</label><div style="font-size:13.5px;padding:4px 0;white-space:pre-wrap;">${esc(profile.motivation) || '—'}</div></div>
+        <div class="field"><label>Academic level</label><div style="font-size:16px;padding:4px 0;">${esc(labelOf(ACADEMIC_LEVELS, profile.academic_level)) || '—'}</div></div>
+        <div class="field"><label>Availability</label><div style="font-size:16px;padding:4px 0;">${esc(profile.availability) || '—'}</div></div>
+        <div class="field" style="grid-column:1/-1;"><label>Relevant experience</label><div style="font-size:16px;padding:4px 0;white-space:pre-wrap;">${esc(profile.experience) || '—'}</div></div>
+        <div class="field" style="grid-column:1/-1;"><label>Skills</label><div style="font-size:16px;padding:4px 0;">${storedSkills.map(esc).join(', ') || '—'}</div></div>
+        <div class="field" style="grid-column:1/-1;"><label>Why do you like to be part of our team?</label><div style="font-size:16px;padding:4px 0;white-space:pre-wrap;">${esc(profile.motivation) || '—'}</div></div>
       </div>`;
     document.getElementById('profile-edit-btn').addEventListener('click', () => { editing = true; renderEditable(box, profile, skillList, storedSkills, otherSkills, userId, main); });
     return;
@@ -208,4 +210,20 @@ function renderEditable(box, profile, skillList, storedSkills, otherSkills, user
     editing = false;
     await renderMyProfileView(main);
   });
+}
+
+// Text size and colours on this device (core.js displayPrefs): the change shows at once, and stays on this phone.
+function renderDisplayChoices(box) {
+  const p = displayPrefs();
+  const choice = (group, [key, label]) => `<button type="button" class="btn ${p[group] === key ? '' : 'secondary'} display-choice" data-group="${group}" data-key="${key}" aria-pressed="${p[group] === key}">${esc(label)}</button>`;
+  box.innerHTML = `
+    <h3>Text and colours on this device</h3>
+    <label>Text size</label>
+    <div class="btn-row display-choices">${TEXT_SIZES.map(s => choice('size', s)).join('')}</div>
+    <label>Colours</label>
+    <div class="btn-row display-choices">${COLOUR_CHOICES.map(c => choice('colours', c)).join('')}</div>`;
+  box.querySelectorAll('.display-choice').forEach(b => b.addEventListener('click', () => {
+    saveDisplayPrefs({ [b.dataset.group]: b.dataset.key });
+    renderDisplayChoices(box);
+  }));
 }

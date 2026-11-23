@@ -5,7 +5,7 @@
 // the UI) - only Admin can set 'approved', paired with the actual role promotion in
 // user_roles (already an admin-only action, see 05_roles_and_permissions.sql).
 
-import { sb, State, esc, canReviewTeamApplications, isAdmin, withStatus, nameMapForEmails } from './core.js?v=20261123145620';
+import { sb, State, esc, canReviewTeamApplications, isAdmin, withStatus, nameMapForEmails, confirmPopup } from './core.js?v=20261123161409';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -203,7 +203,7 @@ async function refreshApplications() {
       await refreshApplications();
     });
     card.querySelector('.apps-reject-btn')?.addEventListener('click', async () => {
-      if (!confirm('Mark this application as not accepted?')) return;
+      if (!await confirmPopup('Mark this application as not accepted?')) return;
       await withStatus(sb.from('collaboration_applications').update({
         status: 'rejected', coordinator_note: note(),
       }).eq('id', id), 'Updating...');
@@ -212,7 +212,7 @@ async function refreshApplications() {
     card.querySelector('.apps-approve-btn')?.addEventListener('click', async () => {
       const row = { id };
       const emailMatch = card.querySelector('.chat-meta b')?.textContent;
-      if (!confirm(`Approve and promote ${emailMatch} to Operator?`)) return;
+      if (!await confirmPopup(`Approve and promote ${emailMatch} to Operator?`)) return;
       const { data: { user } } = await sb.auth.getUser();
       const [app] = await withStatus(sb.from('collaboration_applications').select('user_id').eq('id', id));
       await withStatus(sb.from('user_roles').update({ role: 'operator' }).eq('user_id', app.user_id), 'Promoting...');

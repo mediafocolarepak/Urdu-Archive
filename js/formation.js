@@ -10,9 +10,9 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, confirmPopup } from './core.js?v=20261123145620';
+import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, confirmPopup } from './core.js?v=20261123161409';
 // The reader (a path read like a book) shows the same document card as the Library, as dashboard.js and matchreview.js do.
-import { renderDocDetail } from './docdetail.js?v=20261123145620';
+import { renderDocDetail } from './docdetail.js?v=20261123161409';
 
 // Thumbnails (migration 93, owner's request to make the catalog "look like Coursera") - a public
 // bucket, same shape as board post images (BOARD_MEDIA_BUCKET in core.js), but not shared outside
@@ -447,7 +447,7 @@ async function renderPathDetail(main, pathId) {
   main.innerHTML = `
     <div class="panel">
       <div class="btn-row" style="justify-content:space-between;">
-        <button class="btn secondary" id="fp-back">&larr; Formation Paths</button>
+        <button class="btn secondary back-btn" id="fp-back">&lsaquo; Back</button>
         <span class="hint">${badge}</span>
       </div>
       ${thumbnailUrl(path.thumbnail_path) ? `<img src="${esc(thumbnailUrl(path.thumbnail_path))}" alt="" style="width:100%;max-height:220px;object-fit:cover;border-radius:8px;margin:8px 0;">` : ''}
@@ -590,7 +590,7 @@ function openReader(index) {
     reader.main.insertAdjacentHTML('beforeend', `
       <div class="fp-reader" id="fp-reader" role="dialog" aria-label="Reading">
         <div class="fp-reader-bar">
-          <button type="button" class="btn secondary fp-reader-close" id="fp-reader-close" aria-label="Close">&#10005;</button>
+          <button type="button" class="btn secondary fp-reader-close back-btn" id="fp-reader-close">&lsaquo; Back</button>
           <div class="fp-reader-where">
             <div class="fp-reader-path" dir="auto">${esc(reader.pathTitle)}</div>
             <div class="fp-reader-pos" id="fp-reader-pos"></div>
