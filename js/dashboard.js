@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml } from './core.js?v=20261123135738';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261123135738';
+import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml } from './core.js?v=20261123145620';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261123145620';
 
 // The "From the boards" section (84_boards_moderation.sql) was removed on the Owner's request, 2026-11-18: the
 // Library shows only the archive; board posts are in the Boards tab.
@@ -235,6 +235,8 @@ function openDocDetailScreen() {
   if (!split || split.classList.contains('detail-open')) { scrollMainTo(0); return; }
   listScrollY = document.getElementById('main').scrollTop;
   split.classList.add('detail-open');
+  // The search tools above the list make room for the card: only Back to list stays (Owner's request, 2026-11-23).
+  split.parentElement.classList.add('dash-reading');
   history.pushState({ dashDetail: true }, '');
   scrollMainTo(0);
 }
@@ -244,6 +246,7 @@ function closeDocDetailScreen() {
   // On a phone the card is only hidden, not removed: a recording would go on playing behind the list.
   split.querySelectorAll('.dash-detail-col audio').forEach(a => a.pause());
   split.classList.remove('detail-open');
+  split.parentElement.classList.remove('dash-reading');
   scrollMainTo(listScrollY);
 }
 

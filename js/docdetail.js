@@ -3,14 +3,14 @@
 // `documents` table's full field set.
 
 import {
-  sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete, isCoordinator, isAdmin, docTitlesHtml,
+  sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete, isCoordinator, isAdmin, docTitlesHtml, URDU_SCRIPT,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, DRIVE_AUDIO_PREFIX, mountAudioPlayer, eraseMyAudioFiles,
   textDir, readerChoices,
-} from './core.js?v=20261123135738';
+} from './core.js?v=20261123145620';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -22,8 +22,7 @@ const TASK_STATUS_LABEL = { open: 'Open', claimed: 'Claimed', submitted: 'Submit
 
 // Builds the "riassunto" text block that replaces the old grid of disabled input fields -
 // one line per group of related info, empty groups dropped entirely so the block stays short.
-// On a phone the detail shows only what helps to read: the number (in the heading), the titles, then the date and
-// the language in bold (Owner's request, 2026-11-08). The rest stays on wider screens (.doc-wide-only).
+// The date of a document for its card: "June 28, 2004", or the month, or the period as written.
 function docDateLabel(doc) {
   if (doc.ref_date) {
     const d = new Date(doc.ref_date + 'T00:00:00');
@@ -31,11 +30,6 @@ function docDateLabel(doc) {
   }
   const m = /^(\d{4})-(\d{2})$/.exec(doc.ref_period || '');
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, 1).toLocaleDateString('en', { month: 'long', year: 'numeric' }) : (doc.ref_period || '');
-}
-function renderDocPhoneFacts(doc) {
-  const parts = [docDateLabel(doc), labelOf(State.langs, doc.language),
-    ['VID', 'AUD'].includes(doc.media_type) && doc.duration ? doc.duration : ''].filter(Boolean).map(p => `<b>${esc(p)}</b>`);
-  return `<div class="doc-phone-only doc-phone-facts">${doc.access_level === 'reserved' ? '<span class="count-badge">Reserved</span> ' : ''}${parts.join(' &middot; ')}</div>`;
 }
 
 function renderDocSummary(doc) {
@@ -274,21 +268,36 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
   const versionOf = id => [doc, ...(workSiblings || [])].find(v => String(v.document_id) === String(id));
   // A version of a reserved document would have to be reserved too, and only Admin and Formation can add those.
   const canAddRelated = canWrite() && !HIDDEN_DOC_STATUSES.includes(doc.workflow_status) && (doc.access_level !== 'reserved' || canManageReserved());
+  // The head of the card (Owner's request, 2026-11-23): the number, the English and the Urdu title, the author and the
+  // date. A title missing on this record is taken from another version of the same Work.
+  const all = [doc, ...(workSiblings || []).filter(s => String(s.document_id) !== String(doc.document_id))];
+  const urduOf = d => (d.ur_title || '').trim() || (URDU_SCRIPT.test(d.original_title || '') ? d.original_title.trim() : '');
+  const urTitle = urduOf(doc) || all.map(urduOf).find(Boolean) || '';
+  const enTitle = (doc.en_title || doc.title || '').trim() || all.map(d => (d.en_title || '').trim()).find(Boolean) || '';
+  const facts = [labelOf(State.authors, doc.author), docDateLabel(doc)].filter(Boolean).map(esc).join(' &middot; ');
   box.innerHTML = `
-    <div class="btn-row" style="justify-content:space-between;align-items:center;margin:0 0 8px;">
-      <h3 style="margin:0;">Document #${esc(doc.document_id)}</h3>
-      <div class="btn-row" style="margin:0;">
-        ${canEdit ? '<button class="btn secondary" id="doc-open-editor">Edit</button>' : ''}
-        <button class="btn secondary" id="doc-fav">${favLabel(doc.document_id)}</button>
-        ${State.myBoards.size > 0 && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-board">+ Board</button>' : ''}
-        ${(State.isFormatore || canReviewApplications()) && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-path">+ Path</button>' : ''}
+    <div class="doc-head">
+      <div class="doc-head-top">
+        <h3 style="margin:0;">Document #${esc(doc.document_id)}</h3>
+        <div class="btn-row" style="margin:0;">
+          ${canEdit ? '<button class="btn secondary" id="doc-open-editor">Edit</button>' : ''}
+          <button class="btn secondary" id="doc-fav">${favLabel(doc.document_id)}</button>
+          ${State.myBoards.size > 0 && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-board">+ Board</button>' : ''}
+          ${(State.isFormatore || canReviewApplications()) && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-path">+ Path</button>' : ''}
+        </div>
       </div>
+      ${doc.access_level === 'reserved' ? '<span class="count-badge">Reserved</span>' : ''}
+      ${enTitle ? `<div class="doc-head-en" dir="auto">${esc(enTitle)}</div>` : ''}
+      ${urTitle ? `<div class="doc-head-ur" dir="rtl" lang="ur">${esc(urTitle)}</div>` : ''}
+      ${facts ? `<div class="doc-head-facts">${facts}</div>` : ''}
+      ${doc.contained_in_document_id ? `<div class="doc-head-facts">In the magazine issue <a href="#" id="doc-contained-in">#${esc(doc.contained_in_document_id)}</a>${doc.contained_page ? `, page ${esc(doc.contained_page)}` : ''}</div>` : ''}
+      <div id="doc-contains"></div>
     </div>
     ${readerChoicesHtml(choices, media)}
     ${media.some(m => m.media_type === 'AUD' && String(m.source_document_id) === String(doc.document_id) && m.source_text_at && text?.updated_at > m.source_text_at) ? '<div class="hint">The text has been corrected since it was read aloud, so the two may differ.</div>' : ''}
     <div class="btn-row" style="margin:0 0 8px;">
-      ${text ? '<button class="btn secondary" id="doc-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Open editable text</button>' : ''}
-      ${originalText ? '<button class="btn secondary" id="doc-original-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Original text (Italian)</button>' : ''}
+      ${text && canWrite() ? '<button class="btn secondary" id="doc-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Open editable text</button>' : ''}
+      ${originalText && canWrite() ? '<button class="btn secondary" id="doc-original-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Original text (Italian)</button>' : ''}
       <span id="doc-read-aloud" style="display:contents;"></span>
       ${canAddRelated ? '<button class="btn secondary" id="doc-add-related" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">+ Add a related version</button>' : ''}
       ${canEdit && text && !text.reviewed && doc.source !== 'STE' ? '<button class="btn secondary" id="doc-mark-checked" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;" title="Once checked, the text can be read aloud">Mark the text as checked</button>' : ''}
@@ -296,13 +305,8 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
       ${isAdmin() && ownReading ? '<button class="btn secondary" id="doc-reader-name" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Correct the name</button><button class="btn danger" id="doc-erase-reading" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Erase the recording</button>' : ''}
       <button class="btn secondary" id="doc-report-problem" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Report a problem</button>
     </div>
-    <div class="field" style="font-size:13px;line-height:1.7;">
-      <div style="font-size:14px;margin-bottom:6px;">${docTitlesHtml(doc)}</div>
-      ${renderDocPhoneFacts(doc)}
-      <div class="doc-wide-only">${renderDocSummary(doc)}</div>
-      ${doc.contained_in_document_id ? `<div>In the magazine issue <a href="#" id="doc-contained-in">#${esc(doc.contained_in_document_id)}</a>${doc.contained_page ? `, page ${esc(doc.contained_page)}` : ''}</div>` : ''}
-      <div id="doc-contains"></div>
-    </div>
+    ${canEdit ? `
+    <div class="field doc-wide-only" style="font-size:13px;line-height:1.7;">${renderDocSummary(doc)}</div>
     <div class="field doc-wide-only">
       <label>Recipient(s)</label>
       <div style="font-size:13px;padding:4px 0;">${(doc.recipient || []).map(c => esc(labelOf(State.recipients, c))).join(', ') || '—'}</div>
@@ -314,7 +318,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     ${renderDocTextBox(text, doc.language)}
     ${renderWorkSiblingsHtml(workSiblings, doc.document_id, false)}
     ${doc.storage_path ? `<div class="field"><label>File</label><a href="#" id="doc-download">Download</a></div>` : ''}
-    ${canEdit ? renderDocTasksBox(doc) : ''}
+    ${renderDocTasksBox(doc)}` : ''}
   `;
   document.getElementById('doc-contained-in')?.addEventListener('click', async e => {
     e.preventDefault();
@@ -444,7 +448,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     refreshDocTasksList(doc);
   }
   if (doc.storage_path) {
-    document.getElementById('doc-download').addEventListener('click', async e => {
+    document.getElementById('doc-download')?.addEventListener('click', async e => {
       e.preventDefault();
       const { data } = await sb.storage.from(BUCKET).createSignedUrl(doc.storage_path, 60);
       if (data?.signedUrl) window.open(data.signedUrl, '_blank');

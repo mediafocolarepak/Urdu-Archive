@@ -31,8 +31,7 @@ async function findAndOpenInGDrive(folderId, fileName, notFoundHint) {
   const q = `name='${fileName.replace(/'/g, "\\'")}' and '${folderId}' in parents and trashed=false`;
   const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&key=${GDRIVE_API_KEY}`;
   try {
-    const res = await fetch(url);
-    const data = await res.json();
+    const data = await busyWhile(fetch(url).then(res => res.json()), 'Opening the file...');
     if (data.error) { alert('Google Drive error: ' + data.error.message); return; }
     if (!data.files || data.files.length === 0) {
       alert(`"${fileName}" was not found yet in ${notFoundHint}.`);
@@ -332,7 +331,7 @@ export const DASH_SORTABLE = { document_id: 'ID', en_title: 'Title', author: 'Au
 // The titles of a document in the order they are shown: Urdu at the top (Owner's choice, 2026-11-06), English, Italian.
 // original_title holds different things in different records (the Italian in the old ones, the title in the version's
 // own language in the new ones), so it is shown only when it adds something.
-const URDU_SCRIPT = /[\u0600-\u06FF]/;
+export const URDU_SCRIPT = /[\u0600-\u06FF]/;
 export function docTitles(d) {
   const t = s => (s ?? '').trim();
   const orig = t(d.original_title);
@@ -622,7 +621,7 @@ export async function eraseMyAudioFiles() {
 export async function mountAudioPlayer(box, reading, autoplay) {
   box.innerHTML = '<div class="hint">Loading the recording...</div>';
   let url;
-  try { url = await audioFileUrl(reading.path); }
+  try { url = await busyWhile(audioFileUrl(reading.path), 'Opening the recording...'); }
   catch (e) { box.innerHTML = `<div class="hint">Could not open the recording: ${esc(e.message)}</div>`; return; }
   box.innerHTML = `
     <audio controls preload="metadata" style="width:100%;margin-top:6px;" src="${esc(url)}"></audio>
@@ -887,16 +886,54 @@ export function setStatus(text, isError) {
   if (dot) dot.className = 'dot' + (isError ? ' dirty' : '');
 }
 
+// A turning wheel with "Loading..." in the middle of the screen while the app waits (Owner's request, 2026-11-23:
+// readers not at ease with phones should see that something is happening). It appears only after 0.4 s, so quick
+// answers don't make it flicker, and it never blocks a tap. Every request through withStatus shows it.
+let busyCount = 0;
+let busyTimer = null;
+let busyLabel = 'Loading...';
+function showBusy() {
+  let el = document.getElementById('app-busy');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'app-busy';
+    el.setAttribute('role', 'status');
+    el.innerHTML = '<div class="app-busy-wheel" aria-hidden="true"></div><div class="app-busy-text"></div>';
+    document.body.appendChild(el);
+  }
+  el.querySelector('.app-busy-text').textContent = busyLabel;
+}
+// Requests one after another keep the wheel up: it goes away 0.2 s after the last one ends.
+let busyHideTimer = null;
+export function busyStart(label) {
+  busyLabel = label || 'Loading...';
+  clearTimeout(busyHideTimer);
+  if (document.getElementById('app-busy')) showBusy();
+  else if (busyCount === 0) busyTimer = setTimeout(showBusy, 400);
+  busyCount++;
+}
+export function busyEnd() {
+  busyCount = Math.max(0, busyCount - 1);
+  if (busyCount) return;
+  clearTimeout(busyTimer);
+  busyHideTimer = setTimeout(() => document.getElementById('app-busy')?.remove(), 200);
+}
+export async function busyWhile(promise, label) {
+  busyStart(label);
+  try { return await promise; } finally { busyEnd(); }
+}
+
+// The wheel says "Loading...", or what the caller is doing ("Saving...", "Searching...").
 export async function withStatus(promise, busyText) {
   setStatus(busyText || 'Working...', false);
-  const { data, error } = await promise;
+  const { data, error } = await busyWhile(promise, busyText);
   if (error) { setStatus('Error: ' + error.message, true); throw error; }
   setStatus('Connected', false);
   return data;
 }
 export async function withStatusCount(promise, busyText) {
   setStatus(busyText || 'Working...', false);
-  const { data, error, count } = await promise;
+  const { data, error, count } = await busyWhile(promise, busyText);
   if (error) { setStatus('Error: ' + error.message, true); throw error; }
   setStatus('Connected', false);
   return { data, count };
