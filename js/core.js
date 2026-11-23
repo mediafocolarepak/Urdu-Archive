@@ -477,6 +477,42 @@ export function canManageReserved() { return isAdmin() || isDeptMember('FORM'); 
 // Video links and recordings (113_media.sql). The database is the real gate on links; this check only
 // gives a clear message first. Statuses a reviewer may be able to read, but which aren't published:
 export const HIDDEN_DOC_STATUSES = ['proposed', 'revision', 'pending_publish', 'removed'];
+// What a reader can do with a Work, one row per language (Owner's request, 2026-11-23): the person picks a
+// document, sees every version together and chooses to read it, listen to it or watch it. doc: the record open
+// now; siblings: the other records of its Work; textIds: the ids with a text; media: from fetchDocMedia.
+// One text per language: the record open now, else one with a text, else the starred one, else the lowest number.
+// Rows: the language of the record open now first, then Urdu, Italian, English, then the others.
+export function readerChoices(doc, siblings, textIds, media) {
+  const isCurrent = d => String(d.document_id) === String(doc.document_id);
+  const hasText = d => textIds.has(String(d.document_id));
+  const hasPdf = d => !!(d.file_name || d.storage_path);
+  const texts = [doc, ...(siblings || []).filter(s => !isCurrent(s))]
+    .filter(d => (!d.media_type || d.media_type === 'DOC') && (isCurrent(d) || !HIDDEN_DOC_STATUSES.includes(d.workflow_status)))
+    .filter(d => hasText(d) || hasPdf(d))
+    .sort((a, b) => (isCurrent(b) - isCurrent(a)) || (hasText(b) - hasText(a)) || (!!b.is_preferred - !!a.is_preferred) || (a.document_id - b.document_id));
+  const rows = new Map();
+  const rowOf = lang => {
+    const key = lang || '';
+    if (!rows.has(key)) rows.set(key, { language: lang || null, text: null, pdf: null, audios: [], videos: [] });
+    return rows.get(key);
+  };
+  for (const d of texts) {
+    const row = rowOf(d.language);
+    if (!row.text && hasText(d)) row.text = d;
+  }
+  // The PDF of the text shown, or else of another record of that language.
+  for (const row of rows.values()) {
+    row.pdf = row.text && hasPdf(row.text) ? row.text
+      : texts.find(d => (d.language || null) === row.language && hasPdf(d)) || null;
+  }
+  for (const m of media || []) {
+    if (m.media_type === 'AUD') rowOf(m.language).audios.push(m);
+    else if (m.media_type === 'VID' && m.external_url) rowOf(m.language).videos.push(m);
+  }
+  const order = [doc.language, 'URD', 'ITA', 'ENG'];
+  const rank = lang => { const i = order.indexOf(lang || null); return i < 0 ? order.length : i; };
+  return [...rows.values()].sort((a, b) => (rank(a.language) - rank(b.language)) || String(a.language || '~').localeCompare(String(b.language || '~')));
+}
 export function isMediaLinkOk(url) { return /^https:\/\/((www\.|m\.)?youtube\.com|youtu\.be|drive\.google\.com)\/\S+$/.test(url || ''); }
 // The audio of the Urdu videos (152_drive_audio.sql) is too large for the bucket: its mp3 files are in this Drive
 // folder, shared "anyone with the link" like the PDF folder above, and its readings have the path 'gdrive:<file name>'.

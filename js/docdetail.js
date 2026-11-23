@@ -8,9 +8,9 @@ import {
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
-  ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, DRIVE_AUDIO_PREFIX, videoLinkHtml, mountAudioPlayer, eraseMyAudioFiles,
-  textDir,
-} from './core.js?v=20261122093352';
+  ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, DRIVE_AUDIO_PREFIX, mountAudioPlayer, eraseMyAudioFiles,
+  textDir, readerChoices,
+} from './core.js?v=20261123135738';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved' : '☆ Save'; }
 
@@ -245,13 +245,33 @@ async function addRelatedVersion(doc, siblings) {
   window.__renderTab('proposals');
 }
 
-export function renderDocDetailConsultation(box, doc, workSiblings, docCollections, canEdit, text, originalText, media = []) {
-  // A video with its link, or a reading, has no PDF to open.
-  const noPdf = doc.media_type === 'AUD' || (doc.media_type === 'VID' && doc.external_url);
-  const langOf = m => esc(labelOf(State.langs, m.language) || '?');
+// The top of every card, whichever version was opened: each language of the Work on its own line, with large
+// buttons to read it, listen to it, watch it or open its PDF (Owner's request, 2026-11-23: older readers, not
+// at ease with phones, choose there and need nothing else).
+function readerChoicesHtml(choices, media) {
+  const langName = lang => esc(labelOf(State.langs, lang) || 'Other language');
+  const rows = choices.map(c => `
+    <div class="reader-choice">
+      <div class="reader-choice-lang">${langName(c.language)}</div>
+      <div class="reader-choice-btns">
+        ${c.text ? `<button class="btn reader-btn" data-read="${esc(c.text.document_id)}">&#128214; Read</button>` : ''}
+        ${c.audios.map(m => `<button class="btn reader-btn doc-listen" data-i="${media.indexOf(m)}">&#128266; Listen${m.duration ? ` <span class="reader-btn-note">${esc(m.duration)}</span>` : ''}</button>`).join('')}
+        ${c.videos.map(m => `<a class="btn reader-btn" href="${esc(m.external_url)}" target="_blank" rel="noopener noreferrer">&#9654; Watch</a>`).join('')}
+        ${c.pdf ? `<button class="btn secondary reader-btn" data-pdf="${esc(c.pdf.document_id)}">&#128196; Open PDF</button>` : ''}
+      </div>
+    </div>`).join('');
+  return `
+    <div class="reader-choices">
+      <div class="reader-choices-title">Read, listen or watch</div>
+      ${rows || '<div class="hint" style="font-size:14px;">There is nothing to read or listen to yet.</div>'}
+      <div id="doc-media-player"></div>
+    </div>`;
+}
+
+export function renderDocDetailConsultation(box, doc, workSiblings, docCollections, canEdit, text, originalText, media = [], textIds = new Set()) {
   const ownReading = media.find(m => m.media_type === 'AUD' && String(m.document_id) === String(doc.document_id));
-  // With more than one recording (the parts of a video, say), each button says how long its recording is.
-  const severalAudios = media.filter(m => m.media_type === 'AUD').length > 1;
+  const choices = readerChoices(doc, workSiblings, textIds, media);
+  const versionOf = id => [doc, ...(workSiblings || [])].find(v => String(v.document_id) === String(id));
   // A version of a reserved document would have to be reserved too, and only Admin and Formation can add those.
   const canAddRelated = canWrite() && !HIDDEN_DOC_STATUSES.includes(doc.workflow_status) && (doc.access_level !== 'reserved' || canManageReserved());
   box.innerHTML = `
@@ -262,14 +282,11 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
         <button class="btn secondary" id="doc-fav">${favLabel(doc.document_id)}</button>
         ${State.myBoards.size > 0 && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-board">+ Board</button>' : ''}
         ${(State.isFormatore || canReviewApplications()) && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-path">+ Path</button>' : ''}
-        ${noPdf ? '' : '<button class="btn" id="doc-download-gdrive" style="white-space:nowrap;">Open PDF</button>'}
       </div>
     </div>
+    ${readerChoicesHtml(choices, media)}
+    ${media.some(m => m.media_type === 'AUD' && String(m.source_document_id) === String(doc.document_id) && m.source_text_at && text?.updated_at > m.source_text_at) ? '<div class="hint">The text has been corrected since it was read aloud, so the two may differ.</div>' : ''}
     <div class="btn-row" style="margin:0 0 8px;">
-      ${media.map((m, i) => m === ownReading ? '' : m.media_type === 'VID'
-        ? videoLinkHtml(m.external_url, `Watch video (${labelOf(State.langs, m.language) || '?'})`)
-        : `<button class="btn doc-listen" data-i="${i}" style="flex:0 0 auto;white-space:nowrap;">&#128266; Listen (${langOf(m)}${severalAudios && m.duration ? `, ${esc(m.duration)}` : ''})</button>`).join('')}
-      ${text ? '<button class="btn" id="doc-text-read" style="flex:0 0 auto;white-space:nowrap;">Read (large print)</button>' : ''}
       ${text ? '<button class="btn secondary" id="doc-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Open editable text</button>' : ''}
       ${originalText ? '<button class="btn secondary" id="doc-original-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Original text (Italian)</button>' : ''}
       <span id="doc-read-aloud" style="display:contents;"></span>
@@ -279,8 +296,6 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
       ${isAdmin() && ownReading ? '<button class="btn secondary" id="doc-reader-name" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Correct the name</button><button class="btn danger" id="doc-erase-reading" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Erase the recording</button>' : ''}
       <button class="btn secondary" id="doc-report-problem" style="flex:0 0 auto;white-space:nowrap;font-size:12.5px;padding:5px 10px;">Report a problem</button>
     </div>
-    <div id="doc-media-player"></div>
-    ${media.some(m => m.media_type === 'AUD' && String(m.source_document_id) === String(doc.document_id) && m.source_text_at && text?.updated_at > m.source_text_at) ? '<div class="hint">The text has been corrected since it was read aloud, so the two may differ.</div>' : ''}
     <div class="field" style="font-size:13px;line-height:1.7;">
       <div style="font-size:14px;margin-bottom:6px;">${docTitlesHtml(doc)}</div>
       ${renderDocPhoneFacts(doc)}
@@ -301,7 +316,6 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     ${doc.storage_path ? `<div class="field"><label>File</label><a href="#" id="doc-download">Download</a></div>` : ''}
     ${canEdit ? renderDocTasksBox(doc) : ''}
   `;
-  document.getElementById('doc-download-gdrive')?.addEventListener('click', () => downloadFromGDrive(doc.file_name));
   document.getElementById('doc-contained-in')?.addEventListener('click', async e => {
     e.preventDefault();
     State.selectedDocId = doc.contained_in_document_id;
@@ -320,9 +334,31 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
       }));
     }, () => {});
   }
+  // One recording at a time, under the buttons, saying which one it is; its button stays marked while it is open.
   const mediaPlayer = document.getElementById('doc-media-player');
-  box.querySelectorAll('.doc-listen').forEach(btn => btn.addEventListener('click', () => mountAudioPlayer(mediaPlayer, media[parseInt(btn.dataset.i, 10)], true)));
-  if (ownReading) mountAudioPlayer(mediaPlayer, ownReading, false);
+  const listen = (btn, autoplay) => {
+    const m = media[parseInt(btn.dataset.i, 10)];
+    box.querySelectorAll('.doc-listen.playing').forEach(b => b.classList.remove('playing'));
+    btn.classList.add('playing');
+    mediaPlayer.innerHTML = `<div class="reader-now">&#128266; ${esc(labelOf(State.langs, m.language) || 'Recording')}${m.duration ? ` &middot; ${esc(m.duration)}` : ''}</div><div></div>`;
+    mountAudioPlayer(mediaPlayer.lastElementChild, m, autoplay);
+  };
+  box.querySelectorAll('.doc-listen').forEach(btn => btn.addEventListener('click', () => listen(btn, true)));
+  // On the card of a recording, its player is ready: one tap on the player, or on Listen, starts it.
+  if (ownReading) {
+    const ownBtn = box.querySelector(`.doc-listen[data-i="${media.indexOf(ownReading)}"]`);
+    if (ownBtn) listen(ownBtn, false);
+  }
+  box.querySelectorAll('[data-read]').forEach(btn => btn.addEventListener('click', async () => {
+    if (String(btn.dataset.read) === String(doc.document_id)) { openReadingView(doc, text); return; }
+    const version = versionOf(btn.dataset.read);
+    let rows = [];
+    try { rows = await withStatus(sb.from('document_texts').select('body').eq('document_id', btn.dataset.read)); } catch { /* said below */ }
+    if (!rows[0]?.body) { alert('This text could not be opened. Please try again.'); return; }
+    openReadingView(version, rows[0]);
+    sb.rpc('count_document_open', { p_document_id: version.document_id }).then(() => {}, () => {});
+  }));
+  box.querySelectorAll('[data-pdf]').forEach(btn => btn.addEventListener('click', () => downloadVersion(versionOf(btn.dataset.pdf))));
   // Offered only where it can really start: the database decides, and most texts simply don't show it.
   if (text && (!doc.media_type || doc.media_type === 'DOC')) {
     sb.rpc('reading_state', { p_document_id: doc.document_id }).then(({ data }) => {
@@ -365,8 +401,6 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     body.style.display = isOpen ? 'none' : 'block';
     textToggle.textContent = isOpen ? 'Show' : 'Hide';
   });
-  const textRead = document.getElementById('doc-text-read');
-  if (textRead) textRead.addEventListener('click', () => openReadingView(doc, text));
   const textOpen = document.getElementById('doc-text-open');
   if (textOpen) textOpen.addEventListener('click', () => openDocTextPopup(doc, text));
   const originalTextOpen = document.getElementById('doc-original-text-open');
@@ -733,6 +767,8 @@ function wireAllVersionsBar(box, doc, siblings) {
 export async function renderDocDetail(id, opts = {}) {
   const box = document.getElementById('doc-detail');
   if (!box) return;
+  // Choosing another document stops the recording of this one at once, not when the new card is ready.
+  box.querySelectorAll('audio').forEach(a => a.pause());
   if (!id) { box.innerHTML = '<div class="empty-msg">Select a document from the list, or create a new one.</div>'; return; }
   const rows = await withStatus(sb.from('documents').select('*').eq('document_id', id));
   if (!rows.length) { box.innerHTML = '<div class="empty-msg">Document not found.</div>'; return; }
@@ -747,6 +783,13 @@ export async function renderDocDetail(id, opts = {}) {
   // Drive import runs; the button in renderDocDetailConsultation only appears when present.
   const originalTextRows = await withStatus(sb.from('document_original_texts').select('language,body,reviewed').eq('document_id', doc.document_id));
   const originalText = originalTextRows[0] || null;
+  // Which versions have a text to read, for the buttons at the top of the card: only the numbers, the text comes on a tap.
+  const textIds = new Set(text?.body ? [String(doc.document_id)] : []);
+  const otherTexts = siblings.filter(s => String(s.document_id) !== String(doc.document_id) && (!s.media_type || s.media_type === 'DOC')).map(s => s.document_id);
+  if (otherTexts.length) {
+    const rows = await withStatus(sb.from('document_texts').select('document_id,char_count').in('document_id', otherTexts));
+    rows.filter(r => r.char_count > 0).forEach(r => textIds.add(String(r.document_id)));
+  }
 
   if (opts.legacyFullEdit && canWrite()) {
     renderFullEditForm(box, id, doc, siblings, docCollections, {
@@ -760,7 +803,7 @@ export async function renderDocDetail(id, opts = {}) {
   }
 
   const canEdit = isCoordinator() || isAdmin();
-  renderDocDetailConsultation(box, doc, siblings, docCollections, canEdit, text, originalText, media);
+  renderDocDetailConsultation(box, doc, siblings, docCollections, canEdit, text, originalText, media, textIds);
   // Counted anonymously, once per opening, for whoever gave the text (migration 129): never who opened it.
   if (lastCountedOpen !== doc.document_id && (doc.media_type || 'DOC') === 'DOC') {
     lastCountedOpen = doc.document_id;

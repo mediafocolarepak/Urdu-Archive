@@ -2,9 +2,9 @@
 // Run before every publish (see publish.ps1). Only tests functions with no Supabase calls;
 // mocking supabase-js well enough to unit-test the CRUD glue isn't worth it for this app.
 
-import { slugify, computeFileName, yearOf, titleOverlapScore, normalizeForCompare } from './core.js?v=20261122093352';
-import { extractDateFromFilename } from './bulkimport.js?v=20261122093352';
-import { rankByDateProximity } from './matchreview.js?v=20261122093352';
+import { slugify, computeFileName, yearOf, titleOverlapScore, normalizeForCompare, readerChoices } from './core.js?v=20261123135738';
+import { extractDateFromFilename } from './bulkimport.js?v=20261123135738';
+import { rankByDateProximity } from './matchreview.js?v=20261123135738';
 
 let passed = 0, failed = 0;
 const results = [];
@@ -58,6 +58,28 @@ assertEqual(normalizeForCompare('Hello, World!.pdf'), 'hello world', 'normalizeF
   assertEqual(ranked[0].id, 'd', 'rankByDateProximity: closest date ranked first');
   assertEqual(ranked[ranked.length - 1].id, 'c', 'rankByDateProximity: no-date candidate appended at the end, not dropped');
   assertEqual(rankByDateProximity(null, refs, 'data').length, 4, 'rankByDateProximity: with no target date, returns everything unranked');
+}
+
+// ---- readerChoices (read, listen or watch, one line per language) ----
+{
+  const aud = { document_id: 30, media_type: 'AUD', language: 'URD', path: 'gdrive:x.mp3', duration: '22:31' };
+  const vid = { document_id: 31, media_type: 'VID', language: 'ITA', external_url: 'https://youtu.be/x' };
+  const ita = { document_id: 10, language: 'ITA', media_type: 'DOC', file_name: 'a.pdf' };
+  const urd = { document_id: 20, language: 'URD', media_type: null, file_name: 'b.pdf', is_preferred: true };
+  const urdNoText = { document_id: 19, language: 'URD', media_type: 'DOC', file_name: 'c.pdf' };
+  const proposed = { document_id: 40, language: 'ENG', media_type: 'DOC', file_name: 'd.pdf', workflow_status: 'proposed' };
+  const ids = new Set(['10', '20']);
+  // Opened from the audio card: the Urdu text and the recording on one line, Urdu first.
+  const fromAudio = readerChoices(aud, [ita, urd, urdNoText, proposed, vid], ids, [aud, vid]);
+  assertEqual(fromAudio.map(c => c.language), ['URD', 'ITA'], 'readerChoices: the language of the card first, proposals left out');
+  assertEqual(fromAudio[0].text?.document_id, 20, 'readerChoices: on an audio card, the Urdu text is offered to read');
+  assertEqual(fromAudio[0].audios.length, 1, 'readerChoices: the recording is on the Urdu line');
+  assertEqual(fromAudio[1].videos.length, 1, 'readerChoices: the Italian video is on the Italian line');
+  // Opened from a text with no text body: its own PDF, but the other Urdu record's text.
+  const fromNoText = readerChoices(urdNoText, [ita, urd], ids, []);
+  assertEqual([fromNoText[0].text?.document_id, fromNoText[0].pdf?.document_id], [20, 20], 'readerChoices: a text to read is found in another record of the language');
+  assertEqual(readerChoices(ita, [urd], ids, [])[0].language, 'ITA', 'readerChoices: an Italian card starts with Italian');
+  assertEqual(readerChoices({ document_id: 50, media_type: 'VID', language: 'URD' }, [], new Set(), []).length, 0, 'readerChoices: nothing to offer gives no lines');
 }
 
 // ---- render results ----
