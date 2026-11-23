@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml, docCardHtml } from './core.js?v=20261123162443';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261123162443';
+import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml, docCardHtml } from './core.js?v=20261123163143';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261123163143';
 
 // The "From the boards" section (84_boards_moderation.sql) was removed on the Owner's request, 2026-11-18: the
 // Library shows only the archive; board posts are in the Boards tab.
@@ -39,6 +39,9 @@ export async function renderDashboardView(main) {
   // or what can be heard or watched), and the other options closed under "More search options". Urdu stays the
   // language chosen at first; it is not counted as a search the reader made.
   const media = State.dashFilters.withMedia;
+  // Main topic and Source are not offered to readers (Owner's request, 2026-11-23); staff keep them.
+  const isReader = State.currentRole === 'user';
+  if (isReader) Object.assign(State.dashFilters, { main_topic: '', source: '' });
   main.innerHTML = `
     <div class="panel${isUser ? ' dash-user' : ''}">
       <h2>${heading} <span class="count-badge" id="dash-count"></span></h2>
@@ -61,11 +64,11 @@ export async function renderDashboardView(main) {
         <div class="field"><label>ID #</label><input id="dash-search-id" placeholder="ID #" value="${esc(State.dashFilters.idSearch)}"></div>
         <div class="field"><label>Category</label><select id="f-category">${optionsHtml(State.categories, State.dashFilters.category, true, 'All')}</select></div>
         <div class="field"><label>Author</label><select id="f-author">${optionsHtml(State.authors, State.dashFilters.author, true, 'All')}</select></div>
-        <div class="field"><label>Main topic</label><select id="f-main_topic">${optionsHtml(State.mainTopics, State.dashFilters.main_topic, true, 'All')}</select></div>
+        ${isReader ? '' : `<div class="field"><label>Main topic</label><select id="f-main_topic">${optionsHtml(State.mainTopics, State.dashFilters.main_topic, true, 'All')}</select></div>`}
         ${isUser ? '' : `<div class="field"><label>Workflow status</label><select id="f-status">${optionsHtml(State.statuses, State.dashFilters.workflow_status, true, 'All')}</select></div>`}
         ${isUser && !canManageReserved() ? '' : `<div class="field"><label>Access level</label><select id="f-access">${optionsHtml(ACCESS_LEVELS, State.dashFilters.access_level, true, 'All')}</select></div>`}
         <div class="field"><label>Recipient</label><select id="f-recipient">${optionsHtml(State.recipients, State.dashFilters.recipient, true, 'All')}</select></div>
-        <div class="field"><label>Source</label><select id="f-source">${optionsHtml(State.sources, State.dashFilters.source, true, 'All')}</select></div>
+        ${isReader ? '' : `<div class="field"><label>Source</label><select id="f-source">${optionsHtml(State.sources, State.dashFilters.source, true, 'All')}</select></div>`}
         <div class="field"><label>Collection</label><select id="f-collection">${optionsHtml(State.collections, State.dashFilters.collection, true, 'All')}</select></div>
         <div class="field"><label>Language</label><select id="f-language">${optionsHtml(State.langs, State.dashFilters.language, true, 'All')}</select></div>
       </div>
@@ -141,7 +144,7 @@ export async function renderDashboardView(main) {
   if (isAdmin()) document.getElementById('dash-new').addEventListener('click', () => createNewDocument(refreshDashGrid));
   document.getElementById('f-category').addEventListener('change', e => { State.dashFilters.category = e.target.value; refreshDashGrid(); });
   document.getElementById('f-author').addEventListener('change', e => { State.dashFilters.author = e.target.value; refreshDashGrid(); });
-  document.getElementById('f-main_topic').addEventListener('change', e => { State.dashFilters.main_topic = e.target.value; refreshDashGrid(); });
+  document.getElementById('f-main_topic')?.addEventListener('change', e => { State.dashFilters.main_topic = e.target.value; refreshDashGrid(); });
   document.getElementById('f-access')?.addEventListener('change', e => { State.dashFilters.access_level = e.target.value; refreshDashGrid(); });
   if (!isUser) {
     document.getElementById('f-status').addEventListener('change', e => { State.dashFilters.workflow_status = e.target.value; refreshDashGrid(); });
@@ -149,7 +152,7 @@ export async function renderDashboardView(main) {
     document.getElementById('f-pending').addEventListener('change', e => { State.dashFilters.pendingOnly = e.target.checked; refreshDashGrid(); });
   }
   document.getElementById('f-recipient').addEventListener('change', e => { State.dashFilters.recipient = e.target.value; refreshDashGrid(); });
-  document.getElementById('f-source').addEventListener('change', e => { State.dashFilters.source = e.target.value; refreshDashGrid(); });
+  document.getElementById('f-source')?.addEventListener('change', e => { State.dashFilters.source = e.target.value; refreshDashGrid(); });
   document.getElementById('f-collection').addEventListener('change', e => { State.dashFilters.collection = e.target.value; refreshDashGrid(); });
   document.getElementById('f-language').addEventListener('change', e => { State.dashFilters.language = e.target.value; refreshDashGrid(); });
   if (isAdmin()) document.getElementById('dash-export-csv').addEventListener('click', exportDashboardCsv);
