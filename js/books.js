@@ -45,7 +45,7 @@ const dayLabel = when => {
 const whenOf = d => d.ref_date || ((/^(\d{4})(?:-(\d{2}))?/.exec(d.ref_period || '') || [])[0]) || (/\b(19|20)\d{2}\b/.exec(d.ref_period || '') || [])[0] || null;
 // The titles without what stands in front: "Linkup-1990-10-25-" / "CH-1990-10-25-" (161_linkup_titles.sql), and on the
 // few Link-ups without a date the older "Linkup - P ..." and "Link-up: " / "Collegamento: ". A code alone is no title.
-const bare = s => (s || '').replace(/^(?:Linkup|CH)-\d{4}-\d{2}-\d{2}-?/, '')
+const bare = s => (s || '').replace(/^(?:Linkup|CH)-\d{4}-\d{2}-\d{2}-?/, '').replace(/^\d{2}-\d{2}-\d{4}\s+(?=Linkup)/, '')
   .replace(/^Linkup\s*-\s*[A-Z]\s*(?:\d{2}-\d{2}-\d{4}[A-Za-z]?|\d+)?\s*/, '')
   .replace(/^(?:Link-?up|Collegamento)\s*:\s*/i, '').trim();
 
@@ -98,6 +98,22 @@ async function loadBook(book) {
     const ur = titled.map(d => bare(d.ur_title) || (URDU_SCRIPT.test(d.original_title || '') ? d.original_title : '')).find(Boolean) || '';
     items.push({ key, date: dated[0] || null, en, it, ur, urdu, italian, audios, video });
   }
+  // The same text kept twice in the archive (same date, same Italian title): one page, with every recording.
+  const seen = new Map();
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    if (!it.date || !it.it) continue;
+    const k = `${it.date}|${it.it.toLowerCase()}`;
+    const other = seen.get(k);
+    if (!other) { seen.set(k, it); continue; }
+    const keep = (other.audios.length >= it.audios.length) ? other : it;
+    const drop = keep === other ? it : other;
+    keep.audios = [...keep.audios, ...drop.audios.filter(a => !keep.audios.some(x => x.document_id === a.document_id))];
+    keep.urdu = keep.urdu || drop.urdu;
+    keep.italian = keep.italian || drop.italian;
+    items.splice(items.indexOf(drop), 1);
+    seen.set(k, keep);
+  }
   if (book.order === 'title') items.sort((a, b) => titleOf(a, book).localeCompare(titleOf(b, book), 'en', { sensitivity: 'base' }) || a.key.localeCompare(b.key));
   else items.sort((a, b) => (a.date === null) - (b.date === null) || (a.date || '').localeCompare(b.date || '') || a.key.localeCompare(b.key));
   return items;
@@ -127,7 +143,7 @@ const itemTitle = it => titleOf(it, view.book);
 // ---------- The shelf ----------
 
 function coverHtml(book, items, attrs = '', big = false) {
-  const years = items.filter(i => i.date).map(i => i.date.slice(0, 4));
+  const years = items.filter(i => i.date).map(i => i.date.slice(0, 4)).sort();
   const span = years.length ? (years[0] === years[years.length - 1] ? years[0] : `${years[0]} – ${years[years.length - 1]}`) : '';
   return `
     <button type="button" class="book-cover${big ? ' book-cover-big' : ''}${book.cover ? ` book-cover-${book.cover}` : ''}" ${attrs}>
