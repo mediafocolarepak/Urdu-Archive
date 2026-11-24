@@ -8,7 +8,7 @@
 // The recordings of the Work can be heard on the page. Reserved and hidden texts never appear: the database decides
 // what each person can read (row level security), and proposals and removed texts are left out here.
 
-import { sb, State, esc, withStatus, HIDDEN_DOC_STATUSES, mountAudioPlayer, URDU_SCRIPT } from './core.js?v=20261124161742';
+import { sb, State, esc, withStatus, HIDDEN_DOC_STATUSES, mountAudioPlayer, URDU_SCRIPT } from './core.js?v=20261124162602';
 
 // A book: code (for its bookmark), category, title, the cover's author line, what a page is called, a line under the
 // title. Optional: order 'title' (A to Z, with letters, for texts that seldom have a date; otherwise by date, with
@@ -26,6 +26,11 @@ export const BOOKS = [
     about: 'The experiences of the first times, and the stories of the first focolarini and focolarine, told by them.',
     include: /(stor(y|ies)|first times|profile|heavenly mariapolis|little flowers|telegram|protagonists)|\b(Dori|Ginetta|Foco|Igino|Fons|Palmira|Silvana|Vale|Virgo|Aletta|Marisa|Giosi|Danilo|Vera|Eli)\b/i,
     cover: 'red' },
+  // 2026-11-24: one Word of Life a month. monthly: the pages are months, listed by year; verse: the verse at the top of
+  // each text, between quotation marks, is shown large before the commentary.
+  { code: 'word-of-life', category: 'Wol', title: 'Word of Life', author: 'Month by month', unit: ['Word of Life', 'Words of Life'],
+    about: 'A Word of the Gospel for every month, with its commentary, to put into practice in daily life.',
+    monthly: true, verse: true, cover: 'amber' },
 ];
 
 const view = { book: null, items: [], index: 0, bookmarkKey: null, userId: null, main: null, lang: {}, loading: false };
@@ -42,7 +47,14 @@ const dayLabel = when => {
   return String(y);
 };
 // The date of a text for the book: its ref_date, else the year or month in ref_period ("1997", "2001-04", "Summer 2003").
-const whenOf = d => d.ref_date || ((/^(\d{4})(?:-(\d{2}))?/.exec(d.ref_period || '') || [])[0]) || (/\b(19|20)\d{2}\b/.exec(d.ref_period || '') || [])[0] || null;
+// Many have only the year where the Italian title gives the month too ("Parola di vita, marzo 2006"): then the month.
+const IT_MONTHS = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+const monthFromItalian = d => {
+  const m = /(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+(\d{4})/i.exec(d.it_title || '');
+  return m ? `${m[2]}-${String(IT_MONTHS.indexOf(m[1].toLowerCase()) + 1).padStart(2, '0')}` : null;
+};
+const whenOf = d => d.ref_date || (/^\d{4}-\d{2}/.exec(d.ref_period || '') || [])[0] || monthFromItalian(d)
+  || (/^\d{4}/.exec(d.ref_period || '') || [])[0] || (/\b(19|20)\d{2}\b/.exec(d.ref_period || '') || [])[0] || null;
 // The titles without what stands in front: "Linkup-1990-10-25-" / "CH-1990-10-25-" (161_linkup_titles.sql), and on the
 // few Link-ups without a date the older "Linkup - P ..." and "Link-up: " / "Collegamento: ". A code alone is no title.
 const bare = s => (s || '').replace(/^(?:Linkup|CH)-\d{4}-\d{2}-\d{2}-?/, '').replace(/^\d{2}-\d{2}-\d{4}\s+(?=Linkup)/, '')
@@ -91,7 +103,7 @@ async function loadBook(book) {
     const audios = list.filter(d => d.media_type === 'AUD' && readings.has(d.document_id)).map(d => ({ ...d, ...readings.get(d.document_id) }));
     const video = list.find(d => d.media_type === 'VID' && d.external_url);
     if (!urdu && !italian && !audios.length) continue;
-    const dated = list.map(whenOf).filter(Boolean).sort();
+    const dated = list.map(whenOf).filter(Boolean).map(w => (book.monthly ? w.slice(0, 7) : w)).sort();
     const titled = [italian, urdu, ...list].filter(Boolean);
     const en = titled.map(d => clean(d.en_title)).find(t => t && !/^link-?up$/i.test(t)) || '';
     const it = titled.map(d => clean(d.it_title)).find(Boolean) || '';
@@ -136,6 +148,7 @@ const yearOf = it => {
 };
 const capital = s => s.charAt(0).toUpperCase() + s.slice(1);
 function titleOf(it, book) {
+  if (book.monthly && it.date) return dayLabel(it.date);
   return it.en || it.it || it.ur || (it.date ? `${capital(book.unit[0])} of ${dayLabel(it.date)}` : `${capital(book.unit[0])} without a title`);
 }
 const itemTitle = it => titleOf(it, view.book);
@@ -219,7 +232,7 @@ async function renderBookPage(main, book, openKey, cached = false) {
 
 // The date beside a title in the index: day and month under a year's heading; in an A to Z book, the year.
 function indexDate(it) {
-  if (!it.date) return '';
+  if (!it.date || view.book.monthly) return '';
   if (view.book.order === 'title') return it.date.slice(0, 4);
   const [y, m, d] = it.date.split('-').map(Number);
   if (d) return new Date(y, m - 1, d).toLocaleDateString('en', { day: 'numeric', month: 'short' });
@@ -240,7 +253,7 @@ function indexHtml(items, current = -1) {
         <span class="book-index-text">
           <span class="book-index-name" dir="auto">${esc(itemTitle(it))}</span>
           ${it.ur ? `<span class="book-index-ur" dir="rtl" lang="ur">${esc(it.ur)}</span>` : ''}
-          ${it.it && it.en ? `<span class="book-index-it" dir="auto">${esc(it.it)}</span>` : ''}
+          ${it.it && it.en && !view.book.monthly ? `<span class="book-index-it" dir="auto">${esc(it.it)}</span>` : ''}
         </span>
         <span class="book-index-kinds" aria-hidden="true">${kinds}</span>${mark}
       </button>`;
@@ -310,7 +323,7 @@ async function showPage(index) {
     body.innerHTML = `
       <article class="book-leaf">
         <div class="book-leaf-date">${esc(dayLabel(it.date))}</div>
-        <h2 class="book-leaf-title" dir="auto">${esc(itemTitle(it))}</h2>
+        <h2 class="book-leaf-title" dir="auto">${esc(view.book.monthly && it.date ? view.book.unit[0] : itemTitle(it))}</h2>
         ${it.ur ? `<div class="book-leaf-ur" dir="rtl" lang="ur">${esc(it.ur)}</div>` : ''}
         <div class="book-leaf-tools">
           ${it.urdu && it.italian ? `<div class="book-lang" role="group" aria-label="Language">
@@ -321,6 +334,7 @@ async function showPage(index) {
           ${it.video ? `<a class="btn secondary" href="${esc(it.video.external_url)}" target="_blank" rel="noopener noreferrer">&#9654; Watch</a>` : ''}
         </div>
         <div id="br-player"></div>
+        ${view.book.verse && doc ? verseHtml(text, lang) : ''}
         ${doc ? `<div class="book-leaf-text ${lang === 'URD' ? 'reading-text' : 'reading-text reading-text-latin'}" dir="${lang === 'URD' ? 'rtl' : 'ltr'}" lang="${lang === 'URD' ? 'ur' : 'it'}">${esc(text)}</div>`
           : '<p class="hint">There is no written text of this one yet: you can listen to it.</p>'}
         <div class="book-leaf-end" aria-hidden="true">&#10086;</div>
@@ -345,6 +359,37 @@ async function showPage(index) {
   const next = view.items[index + 1];
   const nextDoc = next && (next.urdu || next.italian);
   if (nextDoc) bodyOf(nextDoc, true).catch(() => {});
+}
+
+// The verse at the top of a Word of Life: the first line between quotation marks near the start (it may run on to the
+// next lines until the quotation closes), with the reference in brackets that follows it. Nothing when none is found.
+function verseHtml(text, lang) {
+  const lines = (text || '').split('\n').map(s => s.trim()).filter(Boolean).slice(0, 10);
+  const opens = /[‘“"«']/;
+  const ref = /\([^()]*\d+\s*[:：]\s*\d+[^()]*\)/;
+  const words = l => l.replace(/[^\p{L}]/gu, '').length > 8;
+  // First a line that carries its Bible reference "(Luke 6:38)", or whose next line is only that reference; else the
+  // first line between quotation marks.
+  let i = lines.findIndex((l, k) => words(l) && k < 6 && (ref.test(l) || (lines[k + 1] && /^\(.{2,40}\)$/.test(lines[k + 1]) && ref.test(lines[k + 1]))));
+  if (i > 0 && !ref.test(lines[i]) && !opens.test(lines[i])) {
+    // The reference may close a verse that began on an earlier line with the quotation mark.
+    const start = lines.slice(0, i).map((l, k) => (opens.test(l) && words(l) ? k : -1)).filter(k => k >= 0).pop();
+    if (start != null && i - start <= 3) i = start;
+  }
+  // A line that only contains quotation marks somewhere (a note in brackets, say) is no verse: it must begin with one.
+  if (i < 0) i = lines.findIndex(l => /^[‘“"«']/.test(l) && words(l));
+  if (i < 0) return '';
+  let verse = lines[i];
+  let j = i;
+  const closes = /[’”»]/;
+  while (!closes.test(verse) && j < i + 3 && lines[j + 1]) verse += ' ' + lines[++j];
+  // The verse ends with its closing quotation mark, and the reference in brackets right after it, when there is one:
+  // the commentary that may follow on the same line is not part of it.
+  const end = /[’”»]+(?:\s*[۔.]?\s*\([^()]{2,40}\))?/.exec(verse);
+  const sameLineRef = end && /\(/.test(end[0]);
+  if (end) verse = verse.slice(0, end.index + end[0].length).trim();
+  const cite = !sameLineRef && lines[j + 1] && /^\(.{2,40}\)$/.test(lines[j + 1]) ? lines[j + 1] : '';
+  return `<blockquote class="book-verse" dir="${lang === 'URD' ? 'rtl' : 'ltr'}" lang="${lang === 'URD' ? 'ur' : 'it'}">${esc(verse)}${cite ? `<cite>${esc(cite)}</cite>` : ''}</blockquote>`;
 }
 
 function updateBookmark() {
