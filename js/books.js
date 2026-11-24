@@ -21,8 +21,11 @@ const textCache = new Map();
 // ---------- Reading the book from the archive ----------
 
 const dayLabel = iso => (iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
-// The titles without the "Linkup-1990-10-25-" / "CH-1990-10-25-" in front (161_linkup_titles.sql).
-const bare = s => (s || '').replace(/^(?:Linkup|CH)-\d{4}-\d{2}-\d{2}-?/, '').trim();
+// The titles without what stands in front: "Linkup-1990-10-25-" / "CH-1990-10-25-" (161_linkup_titles.sql), and on the
+// few Link-ups without a date the older "Linkup - P ..." and "Link-up: " / "Collegamento: ". A code alone is no title.
+const bare = s => (s || '').replace(/^(?:Linkup|CH)-\d{4}-\d{2}-\d{2}-?/, '')
+  .replace(/^Linkup\s*-\s*[A-Z]\s*(?:\d{2}-\d{2}-\d{4}[A-Za-z]?|\d+)?\s*/, '')
+  .replace(/^(?:Link-?up|Collegamento)\s*:\s*/i, '').trim();
 
 async function loadBook(book) {
   const rows = [];
