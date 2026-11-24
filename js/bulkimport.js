@@ -4,7 +4,7 @@
 // (by title similarity against what's already catalogued) are still detected, but only
 // reported afterwards in the summary, not used to block or pre-exclude anything.
 
-import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob, nextDocumentId, confirmPopup } from './core.js?v=20261124155640';
+import { sb, State, esc, today, optionsHtml, withStatus, computeFileName, createWorkFor, titleOverlapScore, readPdfPageCountFromBlob, nextDocumentId, confirmPopup } from './core.js?v=20261124161742';
 
 export function titleFromFilename(name) {
   const noExt = name.replace(/\.[a-z0-9]+$/i, '');

@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml, docCardHtml } from './core.js?v=20261124155640';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261124155640';
+import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml, docCardHtml } from './core.js?v=20261124161742';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261124161742';
 
 // The "From the boards" section (84_boards_moderation.sql) was removed on the Owner's request, 2026-11-18: the
 // Library shows only the archive; board posts are in the Boards tab.
@@ -45,7 +45,7 @@ export async function renderDashboardView(main) {
   main.innerHTML = `
     <div class="panel${isUser ? ' dash-user' : ''}">
       <h2>${heading} <span class="count-badge" id="dash-count"></span></h2>
-      ${isUser ? '<button type="button" class="book-strip" id="dash-book"><span class="book-strip-icon" aria-hidden="true">&#128218;</span><span class="book-strip-text"><b>Read the Link-ups as a book</b><span>From the first to the last, in date order</span></span><span class="start-chevron" aria-hidden="true">&rsaquo;</span></button>' : ''}
+      ${isUser ? '<button type="button" class="book-strip" id="dash-book"><span class="book-strip-icon" aria-hidden="true">&#128218;</span><span class="book-strip-text"><b>Books</b><span>Link-ups &middot; Meditations &middot; Stories of the early days</span></span><span class="start-chevron" aria-hidden="true">&rsaquo;</span></button>' : ''}
       <div class="searchbar">
         <input id="dash-search" type="search" enterkeyhint="search" placeholder="A title or a word" value="${esc(State.dashFilters.search)}">
         <button class="btn" id="dash-search-go">&#128269; Search</button>
@@ -126,7 +126,7 @@ export async function renderDashboardView(main) {
   document.getElementById('dash-search-go').addEventListener('click', () => { searchBox.blur(); searchNow(); });
   document.getElementById('dash-search-id').addEventListener('input', e => { State.dashFilters.idSearch = e.target.value; refreshDashGrid(); });
   document.getElementById('dash-propose')?.addEventListener('click', () => window.__renderTab('proposals'));
-  document.getElementById('dash-book')?.addEventListener('click', () => { State.bookOpen = { code: 'linkups' }; window.__renderTab('books'); });
+  document.getElementById('dash-book')?.addEventListener('click', () => window.__renderTab('books'));
   const sortSelect = document.getElementById('dash-sort');
   sortSelect.value = dashSortValue();
   sortSelect.addEventListener('change', () => {
