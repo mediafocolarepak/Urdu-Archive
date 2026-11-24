@@ -16,6 +16,7 @@ import { renderMyProfileView } from './profile.js?v=20261123163143';
 import { renderMySpaceView } from './myspace.js?v=20261123163143';
 import { renderBoardsView } from './boards.js?v=20261123163143';
 import { renderFormationView } from './formation.js?v=20261123163143';
+import { renderBooksView } from './books.js?v=20261123163143';
 import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261123163143';
 import { renderOnboardingView } from './onboarding.js?v=20261123163143';
 import { renderLanding } from './landing.js?v=20261123163143';
@@ -37,6 +38,7 @@ function getTabs() {
     return [
       { id: 'onboarding', label: 'Home' },
       { id: 'dashboard', label: 'Library' },
+      { id: 'books', label: 'Books' },
       { id: 'myspace', label: 'My Space' },
       { id: 'boards', label: 'Boards' },
       { id: 'formation', label: 'Formation Paths' },
@@ -56,7 +58,7 @@ function getTabs() {
   // "Archive & Data" department instead (owner's request 2026-09-20, see renderArchiveTools in
   // mydepartment.js), reachable by whoever is a member of that department.
   if (isOperator) {
-    const tabs = [{ id: 'dashboard', label: 'Dashboard' }];
+    const tabs = [{ id: 'dashboard', label: 'Dashboard' }, { id: 'books', label: 'Books' }];
     // My Department in second position, right after Dashboard (owner's request 2026-09-20).
     if (State.myDepartments.length > 0) { tabs.push({ id: 'mydepartment', label: 'My Department' }); }
     tabs.push({ id: 'myspace', label: 'My Space' });
@@ -90,6 +92,7 @@ function getTabs() {
   if (isAdmin()) {
     return [
       { id: 'dashboard', label: 'Dashboard' },
+      { id: 'books', label: 'Books' },
       { id: 'mydepartment', label: 'My Department' },
       // Admin-only roll-up of every department's status/priorities (migration 98, owner's
       // request 2026-09-20) - "Department Pulse", see mydepartment.js.
@@ -117,6 +120,7 @@ function getTabs() {
   // from there now). Proofreading is gone (owner's request 2026-09-20, see above).
   const tabs = [
     { id: 'dashboard', label: 'Dashboard' },
+    { id: 'books', label: 'Books' },
     { id: 'myspace', label: 'My Space' },
     { id: 'boards', label: 'Boards' },
     { id: 'formation', label: 'Formation Paths' },
@@ -199,6 +203,7 @@ function renderTab(id) {
   main.dataset.section = id;
   main.innerHTML = '<div class="empty-msg">Loading...</div>';
   if (id === 'dashboard') renderDashboardView(main);
+  else if (id === 'books') renderBooksView(main);
   else if (id === 'myspace') renderMySpaceView(main);
   else if (id === 'boards') renderBoardsView(main);
   else if (id === 'formation') renderFormationView(main);

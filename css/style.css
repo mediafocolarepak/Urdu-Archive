@@ -10,7 +10,7 @@
   --danger: #a13a2e;
   --shadow: 0 1px 3px rgba(43,38,32,0.12);
   --c-start: #955600; --c-library: #3B6B38; --c-myspace: #38489A; --c-share: #7A3868; --c-formation: #1D6A70; --sec-ink: #ffffff;
-  --c-boards: #9A3B2F; --c-readings: #6B4FA0; --c-report: #7A5F12; --c-profile: #4A5A6A;
+  --c-boards: #9A3B2F; --c-readings: #6B4FA0; --c-report: #7A5F12; --c-profile: #4A5A6A; --c-books: #1F4E79;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -25,7 +25,7 @@
     --danger: #e07a68;
     --shadow: 0 1px 3px rgba(0,0,0,0.4);
     --c-start: #E9AB3C; --c-library: #8FC487; --c-myspace: #A3B2F2; --c-share: #DA9DCB; --c-formation: #7ECBCB; --sec-ink: #1a150d;
-    --c-boards: #F0A091; --c-readings: #C4B0F0; --c-report: #E0C56A; --c-profile: #AEBBC8;
+    --c-boards: #F0A091; --c-readings: #C4B0F0; --c-report: #E0C56A; --c-profile: #AEBBC8; --c-books: #9EC5EE;
   }
 }
 :root[data-theme="dark"] {
@@ -33,14 +33,14 @@
   --line: #3c372f; --accent: #c99a5f; --accent-ink: #201a10; --accent-soft: #34291a;
   --danger: #e07a68; --shadow: 0 1px 3px rgba(0,0,0,0.4);
   --c-start: #E9AB3C; --c-library: #8FC487; --c-myspace: #A3B2F2; --c-share: #DA9DCB; --c-formation: #7ECBCB; --sec-ink: #1a150d;
-  --c-boards: #F0A091; --c-readings: #C4B0F0; --c-report: #E0C56A; --c-profile: #AEBBC8;
+  --c-boards: #F0A091; --c-readings: #C4B0F0; --c-report: #E0C56A; --c-profile: #AEBBC8; --c-books: #9EC5EE;
 }
 :root[data-theme="light"] {
   --bg: #f4f1ea; --panel: #ffffff; --ink: #2b2620; --ink-soft: #6b6255;
   --line: #d8d0c0; --accent: #7a5230; --accent-ink: #ffffff; --accent-soft: #efe3d0;
   --danger: #a13a2e; --shadow: 0 1px 3px rgba(43,38,32,0.12);
   --c-start: #955600; --c-library: #3B6B38; --c-myspace: #38489A; --c-share: #7A3868; --c-formation: #1D6A70; --sec-ink: #ffffff;
-  --c-boards: #9A3B2F; --c-readings: #6B4FA0; --c-report: #7A5F12; --c-profile: #4A5A6A;
+  --c-boards: #9A3B2F; --c-readings: #6B4FA0; --c-report: #7A5F12; --c-profile: #4A5A6A; --c-books: #1F4E79;
 }
 /* Noto Nastaliq Urdu (Google Fonts, OFL) - self-hosted rather than loaded from fonts.gstatic.com
    so the service worker (sw.js) can precache it like every other same-origin asset and it still
@@ -764,3 +764,73 @@ details.profile-section > div > h3:first-child, details.profile-section .btn-row
 /* "Save" on a document's card: an outline when not saved, filled gold when saved (Owner's request, 2026-11-23). */
 .btn.fav-btn { background: transparent; color: var(--ink); border: 2px dashed var(--ink-soft); }
 .btn.fav-btn.fav-on { background: #f2b705; color: #1a150d; border: 2px solid #b58500; box-shadow: 0 2px 8px rgba(181, 133, 0, .45); }
+
+/* ---------- Books (js/books.js, Owner's request 2026-11-24) ---------- */
+.tab-btn[data-tab="books"], .bn-btn[data-tab="books"], .home-tile[data-start-tab="books"], #main[data-section="books"] { --sec: var(--c-books); }
+#main[data-section="books"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%2019V5a2%202%200%200%201%202-2h13v14H6a2%202%200%200%200-2%202zm0%200a2%202%200%200%200%202%202h13M9%207h6%22%2F%3E%3C%2Fsvg%3E"); }
+/* The cover: a real book's look - deep blue, a gold frame, the title in a serif type. */
+.book-shelf { display: flex; flex-wrap: wrap; gap: 22px; padding: 6px 2px 10px; }
+.book-cover { width: 190px; aspect-ratio: 3 / 4; padding: 12px; border: 0; border-radius: 4px 12px 12px 4px; cursor: pointer; font: inherit; text-align: center;
+  background: linear-gradient(150deg, #2a5f92 0%, #1b416b 55%, #0f2742 100%); color: #f6e7c1;
+  box-shadow: inset 7px 0 0 rgba(0, 0, 0, .28), inset 9px 0 0 rgba(255, 255, 255, .08), 0 10px 24px rgba(0, 0, 0, .28), 0 2px 4px rgba(0, 0, 0, .2);
+  transition: transform .18s ease, box-shadow .18s ease; }
+.book-cover:hover, .book-cover:focus-visible { transform: translateY(-4px) rotate(-1deg); box-shadow: inset 7px 0 0 rgba(0, 0, 0, .28), 0 16px 30px rgba(0, 0, 0, .32); }
+.book-cover-frame { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 10px 8px 10px 14px;
+  border: 2px solid #d9b45a; outline: 1px solid rgba(217, 180, 90, .55); outline-offset: -7px; border-radius: 2px; }
+.book-cover-author { font-family: Georgia, "Times New Roman", serif; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: #e6cf94; }
+.book-cover-title { font-family: Georgia, "Times New Roman", serif; font-size: 31px; font-weight: 700; line-height: 1.1; color: #fff3d6; text-shadow: 0 2px 6px rgba(0, 0, 0, .35); }
+.book-cover-rule { width: 46%; height: 2px; background: linear-gradient(90deg, transparent, #d9b45a, transparent); margin: 2px 0; }
+.book-cover-years { font-family: Georgia, "Times New Roman", serif; font-size: 16px; color: #f6e7c1; }
+.book-cover-count { font-size: 12.5px; color: #e6cf94; }
+.book-cover-big { width: 210px; cursor: default; }
+.book-cover-big:hover { transform: none; }
+/* A book's page: the cover beside the title and the main button, then the contents. */
+.book-head { display: flex; flex-wrap: wrap; align-items: center; gap: 22px; margin: 4px 0 18px; }
+.book-head-text { flex: 1 1 260px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.panel .book-title { font-family: Georgia, "Times New Roman", serif; font-size: 32px; margin: 0; color: var(--sec, var(--accent)); }
+.book-about { font-size: 17px; line-height: 1.5; margin: 0; }
+.panel h3.book-index-title { font-size: 22px; margin: 6px 0 10px; color: var(--sec, var(--accent)); font-family: Georgia, "Times New Roman", serif; }
+.book-years { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; position: sticky; top: 0; z-index: 2; background: var(--panel); padding: 8px 0; }
+.book-year-chip { font: inherit; font-size: 15px; font-weight: 600; padding: 8px 12px; min-height: 40px; border-radius: 20px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.book-year-chip:hover, .book-year-chip:focus-visible { border-color: var(--sec, var(--accent)); color: var(--sec, var(--accent)); }
+.book-index { display: flex; flex-direction: column; }
+.book-index-year { font-family: Georgia, "Times New Roman", serif; font-size: 22px; font-weight: 700; color: var(--sec, var(--accent)); margin: 18px 0 6px; padding-bottom: 4px; border-bottom: 2px solid var(--sec, var(--accent)); scroll-margin-top: 64px; }
+.book-index-item { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; width: 100%; text-align: left; font: inherit; color: var(--ink); background: none; border: 0; border-bottom: 1px dotted var(--line); padding: 10px 6px; cursor: pointer; }
+.book-index-item:hover, .book-index-item:focus-visible { background: var(--accent-soft); }
+.book-index-item.current { background: var(--accent-soft); box-shadow: inset 4px 0 0 var(--sec, var(--accent)); }
+.book-index-date { flex: 0 0 4.2em; font-size: 14px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.book-index-text { flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; }
+.book-index-name { font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
+.book-index-ur { font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-size: 18px; line-height: 2; text-align: right; }
+.book-index-it { font-size: 14px; color: var(--ink-soft); font-style: italic; }
+.book-index-kinds { font-size: 14px; color: var(--ink-soft); }
+.fp-reader-toc .book-index-year { font-size: 18px; margin-top: 12px; }
+/* A page of the book: date, title, tools, then the text in large type, like a printed page. */
+.book-reader .fp-reader-body { background: var(--bg); }
+.book-leaf { max-width: 760px; margin: 0 auto; background: var(--panel); border-radius: 6px; padding: 26px 24px 30px; box-shadow: 0 2px 14px rgba(0, 0, 0, .12); border-top: 5px solid var(--c-books); }
+.book-leaf-date { font-family: Georgia, "Times New Roman", serif; font-size: 15px; letter-spacing: .08em; text-transform: uppercase; color: var(--c-books); text-align: center; }
+.book-leaf-title { font-family: Georgia, "Times New Roman", serif; font-size: 27px; line-height: 1.3; text-align: center; margin: 6px 0 4px; color: var(--ink); }
+.book-leaf-ur { font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-size: 24px; line-height: 2.1; text-align: center; }
+.book-leaf-tools { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; margin: 14px 0 6px; }
+.book-lang { display: inline-flex; gap: 6px; }
+.book-lang-only { font-size: 14px; color: var(--ink-soft); }
+.btn.book-listen { background: #b3261e; color: #fff; }
+.btn.book-listen.playing { outline: 3px solid var(--c-books); outline-offset: 2px; }
+.book-leaf-text { font-size: 22px; margin-top: 18px; }
+.book-leaf-text.reading-text-latin { font-size: 19px; }
+.book-leaf-end { text-align: center; font-size: 26px; color: var(--c-books); margin: 22px 0 8px; }
+.btn.book-report { display: block; margin: 0 auto; font-size: 14px; min-height: 38px; }
+@media (max-width: 600px) {
+  .book-leaf { padding: 18px 14px 22px; border-radius: 0; }
+  .book-head { justify-content: center; }
+  .book-cover-big { width: 180px; }
+  .book-leaf-text { font-size: 20px; }
+}
+/* The Library's way to the book. */
+.book-strip { display: flex; align-items: center; gap: 14px; width: 100%; margin: 0 0 14px; padding: 12px 16px; font: inherit; text-align: left; cursor: pointer; color: #f6e7c1; border: 0; border-radius: 12px;
+  background: linear-gradient(120deg, #2a5f92, #102a45); box-shadow: var(--shadow); }
+.book-strip-icon { font-size: 30px; }
+.book-strip-text { flex: 1; display: flex; flex-direction: column; }
+.book-strip-text b { font-size: 17px; color: #fff3d6; }
+.book-strip-text span { font-size: 14px; color: #e6cf94; }
+.book-strip .start-chevron { color: #d9b45a; font-size: 28px; }
