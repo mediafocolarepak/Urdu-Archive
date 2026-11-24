@@ -376,12 +376,19 @@ function verseHtml(text, lang) {
     const start = lines.slice(0, i).map((l, k) => (opens.test(l) && words(l) ? k : -1)).filter(k => k >= 0).pop();
     if (start != null && i - start <= 3) i = start;
   }
-  if (i < 0) i = lines.findIndex(l => opens.test(l) && words(l));
+  // A line that only contains quotation marks somewhere (a note in brackets, say) is no verse: it must begin with one.
+  if (i < 0) i = lines.findIndex(l => /^[‘“"«']/.test(l) && words(l));
   if (i < 0) return '';
   let verse = lines[i];
   let j = i;
-  while (!/[’”"»'].{0,40}$/.test(verse) && j < i + 3 && lines[j + 1]) verse += ' ' + lines[++j];
-  const cite = lines[j + 1] && /^\(.{2,40}\)$/.test(lines[j + 1]) ? lines[j + 1] : '';
+  const closes = /[’”»]/;
+  while (!closes.test(verse) && j < i + 3 && lines[j + 1]) verse += ' ' + lines[++j];
+  // The verse ends with its closing quotation mark, and the reference in brackets right after it, when there is one:
+  // the commentary that may follow on the same line is not part of it.
+  const end = /[’”»]+(?:\s*[۔.]?\s*\([^()]{2,40}\))?/.exec(verse);
+  const sameLineRef = end && /\(/.test(end[0]);
+  if (end) verse = verse.slice(0, end.index + end[0].length).trim();
+  const cite = !sameLineRef && lines[j + 1] && /^\(.{2,40}\)$/.test(lines[j + 1]) ? lines[j + 1] : '';
   return `<blockquote class="book-verse" dir="${lang === 'URD' ? 'rtl' : 'ltr'}" lang="${lang === 'URD' ? 'ur' : 'it'}">${esc(verse)}${cite ? `<cite>${esc(cite)}</cite>` : ''}</blockquote>`;
 }
 
