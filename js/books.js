@@ -86,7 +86,7 @@ async function loadBookmark(book) {
 }
 
 const yearOf = it => (it.date ? it.date.slice(0, 4) : 'Without a date');
-const itemTitle = it => it.en || it.it || it.ur || `${view.book.unit[0]} of ${dayLabel(it.date)}`;
+const itemTitle = it => it.en || it.it || it.ur || (it.date ? `${view.book.unit[0]} of ${dayLabel(it.date)}` : `${view.book.unit[0]} without a title`);
 
 // ---------- The shelf ----------
 
@@ -217,9 +217,11 @@ function openReader(index) {
   showPage(index);
 }
 
-async function bodyOf(doc) {
+// quiet: fetching the next page in the background, without the "Loading" wheel.
+async function bodyOf(doc, quiet = false) {
   if (textCache.has(doc.document_id)) return textCache.get(doc.document_id);
-  const rows = await withStatus(sb.from('document_texts').select('body').eq('document_id', doc.document_id), 'Turning the page...');
+  const query = sb.from('document_texts').select('body').eq('document_id', doc.document_id);
+  const rows = quiet ? ((await query).data || []) : await withStatus(query, 'Turning the page...');
   const body = rows[0]?.body || '';
   textCache.set(doc.document_id, body);
   return body;
@@ -279,7 +281,7 @@ async function showPage(index) {
   // The next page is fetched while this one is read, so turning the page is quick.
   const next = view.items[index + 1];
   const nextDoc = next && (next.urdu || next.italian);
-  if (nextDoc) bodyOf(nextDoc).catch(() => {});
+  if (nextDoc) bodyOf(nextDoc, true).catch(() => {});
 }
 
 function updateBookmark() {
