@@ -834,3 +834,7 @@ details.profile-section > div > h3:first-child, details.profile-section .btn-row
 .book-strip-text b { font-size: 17px; color: #fff3d6; }
 .book-strip-text span { font-size: 14px; color: #e6cf94; }
 .book-strip .start-chevron { color: #d9b45a; font-size: 28px; }
+
+/* Each book its own colour on the shelf (2026-11-24): Meditations green, Stories of the early days red. */
+.book-cover.book-cover-green { background: linear-gradient(150deg, #2f7d5b 0%, #1d5641 55%, #0e3426 100%); }
+.book-cover.book-cover-red { background: linear-gradient(150deg, #9c3f3a 0%, #6f2527 55%, #451418 100%); }

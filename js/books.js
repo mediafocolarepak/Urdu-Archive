@@ -10,9 +10,22 @@
 
 import { sb, State, esc, withStatus, HIDDEN_DOC_STATUSES, mountAudioPlayer, URDU_SCRIPT } from './core.js?v=20261124155640';
 
+// A book: code (for its bookmark), category, title, the cover's author line, what a page is called, a line under the
+// title. Optional: order 'title' (A to Z, with letters, for texts that seldom have a date; otherwise by date, with
+// years), include (only the Works with a title like this), clean (what to take off the front of a title), cover (colour).
 export const BOOKS = [
   { code: 'linkups', category: 'Lkp', title: 'Link-ups', author: 'Chiara Lubich', unit: ['Link-up', 'Link-ups'],
     about: 'Chiara’s Link-ups, one after the other, in the order she gave them.' },
+  // 2026-11-24: most meditations have no date, so they are in alphabetical order.
+  { code: 'meditations', category: 'Mdt', title: 'Meditations', author: 'Chiara Lubich', unit: ['meditation', 'meditations'],
+    about: 'Chiara’s meditations, from A to Z: a page for each, to read slowly.', order: 'title', clean: /^Med\.?\s+/i, cover: 'green' },
+  // 2026-11-24: from the Experiences, those of the first times and the stories of the first focolarini and focolarine
+  // (the Owner's request); the recent experiences of Gen, families and volunteers stay out. A new story whose title
+  // names one of them, or says story, profile, first times, comes in by itself.
+  { code: 'early-stories', category: 'Exp', title: 'Stories of the early days', author: 'Focolarini and focolarine', unit: ['story', 'stories'],
+    about: 'The experiences of the first times, and the stories of the first focolarini and focolarine, told by them.',
+    include: /(stor(y|ies)|first times|profile|heavenly mariapolis|little flowers|telegram|protagonists)|\b(Dori|Ginetta|Foco|Igino|Fons|Palmira|Silvana|Vale|Virgo|Aletta|Marisa|Giosi|Danilo|Vera|Eli)\b/i,
+    cover: 'red' },
 ];
 
 const view = { book: null, items: [], index: 0, bookmarkKey: null, userId: null, main: null, lang: {}, loading: false };
@@ -20,7 +33,16 @@ const textCache = new Map();
 
 // ---------- Reading the book from the archive ----------
 
-const dayLabel = iso => (iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
+// A full date ("3 September 1981"), a month ("April 2001") or a year ("1997"): many texts only have the year or month.
+const dayLabel = when => {
+  if (!when) return '';
+  const [y, m, d] = when.split('-').map(Number);
+  if (d) return new Date(y, m - 1, d).toLocaleDateString('en', { day: 'numeric', month: 'long', year: 'numeric' });
+  if (m) return new Date(y, m - 1, 1).toLocaleDateString('en', { month: 'long', year: 'numeric' });
+  return String(y);
+};
+// The date of a text for the book: its ref_date, else the year or month in ref_period ("1997", "2001-04", "Summer 2003").
+const whenOf = d => d.ref_date || ((/^(\d{4})(?:-(\d{2}))?/.exec(d.ref_period || '') || [])[0]) || (/\b(19|20)\d{2}\b/.exec(d.ref_period || '') || [])[0] || null;
 // The titles without what stands in front: "Linkup-1990-10-25-" / "CH-1990-10-25-" (161_linkup_titles.sql), and on the
 // few Link-ups without a date the older "Linkup - P ..." and "Link-up: " / "Collegamento: ". A code alone is no title.
 const bare = s => (s || '').replace(/^(?:Linkup|CH)-\d{4}-\d{2}-\d{2}-?/, '')
@@ -31,7 +53,7 @@ async function loadBook(book) {
   const rows = [];
   for (let from = 0; ; from += 1000) {
     const page = await withStatus(sb.from('documents')
-      .select('document_id,work_id,language,media_type,ref_date,en_title,it_title,ur_title,original_title,is_preferred,workflow_status,external_url,duration')
+      .select('document_id,work_id,language,media_type,ref_date,ref_period,en_title,it_title,ur_title,original_title,is_preferred,workflow_status,external_url,duration')
       .eq('category', book.category).is('deleted_at', null).order('document_id').range(from, from + 999), 'Opening the book...');
     rows.push(...page);
     if (page.length < 1000) break;
@@ -61,20 +83,23 @@ async function loadBook(book) {
   const pick = (list, lang) => list.filter(d => d.language === lang && (d.media_type || 'DOC') === 'DOC' && textIds.has(d.document_id))
     .sort((a, b) => (!!b.is_preferred - !!a.is_preferred) || (a.document_id - b.document_id))[0] || null;
   const items = [];
+  const clean = s => (book.clean ? bare(s).replace(book.clean, '').trim() : bare(s));
   for (const [key, list] of groups) {
+    if (book.include && !list.some(d => book.include.test([d.en_title, d.it_title, d.original_title].filter(Boolean).join(' ')))) continue;
     const urdu = pick(list, 'URD');
     const italian = pick(list, 'ITA');
     const audios = list.filter(d => d.media_type === 'AUD' && readings.has(d.document_id)).map(d => ({ ...d, ...readings.get(d.document_id) }));
     const video = list.find(d => d.media_type === 'VID' && d.external_url);
     if (!urdu && !italian && !audios.length) continue;
-    const dated = list.filter(d => d.ref_date).map(d => d.ref_date).sort();
+    const dated = list.map(whenOf).filter(Boolean).sort();
     const titled = [italian, urdu, ...list].filter(Boolean);
-    const en = titled.map(d => bare(d.en_title)).find(t => t && !/^link-?up$/i.test(t)) || '';
-    const it = titled.map(d => bare(d.it_title)).find(Boolean) || '';
+    const en = titled.map(d => clean(d.en_title)).find(t => t && !/^link-?up$/i.test(t)) || '';
+    const it = titled.map(d => clean(d.it_title)).find(Boolean) || '';
     const ur = titled.map(d => bare(d.ur_title) || (URDU_SCRIPT.test(d.original_title || '') ? d.original_title : '')).find(Boolean) || '';
     items.push({ key, date: dated[0] || null, en, it, ur, urdu, italian, audios, video });
   }
-  items.sort((a, b) => (a.date === null) - (b.date === null) || (a.date || '').localeCompare(b.date || '') || a.key.localeCompare(b.key));
+  if (book.order === 'title') items.sort((a, b) => titleOf(a, book).localeCompare(titleOf(b, book), 'en', { sensitivity: 'base' }) || a.key.localeCompare(b.key));
+  else items.sort((a, b) => (a.date === null) - (b.date === null) || (a.date || '').localeCompare(b.date || '') || a.key.localeCompare(b.key));
   return items;
 }
 
@@ -85,8 +110,19 @@ async function loadBookmark(book) {
   return data?.item_key || null;
 }
 
-const yearOf = it => (it.date ? it.date.slice(0, 4) : 'Without a date');
-const itemTitle = it => it.en || it.it || it.ur || (it.date ? `${view.book.unit[0]} of ${dayLabel(it.date)}` : `${view.book.unit[0]} without a title`);
+// The heading a page is listed under: its year, or for a book in A to Z order the first letter of its title.
+const yearOf = it => {
+  if (view.book && view.book.order === 'title') {
+    const c = titleOf(it, view.book).charAt(0).toUpperCase();
+    return /[A-Z]/.test(c) ? c : '#';
+  }
+  return it.date ? it.date.slice(0, 4) : 'Without a date';
+};
+const capital = s => s.charAt(0).toUpperCase() + s.slice(1);
+function titleOf(it, book) {
+  return it.en || it.it || it.ur || (it.date ? `${capital(book.unit[0])} of ${dayLabel(it.date)}` : `${capital(book.unit[0])} without a title`);
+}
+const itemTitle = it => titleOf(it, view.book);
 
 // ---------- The shelf ----------
 
@@ -94,7 +130,7 @@ function coverHtml(book, items, attrs = '', big = false) {
   const years = items.filter(i => i.date).map(i => i.date.slice(0, 4));
   const span = years.length ? (years[0] === years[years.length - 1] ? years[0] : `${years[0]} – ${years[years.length - 1]}`) : '';
   return `
-    <button type="button" class="book-cover${big ? ' book-cover-big' : ''}" ${attrs}>
+    <button type="button" class="book-cover${big ? ' book-cover-big' : ''}${book.cover ? ` book-cover-${book.cover}` : ''}" ${attrs}>
       <span class="book-cover-frame">
         <span class="book-cover-author">${esc(book.author)}</span>
         <span class="book-cover-title">${esc(book.title)}</span>
@@ -146,12 +182,12 @@ async function renderBookPage(main, book, openKey, cached = false) {
           <h2 class="book-title">${esc(book.title)}</h2>
           <p class="book-about">${esc(book.about)}</p>
           ${items.length ? `<button class="btn big-btn" id="book-start">&#128214; ${marked ? 'Continue reading' : 'Start reading'}</button>
-          ${marked ? `<div class="fp-bookmark-note" dir="auto">&#128278; Your bookmark: ${esc(itemTitle(marked))} &middot; ${esc(dayLabel(marked.date))}</div>` : ''}` : '<p class="empty-msg">There is nothing to read here yet.</p>'}
+          ${marked ? `<div class="fp-bookmark-note" dir="auto">&#128278; Your bookmark: ${esc(itemTitle(marked))}${marked.date ? ` &middot; ${esc(dayLabel(marked.date))}` : ''}</div>` : ''}` : '<p class="empty-msg">There is nothing to read here yet.</p>'}
         </div>
       </div>
       ${items.length ? `
       <h3 class="book-index-title">Contents</h3>
-      <div class="book-years" role="navigation" aria-label="Years">${years.map(y => `<button type="button" class="book-year-chip" data-year="${esc(y)}">${esc(y)}</button>`).join('')}</div>
+      <div class="book-years" role="navigation" aria-label="${book.order === 'title' ? 'Letters' : 'Years'}">${years.map(y => `<button type="button" class="book-year-chip" data-year="${esc(y)}">${esc(y)}</button>`).join('')}</div>
       <div class="book-index">${indexHtml(items)}</div>` : ''}
     </div>`;
   document.getElementById('book-back').addEventListener('click', () => renderBooksView(main));
@@ -165,6 +201,16 @@ async function renderBookPage(main, book, openKey, cached = false) {
   }
 }
 
+// The date beside a title in the index: day and month under a year's heading; in an A to Z book, the year.
+function indexDate(it) {
+  if (!it.date) return '';
+  if (view.book.order === 'title') return it.date.slice(0, 4);
+  const [y, m, d] = it.date.split('-').map(Number);
+  if (d) return new Date(y, m - 1, d).toLocaleDateString('en', { day: 'numeric', month: 'short' });
+  if (m) return new Date(y, m - 1, 1).toLocaleDateString('en', { month: 'short' });
+  return '';
+}
+
 function indexHtml(items, current = -1) {
   let html = '', lastYear = null;
   items.forEach((it, i) => {
@@ -174,7 +220,7 @@ function indexHtml(items, current = -1) {
     const kinds = `${it.urdu || it.italian ? '&#128214;' : ''}${it.audios.length ? ' &#128266;' : ''}`;
     html += `
       <button type="button" class="book-index-item${i === current ? ' current' : ''}" data-go="${i}">
-        <span class="book-index-date">${esc(it.date ? new Date(it.date + 'T00:00:00').toLocaleDateString('en', { day: 'numeric', month: 'short' }) : '')}</span>
+        <span class="book-index-date">${esc(indexDate(it))}</span>
         <span class="book-index-text">
           <span class="book-index-name" dir="auto">${esc(itemTitle(it))}</span>
           ${it.ur ? `<span class="book-index-ur" dir="rtl" lang="ur">${esc(it.ur)}</span>` : ''}
@@ -232,7 +278,8 @@ async function showPage(index) {
   view.loading = true;
   view.index = index;
   const it = view.items[index];
-  document.getElementById('br-pos').textContent = `${yearOf(it)} · page ${index + 1} of ${view.items.length}`;
+  document.getElementById('br-pos').textContent = view.book.order === 'title'
+    ? `page ${index + 1} of ${view.items.length}` : `${yearOf(it)} · page ${index + 1} of ${view.items.length}`;
   document.getElementById('br-count').textContent = `${index + 1} / ${view.items.length}`;
   document.getElementById('br-prev').disabled = index === 0;
   document.getElementById('br-next').disabled = index === view.items.length - 1;
