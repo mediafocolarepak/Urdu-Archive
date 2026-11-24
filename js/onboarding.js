@@ -5,8 +5,9 @@
 // Since 2026-11-23 (Owner's request) Home starts with the Word of Life of the month, as the landing page does, and with
 // "Continue" tiles: the last document opened on this device, and the formation path being read.
 
-import { sb, State, esc } from './core.js?v=20261123163143';
-import { openReadingView } from './docdetail.js?v=20261123163143';
+import { sb, State, esc } from './core.js?v=20261124155640';
+import { openReadingView } from './docdetail.js?v=20261124155640';
+import { lastBookBookmark } from './books.js?v=20261124155640';
 
 // The Urdu names are the ones of the Urdu guides (Documentazione/guide-help/ur1.mjs, ur2.mjs, migration 119): Boards,
 // Formation Paths and Help have one there; the others are named in Latin letters there too, so they stand alone
@@ -14,6 +15,8 @@ import { openReadingView } from './docdetail.js?v=20261123163143';
 const HOME_TILES = [
   // The Library first (Owner's request, 2026-11-18). The Urdu guides call it "Library" in Latin letters too.
   ['dashboard', 'Library', ''],
+  // Books (2026-11-24): the Link-ups and, later, other kinds of text read as a book. No Urdu name yet: the Owner's.
+  ['books', 'Books', ''],
   ['myspace', 'My Space', ''],
   ['boards', 'Boards', 'بورڈز'],
   ['formation', 'Formation Paths', 'تربیتی راستے'],
@@ -40,6 +43,7 @@ const NAV_PATHS = {
   how_to_collaborate: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20a6 6 0 0 1 12 0M17 11a3 3 0 1 0 0-6M17 14a6 6 0 0 1 4 6',
   signin: 'M10 17l5-5-5-5M15 12H3M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5',
   continue: 'M7 4l12 8-12 8z',
+  books: 'M4 19V5a2 2 0 0 1 2-2h13v14H6a2 2 0 0 0-2 2zm0 0a2 2 0 0 0 2 2h13M9 7h6',
 };
 export const navIcon = name => `<span class="start-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${NAV_PATHS[name]}"/></svg></span>`;
 export const CHEVRON = '<span class="start-chevron" aria-hidden="true">&rsaquo;</span>';
@@ -116,10 +120,11 @@ export function renderOnboardingView(main) {
 // The top of Home: the Word of Life, then what this person can continue. Each part on its own: Home works without them.
 async function fillHomeTop(main) {
   const top = main.querySelector('#home-top');
-  const [word, bookmark] = await Promise.all([
+  const [word, bookmark, bookMark] = await Promise.all([
     sb.rpc('public_word_of_life').then(r => (r.data && r.data[0]) || null, () => null),
     sb.from('formation_bookmarks').select('path_id,updated_at,formation_paths(title)').order('updated_at', { ascending: false }).limit(1)
       .then(r => (r.data && r.data[0]) || null, () => null),
+    lastBookBookmark().catch(() => null),
   ]);
   if (!top || !document.body.contains(top)) return;
   const last = lastDocument();
@@ -127,6 +132,7 @@ async function fillHomeTop(main) {
     word && word.body ? wordTileHtml(word, 'data-home-word') : '',
     last ? continueTileHtml('data-home-last-doc', 'Continue reading', last.title || `Document #${last.id}`) : '',
     bookmark && bookmark.formation_paths ? continueTileHtml('data-home-path', 'Continue your formation path', bookmark.formation_paths.title || '') : '',
+    bookMark ? continueTileHtml('data-home-book', 'Continue the book', bookMark.book.title) : '',
   ].join('');
   if (!top.innerHTML.trim()) { top.remove(); return; }
   top.querySelector('[data-home-word]')?.addEventListener('click', () =>
@@ -135,6 +141,10 @@ async function fillHomeTop(main) {
     State.selectedDocId = last.id;
     State.dashOpenDetail = true;
     window.__renderTab('dashboard');
+  });
+  top.querySelector('[data-home-book]')?.addEventListener('click', () => {
+    State.bookOpen = { code: bookMark.book.code, key: bookMark.key };
+    window.__renderTab('books');
   });
   top.querySelector('[data-home-path]')?.addEventListener('click', () => {
     State.formationSelectedPathId = bookmark.path_id;
