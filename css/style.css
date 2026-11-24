@@ -846,3 +846,8 @@ details.profile-section > div > h3:first-child, details.profile-section .btn-row
 .book-cover-big .book-cover-title-s { font-size: 32px; }
 .book-cover-big .book-cover-title-m { font-size: 24px; }
 .book-cover-big .book-cover-title-l { font-size: 24px; }
+/* Word of Life (2026-11-24): an amber cover, and the verse large in a gold frame before the commentary. */
+.book-cover.book-cover-amber { background: linear-gradient(150deg, #b8731a 0%, #8a4f0c 55%, #5c3205 100%); }
+.book-verse { margin: 18px auto 6px; max-width: 40em; padding: 16px 20px; border: 2px solid #d9b45a; border-radius: 12px; background: var(--accent-soft); font-size: 24px; line-height: 2; text-align: center; font-weight: 600; }
+.book-verse[lang="ur"] { font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-weight: 400; font-size: 25px; line-height: 2.2; }
+.book-verse cite { display: block; margin-top: 4px; font-style: normal; font-size: 17px; color: var(--ink-soft); }
