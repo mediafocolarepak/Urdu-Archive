@@ -10,7 +10,7 @@ import {
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, DRIVE_AUDIO_PREFIX, mountAudioPlayer, eraseMyAudioFiles,
   textDir, readerChoices, confirmPopup, promptPopup
-} from './core.js?v=20261124161742';
+} from './core.js?v=20261124162602';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved ✓' : '☆ Save'; }
 
