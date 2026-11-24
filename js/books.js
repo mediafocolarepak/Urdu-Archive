@@ -149,7 +149,7 @@ function coverHtml(book, items, attrs = '', big = false) {
     <button type="button" class="book-cover${big ? ' book-cover-big' : ''}${book.cover ? ` book-cover-${book.cover}` : ''}" ${attrs}>
       <span class="book-cover-frame">
         <span class="book-cover-author">${esc(book.author)}</span>
-        <span class="book-cover-title">${esc(book.title)}</span>
+        <span class="book-cover-title book-cover-title-${book.title.length <= 8 ? 's' : book.title.length <= 12 ? 'm' : 'l'}">${esc(book.title).replace(/-/g, '\u2011')}</span>
         <span class="book-cover-rule" aria-hidden="true"></span>
         ${span ? `<span class="book-cover-years">${esc(span)}</span>` : ''}
         ${items.length ? `<span class="book-cover-count">${items.length} ${esc(book.unit[items.length === 1 ? 0 : 1])}</span>` : ''}
