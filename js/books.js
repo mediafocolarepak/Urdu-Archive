@@ -8,7 +8,7 @@
 // The recordings of the Work can be heard on the page. Reserved and hidden texts never appear: the database decides
 // what each person can read (row level security), and proposals and removed texts are left out here.
 
-import { sb, State, esc, withStatus, HIDDEN_DOC_STATUSES, mountAudioPlayer, URDU_SCRIPT } from './core.js?v=20261123163143';
+import { sb, State, esc, withStatus, HIDDEN_DOC_STATUSES, mountAudioPlayer, URDU_SCRIPT } from './core.js?v=20261124155640';
 
 export const BOOKS = [
   { code: 'linkups', category: 'Lkp', title: 'Link-ups', author: 'Chiara Lubich', unit: ['Link-up', 'Link-ups'],
