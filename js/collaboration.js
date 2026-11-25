@@ -5,7 +5,7 @@
 // the UI) - only Admin can set 'approved', paired with the actual role promotion in
 // user_roles (already an admin-only action, see 05_roles_and_permissions.sql).
 
-import { sb, State, esc, canReviewTeamApplications, isAdmin, withStatus, nameMapForEmails, confirmPopup } from './core.js?v=20261125143357';
+import { authorNames, sb, State, esc, canReviewTeamApplications, isAdmin, withStatus, nameMapForEmails, confirmPopup } from './core.js?v=20261125145432';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -171,7 +171,7 @@ async function refreshApplications() {
 
   const list = document.getElementById('apps-list');
   if (!rows.length) { list.innerHTML = '<div class="empty-msg">No applications match this filter.</div>'; return; }
-  const nameMap = await nameMapForEmails([...rows.map(r => r.user_email), ...rows.map(r => r.recommended_by_email).filter(Boolean)]);
+  const [nameMap, recommender] = await Promise.all([nameMapForEmails(rows.map(r => r.user_email)), authorNames(rows, 'recommended_by', 'recommended_by_email')]);
 
   list.innerHTML = rows.map(r => `
     <div class="panel" data-id="${r.id}" style="margin-bottom:12px;">
@@ -181,7 +181,7 @@ async function refreshApplications() {
       ${r.skills ? `<p><b>Skills:</b> ${esc(r.skills)}</p>` : ''}
       <p><b>Motivation:</b> ${esc(r.motivation)}</p>
       ${r.availability ? `<p><b>Availability:</b> ${esc(r.availability)}</p>` : ''}
-      ${r.recommended_by_email ? `<p class="hint"><b>Recommended by:</b> ${esc(nameMap[r.recommended_by_email] || r.recommended_by_email)}</p>` : ''}
+      ${recommender(r) ? `<p class="hint"><b>Recommended by:</b> ${esc(recommender(r))}</p>` : ''}
       ${r.coordinator_note ? `<p class="hint"><b>Note:</b> ${esc(r.coordinator_note)}</p>` : ''}
       ${(r.status === 'pending' || r.status === 'recommended') ? `
         <div class="field"><label>Note <span class="hint">(optional, shown to the applicant if not accepted)</span></label>
@@ -213,11 +213,10 @@ async function refreshApplications() {
       const row = { id };
       const emailMatch = card.querySelector('.chat-meta b')?.textContent;
       if (!await confirmPopup(`Approve and promote ${emailMatch} to Operator?`)) return;
-      const { data: { user } } = await sb.auth.getUser();
       const [app] = await withStatus(sb.from('collaboration_applications').select('user_id').eq('id', id));
       await withStatus(sb.from('user_roles').update({ role: 'operator' }).eq('user_id', app.user_id), 'Promoting...');
       await withStatus(sb.from('collaboration_applications').update({
-        status: 'approved', reviewed_by_email: user.email, reviewed_at: new Date().toISOString(), coordinator_note: note(),
+        status: 'approved', reviewed_at: new Date().toISOString(), coordinator_note: note(),
       }).eq('id', id), 'Approving...');
       await refreshApplications();
     });

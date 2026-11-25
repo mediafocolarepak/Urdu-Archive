@@ -3,14 +3,14 @@
 // Department list is fully data-driven from option_lists ('department') and department_members
 // - departments can be added, renamed or retired from Options without touching this file.
 
-import {
+import { authorNames,
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
-  nameMapForEmails, nameMapForIds, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved,
+  nameMapForIds, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved,
   helpLinkHtml, confirmPopup, promptPopup, showLoadFailed
-} from './core.js?v=20261125143357';
-import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261125143357';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261125143357';
-import { renderApplicationsView } from './collaboration.js?v=20261125143357';
+} from './core.js?v=20261125145432';
+import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261125145432';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261125145432';
+import { renderApplicationsView } from './collaboration.js?v=20261125145432';
 
 // Each department's page opens its own guide from the "?" beside the title.
 const DEPT_GUIDES = { HR: 'dept-hr', COORD: 'dept-coordination', FORM: 'dept-formation', RF: 'dept-reward', COMM: 'dept-communication', ARCHIVE: 'dept-archive' };
@@ -150,7 +150,7 @@ async function renderDepartmentStatus(box, code) {
   const status = statusRows[0] || { status: 'on_track', note: null, updated_by_email: null, updated_at: null };
   const meta = STATUS_META[status.status] || STATUS_META.on_track;
   const suggestion = suggestionRows[0] || null;
-  const updatedBy = status.updated_by_email ? (await nameMapForEmails([status.updated_by_email]))[status.updated_by_email] : '';
+  const updatedBy = (await authorNames([status], 'updated_by', 'updated_by_email'))(status);
 
   const priorityRow = p => `
     <div class="btn-row" style="align-items:center;justify-content:space-between;padding:4px 0;${p.done ? 'opacity:.6;' : ''}">
@@ -475,9 +475,10 @@ async function renderTranslationPromptEditor(box) {
   if (!box) return;
   const [active, versions] = await Promise.all([
     fetchActiveTranslationPrompt(),
-    withStatus(sb.from('translation_prompts').select('id,version,change_note,created_by_email,created_at').order('id', { ascending: false }).limit(20)),
+    withStatus(sb.from('translation_prompts').select('*').order('id', { ascending: false }).limit(20)),
   ]);
 
+  const savedBy = await authorNames(versions, 'created_by', 'created_by_email');
   box.innerHTML = `
     <div class="panel">
       <h2>Translation prompt <span class="hint">&mdash; what the Translate button copies</span></h2>
@@ -494,7 +495,7 @@ async function renderTranslationPromptEditor(box) {
         <tbody>${versions.length ? versions.map(v => `<tr>
           <td title="${esc(v.version)}">${esc(v.version)}</td>
           <td>${esc(String(v.created_at).slice(0, 10))}</td>
-          <td>${esc(v.created_by_email)}</td>
+          <td>${esc(savedBy(v))}</td>
           <td title="${esc(v.change_note)}">${esc(v.change_note)}</td>
           <td><button class="btn secondary tp-load-btn" data-id="${v.id}" style="padding:2px 8px;">Load</button></td>
         </tr>`).join('') : '<tr><td colspan="5" class="hint">No versions yet.</td></tr>'}</tbody>
@@ -520,8 +521,7 @@ async function renderTranslationPromptEditor(box) {
     if (!body) { errBox.textContent = 'The prompt cannot be empty.'; return; }
     if (active && body === active.body.trim() && version === active.version) { errBox.textContent = 'Nothing changed.'; return; }
     if (active && version === active.version) { errBox.textContent = 'The prompt changed but the version label did not - change the label too, so two different prompts never share one.'; return; }
-    const { data: { user } } = await sb.auth.getUser();
-    await withStatus(sb.from('translation_prompts').insert({ version, body, change_note, created_by_email: user.email }), 'Saving...');
+    await withStatus(sb.from('translation_prompts').insert({ version, body, change_note }), 'Saving...');
     renderTranslationPromptEditor(box);
   });
 }
@@ -1101,7 +1101,7 @@ async function renderRoster(code) {
     resultsBox.innerHTML = rows.map(r => `<div class="hint" style="cursor:pointer;padding:2px 0;" data-add-uid="${esc(r.user_id)}">${esc(r.full_name) || esc(r.email)} &middot; ${esc(r.email)}</div>`).join('') || '<div class="hint">No match.</div>';
     resultsBox.querySelectorAll('[data-add-uid]').forEach(el => el.addEventListener('click', async () => {
       const { data: { user } } = await sb.auth.getUser();
-      const { error } = await sb.from('department_members').insert({ department_code: code, user_id: el.dataset.addUid, added_by_email: user.email });
+      const { error } = await sb.from('department_members').insert({ department_code: code, user_id: el.dataset.addUid });
       if (error && error.code !== '23505') { alert(error.message); return; } // 23505 = already a member, ignore
       document.getElementById('mydept-search').value = '';
       resultsBox.innerHTML = '';
@@ -1134,7 +1134,7 @@ async function renderDeptChannel(box, code) {
   const { data: { user } } = await sb.auth.getUser();
 
   const rows = await withStatus(sb.from('department_messages').select('*').eq('department_code', code).order('created_at'));
-  const nameMap = await nameMapForEmails(rows.map(r => r.user_email));
+  const nameMap = await nameMapForIds(rows.map(r => r.user_id));
 
   const imagePaths = rows.filter(r => r.image_path).map(r => r.image_path);
   let signedUrlByPath = {};
@@ -1155,7 +1155,7 @@ async function renderDeptChannel(box, code) {
       ? `<div style="margin-top:6px;"><img src="${esc(signedUrlByPath[r.image_path])}" style="max-width:100%;max-height:240px;border-radius:8px;"></div>` : '';
     return `
       <div class="chat-bubble ${mine ? 'from-me' : 'from-other'} ${r.pinned ? 'pinned' : ''}" data-msg-id="${r.id}">
-        <div class="chat-meta">${esc(nameMap[r.user_email] || r.user_email)} &middot; ${deptChatDateTime(r.created_at)}${r.edited_at ? ' &middot; edited' : ''}${r.pinned ? ' &middot; 📌 pinned' : ''}</div>
+        <div class="chat-meta">${esc(nameMap[r.user_id] || '')} &middot; ${deptChatDateTime(r.created_at)}${r.edited_at ? ' &middot; edited' : ''}${r.pinned ? ' &middot; 📌 pinned' : ''}</div>
         <div class="dept-msg-body" dir="auto" style="white-space:pre-wrap;">${esc(r.body)}</div>
         ${img}
         <div class="btn-row" style="margin-top:6px;">
@@ -1167,7 +1167,7 @@ async function renderDeptChannel(box, code) {
   };
   const pinnedReminder = r => `
     <div class="chat-bubble pinned from-other">
-      <div class="chat-meta">📌 ${esc(nameMap[r.user_email] || r.user_email)} &middot; ${deptChatDateTime(r.created_at)}</div>
+      <div class="chat-meta">📌 ${esc(nameMap[r.user_id] || '')} &middot; ${deptChatDateTime(r.created_at)}</div>
       <div dir="auto" style="white-space:pre-wrap;">${esc(r.body)}</div>
     </div>`;
 
@@ -1201,7 +1201,7 @@ async function renderDeptChannel(box, code) {
       image_path = path;
     }
     await withStatus(sb.from('department_messages').insert({
-      department_code: code, user_id: user.id, user_email: user.email, body: body || null, image_path,
+      department_code: code, user_id: user.id, body: body || null, image_path,
     }), 'Sending...');
     await renderDeptChannel(box, code);
   });

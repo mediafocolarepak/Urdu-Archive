@@ -8,11 +8,11 @@
 // itself, the same pattern as is_board_editor()/document_is_postable() in 71_boards.sql.
 
 import {
-  quiet, sb, State, esc, withStatus, canReviewApplications, nameMapForEmails,
+  quiet, sb, State, esc, withStatus, canReviewApplications, nameMapForIds,
   openBoardPostPopup, likeSafe, DEFAULT_BOARD_FOR_MEMBERSHIP, BOARD_MEDIA_BUCKET, ackBoardPolicy,
   canWrite, isMediaLinkOk,
   helpLinkHtml, promptPopup
-} from './core.js?v=20261125143357';
+} from './core.js?v=20261125145432';
 
 // Shown once, before a person's first post (84_boards_moderation.sql) - keep this in sync with
 // the Help guide "boards" (116_help_redesign.sql), which says the same thing in its own section.
@@ -62,7 +62,7 @@ function textPreview(body, maxChars = 280) {
 
 export async function renderBoardsView(main) {
   const { data: { user } } = await sb.auth.getUser();
-  const myEmail = user.email;
+  const myId = user.id;
 
   const posts = await withStatus(sb.from('board_posts').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }));
   const docIds = [...new Set(posts.filter(p => p.document_id != null).map(p => p.document_id))];
@@ -110,7 +110,7 @@ export async function renderBoardsView(main) {
   }));
   document.getElementById('board-search').addEventListener('input', e => {
     State.boardsSearch = e.target.value;
-    renderPostsForBoard(active, postsForActiveBoard(), docById, textById, myEmail, main);
+    renderPostsForBoard(active, postsForActiveBoard(), docById, textById, myId, main);
   });
 
   function postsForActiveBoard() {
@@ -122,7 +122,7 @@ export async function renderBoardsView(main) {
   if (looksAfter(active)) {
     renderPendingQueue(document.getElementById('board-pending-queue'), active, posts.filter(p => p.board_code === active && p.status === 'pending'), main);
   }
-  renderPostsForBoard(active, postsForActiveBoard(), docById, textById, myEmail, main);
+  renderPostsForBoard(active, postsForActiveBoard(), docById, textById, myId, main);
   if (!quiet()) renderArchiveRequests(document.getElementById('board-archive-requests'), main);
 
   if (canReviewApplications()) {
@@ -205,21 +205,19 @@ function renderPendingQueue(box, boardCode, pendingPosts, main) {
         </div>`).join('')}
     </div>`;
   box.querySelectorAll('[data-publish]').forEach(btn => btn.addEventListener('click', async () => {
-    const { data: { user } } = await sb.auth.getUser();
     const note = btn.closest('[data-pending-id]').querySelector('.pq-note').value.trim();
-    await withStatus(sb.from('board_posts').update({ status: 'published', moderated_by_email: user.email, moderation_note: note || null }).eq('id', btn.dataset.publish), 'Publishing...');
+    await withStatus(sb.from('board_posts').update({ status: 'published', moderation_note: note || null }).eq('id', btn.dataset.publish), 'Publishing...');
     renderBoardsView(main);
   }));
   box.querySelectorAll('[data-reject]').forEach(btn => btn.addEventListener('click', async () => {
     const note = btn.closest('[data-pending-id]').querySelector('.pq-note').value.trim();
     if (!note) { alert('A note is required when rejecting - the author will see it.'); return; }
-    const { data: { user } } = await sb.auth.getUser();
-    await withStatus(sb.from('board_posts').update({ status: 'rejected', moderated_by_email: user.email, moderation_note: note }).eq('id', btn.dataset.reject), 'Rejecting...');
+    await withStatus(sb.from('board_posts').update({ status: 'rejected', moderation_note: note }).eq('id', btn.dataset.reject), 'Rejecting...');
     renderBoardsView(main);
   }));
 }
 
-async function renderPostsForBoard(boardCode, posts, docById, textById, myEmail, main) {
+async function renderPostsForBoard(boardCode, posts, docById, textById, myId, main) {
   const box = document.getElementById('board-posts');
   // Posting is open to any signed-in user now (84_boards_moderation.sql) - only an explicit
   // block (proposed by an editor, approved by a Formation/HR lead via the People tab) removes it.
@@ -249,7 +247,7 @@ async function renderPostsForBoard(boardCode, posts, docById, textById, myEmail,
     ${canPost
       ? '<div class="btn-row" style="margin-bottom:10px;"><button class="btn" id="board-new-post">+ New post</button></div>'
       : '<p class="hint">You have been blocked from posting on boards.</p>'}
-    <div id="board-posts-list">${posts.map(p => renderPostCard(p, docById[p.document_id], textById[p.document_id], myEmail, myReadSet.has(p.id), countByPost[p.id] || 0, promotedPostIds.has(p.id), requestedPostIds.has(p.id))).join('') || '<div class="empty-msg">No posts match here yet.</div>'}</div>`;
+    <div id="board-posts-list">${posts.map(p => renderPostCard(p, docById[p.document_id], textById[p.document_id], myId, myReadSet.has(p.id), countByPost[p.id] || 0, promotedPostIds.has(p.id), requestedPostIds.has(p.id))).join('') || '<div class="empty-msg">No posts match here yet.</div>'}</div>`;
 
   if (canPost) {
     document.getElementById('board-new-post').addEventListener('click', () => openBoardPostPopupGated({
@@ -263,14 +261,14 @@ async function renderPostsForBoard(boardCode, posts, docById, textById, myEmail,
   }
 
   // Resolve author display names after the initial render, in one request for the whole board.
-  nameMapForEmails(posts.map(p => p.posted_by_email)).then(names => {
+  nameMapForIds(posts.map(p => p.posted_by)).then(names => {
     posts.forEach(p => {
       const el = document.querySelector(`.board-post[data-id="${p.id}"] .board-post-author`);
-      if (el) el.textContent = names[p.posted_by_email] || '';
+      if (el) el.textContent = names[p.posted_by] || '';
     });
   }).catch(e => console.warn('Names of the authors:', e));
 
-  wirePostActions(posts, docById, myEmail, main);
+  wirePostActions(posts, docById, myId, main);
 }
 
 // Looking after a board is work: an Operator does it from My work, and in Home reads and writes like everyone (core.js quiet()).
@@ -281,9 +279,9 @@ const STATUS_BADGE = {
   rejected: '<span class="hint" style="color:var(--danger);">Rejected</span>',
 };
 
-function renderPostCard(p, doc, text, myEmail, iRead, readCount, alreadyPromoted, alreadyRequested) {
+function renderPostCard(p, doc, text, myId, iRead, readCount, alreadyPromoted, alreadyRequested) {
   const isModerator = looksAfter(p.board_code);
-  const isMine = p.posted_by_email === myEmail;
+  const isMine = p.posted_by === myId;
   // Edit: the author (any role, own text) or a moderator. Delete stays narrower - unchanged
   // from before this migration - because a plain User's own post isn't theirs to remove once
   // submitted; only a moderator (or Coordinator/Admin) can, "with a reason" (the confirm below).
@@ -328,7 +326,7 @@ function renderPostCard(p, doc, text, myEmail, iRead, readCount, alreadyPromoted
     </div>`;
 }
 
-function wirePostActions(posts, docById, myEmail, main) {
+function wirePostActions(posts, docById, myId, main) {
   document.querySelectorAll('[data-show-readers]').forEach(el => el.addEventListener('click', async () => {
     const id = el.dataset.showReaders;
     const box = document.getElementById(`board-readers-${id}`);
@@ -396,7 +394,7 @@ async function renderEditorsPanel(box, allBoards, selectedBoard) {
     resultsBox.innerHTML = rows.map(r => `<div class="hint" style="cursor:pointer;padding:2px 0;" data-add-uid="${esc(r.user_id)}" data-add-email="${esc(r.email)}">${esc(r.full_name) || esc(r.email)} &middot; ${esc(r.email)}</div>`).join('') || '<div class="hint">No match.</div>';
     resultsBox.querySelectorAll('[data-add-uid]').forEach(el => el.addEventListener('click', async () => {
       await withStatus(sb.from('board_editors').insert({
-        board_code: boardSel.value, user_id: el.dataset.addUid, added_by_email: (await sb.auth.getUser()).data.user.email,
+        board_code: boardSel.value, user_id: el.dataset.addUid, 
       }), 'Adding...');
       document.getElementById('be-search').value = '';
       resultsBox.innerHTML = '';

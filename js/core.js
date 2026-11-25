@@ -1224,7 +1224,7 @@ async function maybeShowSplash(userId) {
   if (error || !data || !data.length) return;
   const msg = data[0];
   if (Number(msg.id) <= await lastSeenSplashId(userId)) return;
-  const authorName = await getDisplayNameByEmail(msg.created_by_email);
+  const authorName = (await authorNames([msg], 'created_by', 'created_by_email'))(msg);
   const langs = splashLangs(msg);
   let lang = splashStartLang(msg);
   const backdrop = document.createElement('div');
@@ -1269,8 +1269,7 @@ async function maybeShowSplash(userId) {
 async function showSplashHistory(lang = 'en') {
   const { data } = await sb.from('splash_messages').select('*').order('created_at', { ascending: false });
   const rows = data || [];
-  const nameMap = await nameMapForEmails(rows.map(r => r.created_by_email));
-  const names = rows.map(r => nameMap[r.created_by_email] || '');
+  const names = rows.map(await authorNames(rows, 'created_by', 'created_by_email'));
   const backdrop = document.createElement('div');
   backdrop.className = 'overlay-backdrop';
   backdrop.innerHTML = `
@@ -1335,6 +1334,14 @@ export async function nameMapForIds(ids) {
     for (const r of data || []) if (r.email) found.set(r.user_id, displayLogin(r.email));
   }
   return Object.fromEntries(unique.map(id => [id, found.get(id) || NAMELESS]));
+}
+
+// The names of those who wrote some rows, by account, as a function of the row. Until 173_who_writes.sql has been run some rows
+// have a login and no account: for those, by login. Nobody is shown where there is neither.
+export async function authorNames(rows, idKey, emailKey) {
+  const noId = rows.filter(r => !r[idKey] && r[emailKey] && String(r[emailKey]).includes('@'));
+  const [byId, byEmail] = await Promise.all([nameMapForIds(rows.map(r => r[idKey])), noId.length ? nameMapForEmails(noId.map(r => r[emailKey])) : {}]);
+  return r => byId[r[idKey]] || byEmail[r[emailKey]] || '';
 }
 
 // Same postability rule as document_is_postable() in 71_boards.sql - a client-side echo so a
@@ -1641,8 +1648,7 @@ export function openBoardPostPopup({ doc = null, boardCode = null, post = null, 
       image_path = path;
     }
     if (!document_id && !body && !link_url && !image_path) { errBox.textContent = 'A document, some text, a link, or an image is required.'; return; }
-    const { data: { user } } = await sb.auth.getUser();
-    const row = { board_code, document_id, title, body: body || null, link_url: link_url || null, image_path, posted_by_email: user.email };
+    const row = { board_code, document_id, title, body: body || null, link_url: link_url || null, image_path };
     if (post) await withStatus(sb.from('board_posts').update(row).eq('id', post.id), 'Saving...');
     else await withStatus(sb.from('board_posts').insert(row), 'Saving...');
     backdrop.remove();

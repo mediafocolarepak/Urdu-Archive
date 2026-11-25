@@ -3,7 +3,7 @@
 // admins see every message and can reply + dismiss. Everything stays in chat_messages
 // forever - "dismiss" is a soft flag hiding a row from the admin's default list, not a delete.
 
-import { sb, State, esc, canReviewApplications, withStatus, nameMapForEmails, labelOf, confirmPopup } from './core.js?v=20261125143357';
+import { displayLogin, nameMapForIds, sb, State, esc, canReviewApplications, withStatus, labelOf, confirmPopup } from './core.js?v=20261125145432';
 
 // Report types are admin-editable from Options ("Report type" list) - see OPTION_LIST_NAMES
 // in core.js and 55_report_types.sql for the seed. Read fresh each time rather than cached in
@@ -57,6 +57,12 @@ export async function renderAdminMessagesView(main) {
   await refreshAdminMessages();
 }
 
+// Who reads Messages may also look for a person by login (Coordinators and Admins read the accounts).
+async function loginsOf(ids) {
+  const { data } = await sb.from('user_roles').select('user_id,email').in('user_id', [...new Set(ids.filter(Boolean))]);
+  return Object.fromEntries((data || []).map(r => [r.user_id, displayLogin(r.email)]));
+}
+
 async function refreshAdminMessages() {
   const emailFilter = document.getElementById('msg-filter-user').value.trim().toLowerCase();
   const typeFilter = document.getElementById('msg-filter-type').value;
@@ -68,8 +74,9 @@ async function refreshAdminMessages() {
   if (typeFilter) query = query.eq('report_type', typeFilter);
   if (docIdFilter) query = query.eq('document_id', parseInt(docIdFilter, 10));
   const rows = await withStatus(query);
-  const filtered = emailFilter ? rows.filter(r => (r.user_email || '').toLowerCase().includes(emailFilter)) : rows;
-  const nameMap = await nameMapForEmails(filtered.map(r => r.user_email));
+  const nameMap = await nameMapForIds(rows.map(r => r.user_id));
+  const logins = emailFilter ? await loginsOf(rows.map(r => r.user_id)) : {};
+  const filtered = emailFilter ? rows.filter(r => `${nameMap[r.user_id] || ''} ${logins[r.user_id] || ''}`.toLowerCase().includes(emailFilter)) : rows;
   const audioUrls = await reportAudioUrls(filtered);
   // A report that led to a correction gives its author a token of appreciation (docs/TOKEN_POLICY.md, migration 129).
   const { data: markedRows } = await sb.rpc('token_marked_reports');
@@ -80,7 +87,7 @@ async function refreshAdminMessages() {
   body.innerHTML = filtered.map(r => `
     <tr data-id="${r.id}" class="${r.dismissed ? 'dismissed-row' : ''}">
       <td>${formatDateTime(r.created_at)}</td>
-      <td>${esc(nameMap[r.user_email] || r.user_email)}</td>
+      <td>${esc(nameMap[r.user_id] || '')}</td>
       <td>${esc(labelOf(reportTypes(), r.report_type) || r.report_type)}</td>
       <td>${r.document_id ? esc(r.document_id) : '—'}</td>
       <td style="white-space:normal;max-width:260px;">${esc(r.message_text || '')}${reportAudioHtml(r, audioUrls)}</td>
@@ -100,9 +107,8 @@ async function refreshAdminMessages() {
     tr.querySelector('.msg-reply-btn').addEventListener('click', async () => {
       const reply_text = tr.querySelector('.msg-reply-input').value.trim();
       if (!reply_text) { alert('Please enter a reply.'); return; }
-      const { data: { user } } = await sb.auth.getUser();
       await withStatus(sb.from('chat_messages').update({
-        reply_text, replied_at: new Date().toISOString(), replied_by_email: user.email,
+        reply_text, replied_at: new Date().toISOString(),
       }).eq('id', id), 'Sending reply...');
       await refreshAdminMessages();
     });

@@ -10,9 +10,9 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, quiet, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, nameMapForIds, confirmPopup } from './core.js?v=20261125143357';
+import { sb, State, esc, withStatus, canReviewApplications, quiet, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForIds, confirmPopup } from './core.js?v=20261125145432';
 // The reader (a path read like a book) shows the same document card as the Library, as dashboard.js and matchreview.js do.
-import { renderDocDetail } from './docdetail.js?v=20261125143357';
+import { renderDocDetail } from './docdetail.js?v=20261125145432';
 
 // Thumbnails (migration 93, owner's request to make the catalog "look like Coursera") - a public
 // bucket, same shape as board post images (BOARD_MEDIA_BUCKET in core.js), but not shared outside
@@ -369,7 +369,7 @@ async function renderPathDetail(main, pathId) {
 
   // Co-authors (migration 82): any editor works the path exactly like the owner (can_edit_path()
   // server-side); only the owner or the Formation lead may add/remove co-authors themselves.
-  const editorRows = await withStatus(sb.from('formation_path_editors').select('user_id,added_by_email,created_at').eq('path_id', pathId));
+  const editorRows = await withStatus(sb.from('formation_path_editors').select('user_id,created_at').eq('path_id', pathId));
   const isCoAuthor = editorRows.some(e => e.user_id === user.id);
   const canManageCoAuthors = !quiet() && (path.owner_id === user.id || isDeptLead('FORM') || isAdmin());
   const editorNames = await nameMapForIds(editorRows.map(e => e.user_id));
@@ -815,7 +815,7 @@ function wireCoAuthorsActions(main, pathId, canManageCoAuthors) {
     const sel = document.getElementById('fp-coauthor-add');
     if (!sel.value) return;
     const { data: { user } } = await sb.auth.getUser();
-    await withStatus(sb.from('formation_path_editors').insert({ path_id: pathId, user_id: sel.value, added_by_email: user.email }), 'Adding...');
+    await withStatus(sb.from('formation_path_editors').insert({ path_id: pathId, user_id: sel.value }), 'Adding...');
     renderPathDetail(main, pathId);
   });
   document.querySelectorAll('[data-remove-coauthor]').forEach(btn => btn.addEventListener('click', async () => {
@@ -854,13 +854,13 @@ function wireChatSection(main, pathId, channel, canAccess) {
 async function refreshChatThread(main, pathId, channel) {
   const { data: { user } } = await sb.auth.getUser();
   const rows = await withStatus(sb.from('formation_chat_messages').select('*').eq('path_id', pathId).eq('channel', channel).order('created_at'));
-  const nameMap = await nameMapForEmails(rows.map(r => r.user_email));
+  const nameMap = await nameMapForIds(rows.map(r => r.user_id));
   const box = document.getElementById(`fp-chat-thread-${channel}`);
   if (!box) return;
   box.innerHTML = rows.length
     ? rows.map(r => `
       <div class="chat-bubble ${r.user_id === user.id ? 'from-user' : 'from-admin'}">
-        <div class="chat-meta">${esc(nameMap[r.user_email] || r.user_email)} &middot; ${esc((r.created_at || '').slice(0, 16).replace('T', ' '))}</div>
+        <div class="chat-meta">${esc(nameMap[r.user_id] || '')} &middot; ${esc((r.created_at || '').slice(0, 16).replace('T', ' '))}</div>
         <div dir="auto">${esc(r.message_text)}</div>
       </div>`).join('')
     : '<div class="empty-msg">No messages yet.</div>';
@@ -870,7 +870,7 @@ async function refreshChatThread(main, pathId, channel) {
     const input = document.getElementById(`fp-chat-input-${channel}`);
     const text = input.value.trim();
     if (!text) return;
-    await withStatus(sb.from('formation_chat_messages').insert({ path_id: pathId, channel, message_text: text, user_email: user.email }), 'Sending...');
+    await withStatus(sb.from('formation_chat_messages').insert({ path_id: pathId, channel, message_text: text }), 'Sending...');
     renderPathDetail(main, pathId);
   });
 }

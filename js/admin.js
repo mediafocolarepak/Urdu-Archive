@@ -1,5 +1,5 @@
-import { dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, nameMapForEmails, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261125143357';
-import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261125143357';
+import { authorNames, dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261125145432';
+import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261125145432';
 
 // ---------- Users ----------
 
@@ -24,6 +24,11 @@ export async function renderUsersView(main) {
   const deptByUid = {};
   for (const d of deptRows) (deptByUid[d.user_id] ||= []).push(d);
   const adminCount = rows.filter(r => r.role === 'admin').length;
+  // Somebody with the same name as a Coordinator, an Admin or a lead could be taken for them: shown here, decided by a person.
+  const plainName = uid => (profileByUid[uid]?.full_name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  const teamByName = {};
+  for (const r of rows) if (plainName(r.user_id) && (['admin', 'coordinator'].includes(r.role) || (deptByUid[r.user_id] || []).some(d => d.is_lead))) (teamByName[plainName(r.user_id)] ||= []).push(r.user_id);
+  const sameName = uid => (teamByName[plainName(uid)] || []).some(other => other !== uid);
 
   // Sortable by name or by signup date only (the other columns have no obvious total order,
   // e.g. role/qualifications) - same click-a-th-header pattern as dashboard.js's DASH_SORTABLE.
@@ -47,7 +52,7 @@ export async function renderUsersView(main) {
         <tbody>${rows.map(r => { const p = profileByUid[r.user_id] || {}; const uidQuals = qualByUid[r.user_id] || new Set(); const lowRep = r.role === 'operator' && r.reputation != null && r.reputation < 20;
           const deptLabel = (deptByUid[r.user_id] || []).map(d => `${labelOf(State.optionListsByName.department || [], d.department_code)}${d.is_lead ? ' (lead)' : ''}`).join(', ');
           return `<tr data-uid="${esc(r.user_id)}">
-          <td>${esc(p.full_name)}</td>
+          <td>${esc(p.full_name)}${sameName(r.user_id) ? ' <span class="hint" style="color:var(--danger);">same name as someone of the team</span>' : ''}</td>
           <td>${ageCell(r.user_id, p)}</td>
           <td>${esc(displayLogin(r.email))}</td>
           <td><select class="role-select" data-uid="${esc(r.user_id)}" style="width:10ch;" ${r.role === 'admin' ? 'disabled title="Admin role can\'t be changed here - remove access and re-add at the new role instead."' : ''}>${optionsHtml([['user', 'User'], ['operator', 'Operator'], ['coordinator', 'Coordinator'], ['admin', 'Admin']], r.role, false)}</select></td>
@@ -289,7 +294,7 @@ async function renderDepartmentsEditor() {
     resultsBox.innerHTML = rows.map(r => `<div class="hint" style="cursor:pointer;padding:2px 0;" data-add-uid="${esc(r.user_id)}">${esc(r.full_name) || esc(r.email)} &middot; ${esc(r.email)}</div>`).join('') || '<div class="hint">No match.</div>';
     resultsBox.querySelectorAll('[data-add-uid]').forEach(el => el.addEventListener('click', async () => {
       const { data: { user } } = await sb.auth.getUser();
-      const { error } = await sb.from('department_members').insert({ department_code: sel.value, user_id: el.dataset.addUid, added_by_email: user.email });
+      const { error } = await sb.from('department_members').insert({ department_code: sel.value, user_id: el.dataset.addUid });
       if (error && error.code !== '23505') { alert(error.message); return; } // 23505 = already a member, ignore
       document.getElementById('dept-search').value = '';
       resultsBox.innerHTML = '';
@@ -485,8 +490,7 @@ export async function renderAnnouncementsView(main) {
 
 async function refreshAnnouncementsHistory() {
   const rows = await withStatus(sb.from('splash_messages').select('*').order('created_at', { ascending: false }));
-  const nameMap = await nameMapForEmails(rows.map(r => r.created_by_email));
-  const names = rows.map(r => nameMap[r.created_by_email] || '');
+  const names = rows.map(await authorNames(rows, 'created_by', 'created_by_email'));
   document.getElementById('splash-history-body').innerHTML = rows.map((r, i) => `<tr>
     <td>${esc((r.created_at || '').slice(0, 16).replace('T', ' '))}</td>
     <td>${esc(names[i])}</td>
