@@ -6,11 +6,11 @@ import {
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete, isCoordinator, isAdmin, docTitlesHtml, URDU_SCRIPT, docDateLabel,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
-  readPdfPageCount, readPdfPageCountFromBlob, getDisplayNameByEmail, openBoardPostPopup, isDocPostable,
+  readPdfPageCount, readPdfPageCountFromBlob, nameMapForEmails, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, DRIVE_AUDIO_PREFIX, mountAudioPlayer, eraseMyAudioFiles,
   textDir, readerChoices, confirmPopup, promptPopup
-} from './core.js?v=20261124162602';
+} from './core.js?v=20261125095640';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved ✓' : '☆ Save'; }
 
@@ -469,7 +469,8 @@ async function refreshDocTasksList(doc) {
   if (!box) return;
   const rows = await withStatus(sb.from('tasks').select('*').eq('document_id', doc.document_id).order('created_at', { ascending: false }));
   if (!rows.length) { box.innerHTML = '<div class="hint">No tasks yet for this document.</div>'; return; }
-  const names = await Promise.all(rows.map(t => t.claimed_by_email ? getDisplayNameByEmail(t.claimed_by_email) : Promise.resolve(null)));
+  const nameMap = await nameMapForEmails(rows.map(t => t.claimed_by_email));
+  const names = rows.map(t => nameMap[t.claimed_by_email] || null);
   box.innerHTML = `
     <div class="grid-wrap"><table class="grid">
       <thead><tr><th>ID</th><th>Status</th><th>Claimed by</th><th>Due date</th><th>Credits</th></tr></thead>
@@ -497,11 +498,11 @@ async function openCreateTaskPopup(doc, onCreated) {
   const rateRows = await withStatus(sb.from('task_category_rates').select('*'));
   const categoryRates = Object.fromEntries(rateRows.map(r => [r.category, r.credits_per_page]));
   const opRows = await withStatus(sb.from('user_roles').select('user_id,email').in('role', ['operator', 'coordinator']).order('email'));
-  const opNames = await Promise.all(opRows.map(r => getDisplayNameByEmail(r.email)));
+  const opNames = await nameMapForEmails(opRows.map(r => r.email));
   const qualRows = await withStatus(sb.from('user_qualifications').select('*'));
   const qualByUid = {};
   for (const q of qualRows) (qualByUid[q.user_id] ||= new Set()).add(q.qualification_code);
-  const operators = opRows.map((r, i) => ({ ...r, displayName: opNames[i], qualifications: qualByUid[r.user_id] || new Set() }));
+  const operators = opRows.map(r => ({ ...r, displayName: opNames[r.email], qualifications: qualByUid[r.user_id] || new Set() }));
 
   panel.innerHTML = `
     <h2 style="margin-top:0;">Create Task <span class="hint">— Document #${esc(doc.document_id)}</span></h2>
