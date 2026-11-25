@@ -7,10 +7,10 @@ import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
   nameMapForEmails, nameMapForIds, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved,
   helpLinkHtml, confirmPopup, promptPopup
-} from './core.js?v=20261125095640';
-import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261125095640';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261125095640';
-import { renderApplicationsView } from './collaboration.js?v=20261125095640';
+} from './core.js?v=20261125101955';
+import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261125101955';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261125101955';
+import { renderApplicationsView } from './collaboration.js?v=20261125101955';
 
 // Each department's page opens its own guide from the "?" beside the title.
 const DEPT_GUIDES = { HR: 'dept-hr', COORD: 'dept-coordination', FORM: 'dept-formation', RF: 'dept-reward', COMM: 'dept-communication', ARCHIVE: 'dept-archive' };

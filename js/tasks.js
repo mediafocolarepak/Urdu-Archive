@@ -7,7 +7,7 @@
 // un'operazione tecnica). RLS impedisce di toccare un task preso da qualcun altro (vedi
 // 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel vincolo, non lo sostituiscono.
 
-import { helpLinkHtml, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup } from './core.js?v=20261125095640';
+import { helpLinkHtml, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup } from './core.js?v=20261125101955';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -166,6 +166,19 @@ async function renderStoreView(body, manage, admin) {
   }
 }
 
+// Taking and sending a task go through claim_task() and submit_task() (165_task_doors.sql), which check everything and
+// say what is wrong. Until 165 has been run they are not there: the old direct change. True if it was done.
+async function taskStep(fn, args, oldWay, busyText) {
+  try {
+    await withStatus(sb.rpc(fn, args), busyText);
+    return true;
+  } catch (e) {
+    if (e.code !== 'PGRST202') { alert(e.message); return false; }
+  }
+  await withStatus(oldWay(), busyText);
+  return true;
+}
+
 function openClaimPopup(t) {
   document.getElementById('claim-task-popup')?.remove();
   const overlay = document.createElement('div');
@@ -180,14 +193,14 @@ function openClaimPopup(t) {
     <h2 style="margin-top:0;">Claim task <span class="hint">#${esc(t.id)}</span></h2>
     <p>${esc(t.title)}</p>
     ${docLine(t)}
-    <div class="field"><label>Your target due date</label><input id="claim-due" type="date"></div>
+    <div class="field"><label>Your target due date</label><input id="claim-due" type="date" min="${today()}"></div>
     <div class="btn-row"><button class="btn" id="claim-confirm">Claim</button><button class="btn secondary" id="claim-cancel">Cancel</button></div>`;
   panel.querySelector('#claim-cancel').addEventListener('click', close);
   panel.querySelector('#claim-confirm').addEventListener('click', async () => {
     const due = panel.querySelector('#claim-due').value;
     if (!due) { alert('Please set a target due date before claiming.'); return; }
     const { data: { user } } = await sb.auth.getUser();
-    await withStatus(sb.from('tasks').update({
+    await taskStep('claim_task', { p_task_id: t.id, p_due_date: due }, () => sb.from('tasks').update({
       status: 'claimed', claimed_by: user.id, claimed_by_email: user.email,
       claimed_at: new Date().toISOString(), due_date: due,
     }).eq('id', t.id), 'Claiming...');
@@ -498,7 +511,8 @@ function renderMineActiveList(rows, candidateByTaskId) {
     });
     card.querySelector('.task-mine-submit')?.addEventListener('click', async () => {
       if (!await confirmPopup('Submit this task for review? You will not be able to make further changes.')) return;
-      await withStatus(sb.from('tasks').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', id), 'Submitting...');
+      await taskStep('submit_task', { p_task_id: parseInt(id, 10) },
+        () => sb.from('tasks').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', id), 'Submitting...');
       await renderTasksView(document.getElementById('main'));
     });
     card.querySelector('.task-mine-giveup')?.addEventListener('click', async () => {
