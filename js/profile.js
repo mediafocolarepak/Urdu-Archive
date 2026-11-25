@@ -5,7 +5,7 @@
 // reviewed. Deliberately does not import from collaboration.js (project convention: modules
 // only import from core.js), so the skill-chip rendering is duplicated here in small form.
 
-import { sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml, dateOfBirthFieldsHtml, readDateOfBirth, displayLogin, PHONE_LOGIN_DOMAIN, TEXT_SIZES, COLOUR_CHOICES, displayPrefs, saveDisplayPrefs } from './core.js?v=20261125162405';
+import { sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml, dateOfBirthFieldsHtml, readDateOfBirth, displayLogin, PHONE_LOGIN_DOMAIN, TEXT_SIZES, COLOUR_CHOICES, displayPrefs, saveDisplayPrefs } from './core.js?v=20261125163746';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -288,8 +288,9 @@ function printCertificate(c, name) {
     <div>${esc(c.milestone)} tokens of appreciation</div>
     <div class="f">${esc(c.signer)}<br>${esc((c.issued_at || '').slice(0, 10))}</div>
     <div class="k">Code ${esc(c.code)}</div></div>
-    <p><button onclick="print()">Print</button></p></body></html>`);
+    <p><button id="print">Print</button></p></body></html>`);
   w.document.close();
+  w.document.getElementById('print').addEventListener('click', () => w.print());
 }
 
 // The certificates of the formation paths (formation_certificates), one line each.

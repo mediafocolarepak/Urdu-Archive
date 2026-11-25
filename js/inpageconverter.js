@@ -8,7 +8,7 @@
 // raw .inp binary directly (locates the content block via fixed byte markers, then maps
 // each InPage glyph code to its Unicode Arabic/Urdu codepoint), so no InPage clipboard
 // step is needed. Rewritten here as a pure function instead of relying on globals.
-import { sb, canWrite, isAdmin, esc, withStatus, getDriveAccessToken, driveUploadOrReplace, confirmPopup } from './core.js?v=20261125162405';
+import { sb, canWrite, isAdmin, esc, withStatus, getDriveAccessToken, driveUploadOrReplace, confirmPopup, loadLibrary, printWhenReady } from './core.js?v=20261125163746';
 
 const DEFAULT_OPTIONS = {
   urdu: true,          // Urdu glyph variants (ک ی ہ ھ ں...) vs. plain Arabic ones
@@ -313,25 +313,6 @@ export async function inPageFileToUnicode(file, opts) {
 
 // ---------- Word (.docx) generation ----------
 
-let docxLibPromise = null;
-function loadDocxLib() {
-  if (window.docx) return Promise.resolve(window.docx);
-  if (!docxLibPromise) {
-    docxLibPromise = new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      // .iife.js, not .umd.cjs: jsDelivr serves .cjs as MIME type application/node, which
-      // browsers with strict MIME checking refuse to execute as a <script> (found by testing
-      // in a real browser - Node's `require()` doesn't care about MIME types, so this only
-      // shows up once the library actually has to load in a page).
-      s.src = 'https://cdn.jsdelivr.net/npm/docx@9.7.1/dist/index.iife.js';
-      s.onload = () => resolve(window.docx);
-      s.onerror = () => reject(new Error('Could not load the Word-generation library.'));
-      document.head.appendChild(s);
-    });
-  }
-  return docxLibPromise;
-}
-
 const URDU_FONT = 'Jameel Noori Nastaleeq';
 
 // Converted InPage text uses \r\n (or, once round-tripped through an HTML <textarea>, plain
@@ -347,7 +328,7 @@ function splitIntoLines(text) {
 // before the Urdu body, each rendered right-aligned/RTL to match the layout already used
 // for Word of Life bulletins.
 export async function buildDocxBlob(urduText, header) {
-  const docx = await loadDocxLib();
+  const docx = await loadLibrary('docx', 'Could not load the Word-generation library.');
   const { Document, Packer, Paragraph, TextRun, AlignmentType } = docx;
   const headerParas = [];
   if (header?.documentId) headerParas.push(new Paragraph({ children: [new TextRun({ text: `Document ID: ${header.documentId}`, bold: true })] }));
@@ -390,9 +371,9 @@ export function openPrintPreview(urduText, header) {
   </style></head><body>
   <div class="header">${header?.documentId ? esc(`Document ID: ${header.documentId}`) + '<br>' : ''}${header?.englishRef ? esc(header.englishRef) : ''}</div>
   <div class="body">${paras}</div>
-  <script>window.onload = () => window.print();</script>
   </body></html>`);
   w.document.close();
+  printWhenReady(w);
 }
 
 // ---------- Google Drive upload ----------
