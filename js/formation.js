@@ -10,9 +10,9 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, confirmPopup } from './core.js?v=20261124162602';
+import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, nameMapForIds, confirmPopup } from './core.js?v=20261125095640';
 // The reader (a path read like a book) shows the same document card as the Library, as dashboard.js and matchreview.js do.
-import { renderDocDetail } from './docdetail.js?v=20261124162602';
+import { renderDocDetail } from './docdetail.js?v=20261125095640';
 
 // Thumbnails (migration 93, owner's request to make the catalog "look like Coursera") - a public
 // bucket, same shape as board post images (BOARD_MEDIA_BUCKET in core.js), but not shared outside
@@ -370,15 +370,15 @@ async function renderPathDetail(main, pathId) {
   const editorRows = await withStatus(sb.from('formation_path_editors').select('user_id,added_by_email,created_at').eq('path_id', pathId));
   const isCoAuthor = editorRows.some(e => e.user_id === user.id);
   const canManageCoAuthors = path.owner_id === user.id || isDeptLead('FORM') || isAdmin();
-  const editorProfiles = editorRows.length ? await withStatus(sb.from('user_profiles').select('user_id,email,full_name').in('user_id', editorRows.map(e => e.user_id))) : [];
-  const editorProfileByUid = {}; for (const p of editorProfiles) editorProfileByUid[p.user_id] = p;
+  const editorNames = await nameMapForIds(editorRows.map(e => e.user_id));
+  const editorProfileByUid = Object.fromEntries(Object.entries(editorNames).map(([uid, name]) => [uid, { full_name: name }]));
   let formMemberOptions = [];
   if (canManageCoAuthors) {
     const formMembers = await withStatus(sb.from('department_members').select('user_id').eq('department_code', 'FORM'));
     const candidateIds = formMembers.map(m => m.user_id).filter(uid => uid !== path.owner_id && !editorRows.some(e => e.user_id === uid));
     if (candidateIds.length) {
-      const candidateProfiles = await withStatus(sb.from('user_profiles').select('user_id,email,full_name').in('user_id', candidateIds));
-      formMemberOptions = candidateProfiles.map(p => [p.user_id, p.full_name || p.email]);
+      const candidateNames = await nameMapForIds(candidateIds);
+      formMemberOptions = candidateIds.map(uid => [uid, candidateNames[uid]]);
     }
   }
 

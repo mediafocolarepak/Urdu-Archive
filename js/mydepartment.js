@@ -5,12 +5,12 @@
 
 import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
-  nameMapForEmails, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved,
+  nameMapForEmails, nameMapForIds, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved,
   helpLinkHtml, confirmPopup, promptPopup
-} from './core.js?v=20261124162602';
-import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261124162602';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261124162602';
-import { renderApplicationsView } from './collaboration.js?v=20261124162602';
+} from './core.js?v=20261125095640';
+import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261125095640';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261125095640';
+import { renderApplicationsView } from './collaboration.js?v=20261125095640';
 
 // Each department's page opens its own guide from the "?" beside the title.
 const DEPT_GUIDES = { HR: 'dept-hr', COORD: 'dept-coordination', FORM: 'dept-formation', RF: 'dept-reward', COMM: 'dept-communication', ARCHIVE: 'dept-archive' };
@@ -524,11 +524,7 @@ async function renderFormationPipeline(box) {
     withStatus(sb.from('formation_chat_messages').select('path_id,created_at').eq('channel', 'formatori').order('created_at', { ascending: false })),
   ]);
   const ownerIds = [...new Set(paths.map(p => p.owner_id))];
-  const profileRows = ownerIds.length
-    ? await withStatus(sb.from('user_profiles').select('user_id,email,full_name').in('user_id', ownerIds))
-    : [];
-  const profileByUid = {};
-  for (const p of profileRows) profileByUid[p.user_id] = p;
+  const ownerNames = await nameMapForIds(ownerIds);
   const coAuthorCount = {};
   for (const e of editorRows) coAuthorCount[e.path_id] = (coAuthorCount[e.path_id] || 0) + 1;
   const activityCount = {};
@@ -537,7 +533,7 @@ async function renderFormationPipeline(box) {
     activityCount[m.path_id] = (activityCount[m.path_id] || 0) + 1;
     if (!lastActivity[m.path_id]) lastActivity[m.path_id] = m.created_at;
   }
-  const ownerName = uid => { const p = profileByUid[uid] || {}; return p.full_name || p.email || uid || '—'; };
+  const ownerName = uid => ownerNames[uid] || '—';
 
   const row = p => `<tr>
     <td>${esc(p.title)}</td>
@@ -573,11 +569,7 @@ async function renderCoordinationOverview(box) {
   const rows = await withStatus(sb.rpc('coordination_task_overview'));
   const pendingExtraCredits = rows.filter(r => r.extra_credits_status === 'pending');
   const claimedIds = [...new Set(rows.filter(r => r.claimed_by).map(r => r.claimed_by))];
-  const profileRows = claimedIds.length
-    ? await withStatus(sb.from('user_profiles').select('user_id,email,full_name').in('user_id', claimedIds))
-    : [];
-  const profileByUid = {};
-  for (const p of profileRows) profileByUid[p.user_id] = p;
+  const assigneeNames = await nameMapForIds(claimedIds);
 
   const nearDueDays = State.policyValues.task_near_due_days ?? 3;
   const todayStr = today();
@@ -593,7 +585,7 @@ async function renderCoordinationOverview(box) {
   const overdue = claimed.filter(isOverdue);
   const nearDue = claimed.filter(isNearDue);
 
-  const whoName = uid => { const p = profileByUid[uid] || {}; return p.full_name || p.email || uid || '—'; };
+  const whoName = uid => assigneeNames[uid] || '—';
   const daysDiff = due => Math.round((new Date(due) - new Date(todayStr)) / 86400000);
   const dueCell = r => {
     if (!r.due_date) return '<span class="hint">—</span>';

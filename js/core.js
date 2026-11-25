@@ -1243,7 +1243,8 @@ async function maybeShowSplash(userId) {
 async function showSplashHistory(lang = 'en') {
   const { data } = await sb.from('splash_messages').select('*').order('created_at', { ascending: false });
   const rows = data || [];
-  const names = await Promise.all(rows.map(r => getDisplayNameByEmail(r.created_by_email)));
+  const nameMap = await nameMapForEmails(rows.map(r => r.created_by_email));
+  const names = rows.map(r => nameMap[r.created_by_email] || '');
   const backdrop = document.createElement('div');
   backdrop.className = 'overlay-backdrop';
   backdrop.innerHTML = `
@@ -1263,24 +1264,51 @@ async function showSplashHistory(lang = 'en') {
   document.getElementById('splash-history-close-btn').addEventListener('click', () => backdrop.remove());
 }
 
-// Resolves an email to its user_profiles.full_name, falling back to the email itself if no
-// profile/name is on file (or if RLS blocks the read - anyone can read their own profile;
-// reading another user's needs Coordinator/Admin, see 35_task_names.sql).
-export async function getDisplayNameByEmail(email) {
-  if (!email) return '';
-  const { data } = await sb.from('user_profiles').select('full_name').eq('email', email).limit(1);
-  return (data && data[0] && data[0].full_name) || email;
+// People are shown by name, never by login: for a phone account the login is the mobile number. Names come from
+// people_names() (164_people_names.sql), which gives a name only, and only of people the caller meets in the app.
+// Where a name is not given, Coordinators and Admins see the login, as they need it; everyone else "A member of DUA".
+const NAMELESS = 'A member of DUA';
+const PEOPLE_BATCH = 300;
+async function fetchPeopleNames({ ids = [], emails = [] }) {
+  const { data, error } = await sb.rpc('people_names', { p_ids: ids, p_emails: emails });
+  if (!error) return data || [];
+  // Until 164 has been run the function is not there: the old way, which gives whatever the rules let the caller read.
+  const list = ids.length ? ['user_id', ids] : ['email', emails];
+  const old = await sb.from('user_profiles').select('user_id,email,full_name').in(list[0], list[1]);
+  return old.data || [];
+}
+async function namesFor(key, values) {
+  const unique = [...new Set((values || []).filter(Boolean))];
+  const found = new Map();
+  for (let i = 0; i < unique.length; i += PEOPLE_BATCH) {
+    const rows = await fetchPeopleNames({ [key]: unique.slice(i, i + PEOPLE_BATCH) });
+    for (const r of rows) if (r.full_name) found.set(key === 'ids' ? r.user_id : r.email, r.full_name);
+  }
+  return { unique, found };
 }
 
-// Batch version for a list view showing several different people at once (Team Applications,
-// admin Messages inbox, Tasks board) - one round trip per distinct email instead of resolving
-// each row's name in isolation.
+// One person's name from the login kept with a message, a post or a task.
+export async function getDisplayNameByEmail(email) {
+  if (!email) return '';
+  return (await nameMapForEmails([email]))[email];
+}
+
+// The same for a list, with one request for all of them. Every login asked for has an answer in the map.
 export async function nameMapForEmails(emails) {
-  const unique = [...new Set(emails.filter(Boolean))];
-  const names = await Promise.all(unique.map(e => getDisplayNameByEmail(e)));
-  const map = {};
-  unique.forEach((e, i) => { map[e] = names[i]; });
-  return map;
+  const { unique, found } = await namesFor('emails', emails);
+  return Object.fromEntries(unique.map(e => [e, found.get(e) || (canReviewApplications() ? displayLogin(e) : NAMELESS)]));
+}
+
+// Names by account id, for path owners, co-authors and assignees. Every id asked for has an answer in the map.
+export async function nameMapForIds(ids) {
+  const { unique, found } = await namesFor('ids', ids);
+  const missing = unique.filter(id => !found.has(id));
+  // An old account may have no name yet: Coordinators and Admins, who may read the profile, see its login.
+  if (missing.length && canReviewApplications()) {
+    const { data } = await sb.from('user_profiles').select('user_id,email').in('user_id', missing);
+    for (const r of data || []) if (r.email) found.set(r.user_id, displayLogin(r.email));
+  }
+  return Object.fromEntries(unique.map(id => [id, found.get(id) || NAMELESS]));
 }
 
 // Same postability rule as document_is_postable() in 71_boards.sql - a client-side echo so a

@@ -7,7 +7,7 @@
 // un'operazione tecnica). RLS impedisce di toccare un task preso da qualcun altro (vedi
 // 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel vincolo, non lo sostituiscono.
 
-import { helpLinkHtml, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, getDisplayNameByEmail, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup } from './core.js?v=20261124162602';
+import { helpLinkHtml, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup } from './core.js?v=20261125095640';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -33,11 +33,11 @@ const STATUS_LABELS = { claimed: 'Claimed', submitted: 'Waiting for review', app
 
 async function fetchOperators() {
   const rows = await withStatus(sb.from('user_roles').select('user_id,email,reputation').in('role', ['operator', 'coordinator']).order('email'));
-  const names = await Promise.all(rows.map(r => getDisplayNameByEmail(r.email)));
+  const nameMap = await nameMapForEmails(rows.map(r => r.email));
   const qualRows = await withStatus(sb.from('user_qualifications').select('*'));
   const qualByUid = {};
   for (const q of qualRows) (qualByUid[q.user_id] ||= new Set()).add(q.qualification_code);
-  return rows.map((r, i) => ({ ...r, displayName: names[i], qualifications: qualByUid[r.user_id] || new Set() }));
+  return rows.map(r => ({ ...r, displayName: nameMap[r.email], qualifications: qualByUid[r.user_id] || new Set() }));
 }
 
 function docLine(t) {

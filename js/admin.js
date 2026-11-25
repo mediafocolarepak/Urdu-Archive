@@ -1,5 +1,5 @@
-import { dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, getDisplayNameByEmail, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261124162602';
-import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261124162602';
+import { dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, nameMapForEmails, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261125095640';
+import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261125095640';
 
 // ---------- Users ----------
 
@@ -485,7 +485,8 @@ export async function renderAnnouncementsView(main) {
 
 async function refreshAnnouncementsHistory() {
   const rows = await withStatus(sb.from('splash_messages').select('*').order('created_at', { ascending: false }));
-  const names = await Promise.all(rows.map(r => getDisplayNameByEmail(r.created_by_email)));
+  const nameMap = await nameMapForEmails(rows.map(r => r.created_by_email));
+  const names = rows.map(r => nameMap[r.created_by_email] || '');
   document.getElementById('splash-history-body').innerHTML = rows.map((r, i) => `<tr>
     <td>${esc((r.created_at || '').slice(0, 16).replace('T', ' '))}</td>
     <td>${esc(names[i])}</td>

@@ -8,11 +8,11 @@
 // itself, the same pattern as is_board_editor()/document_is_postable() in 71_boards.sql.
 
 import {
-  sb, State, esc, withStatus, canReviewApplications, getDisplayNameByEmail,
+  sb, State, esc, withStatus, canReviewApplications, nameMapForEmails,
   openBoardPostPopup, likeSafe, DEFAULT_BOARD_FOR_MEMBERSHIP, BOARD_MEDIA_BUCKET, ackBoardPolicy,
   canWrite, isMediaLinkOk,
   helpLinkHtml, promptPopup
-} from './core.js?v=20261124162602';
+} from './core.js?v=20261125095640';
 
 // Shown once, before a person's first post (84_boards_moderation.sql) - keep this in sync with
 // the Help guide "boards" (116_help_redesign.sql), which says the same thing in its own section.
@@ -262,13 +262,13 @@ async function renderPostsForBoard(boardCode, posts, docById, textById, myEmail,
       .then(({ error }) => { if (error) console.error('Could not record "read" for board posts:', error); });
   }
 
-  // Resolve author display names after the initial render (avoids one query per post up front).
-  Promise.all(posts.map(p => getDisplayNameByEmail(p.posted_by_email))).then(resolvedNames => {
-    posts.forEach((p, i) => {
+  // Resolve author display names after the initial render, in one request for the whole board.
+  nameMapForEmails(posts.map(p => p.posted_by_email)).then(names => {
+    posts.forEach(p => {
       const el = document.querySelector(`.board-post[data-id="${p.id}"] .board-post-author`);
-      if (el) el.textContent = resolvedNames[i];
+      if (el) el.textContent = names[p.posted_by_email] || '';
     });
-  });
+  }).catch(e => console.warn('Names of the authors:', e));
 
   wirePostActions(posts, docById, myEmail, main);
 }
