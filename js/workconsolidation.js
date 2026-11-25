@@ -9,12 +9,13 @@
 // management lives on the document detail page (Other Versions table) rather than duplicated
 // here.
 
-import { sb, esc, withStatus, labelOf, State, downloadFromGDrive, mergeWorks, titleOverlapScore, confirmPopup } from './core.js?v=20261125125719';
+import { sb, esc, canCatalogue, withStatus, labelOf, State, downloadFromGDrive, mergeWorks, titleOverlapScore, confirmPopup } from './core.js?v=20261125143357';
 
 const SIMILARITY_THRESHOLD = 0.6;
 const MAX_FOR_SUGGESTIONS = 1500; // guard against an O(n^2) scan over a very large catalogue
 
 export async function renderWorkConsolidationView(main) {
+  if (!canCatalogue()) { main.innerHTML = '<div class="empty-msg">This tool is for the members of Archive &amp; Data.</div>'; return; }
   main.innerHTML = `
     <div class="panel">
       <h2>Work Consolidation</h2>

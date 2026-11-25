@@ -5,7 +5,7 @@
 // reviewed. Deliberately does not import from collaboration.js (project convention: modules
 // only import from core.js), so the skill-chip rendering is duplicated here in small form.
 
-import { sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml, dateOfBirthFieldsHtml, readDateOfBirth, displayLogin, PHONE_LOGIN_DOMAIN, TEXT_SIZES, COLOUR_CHOICES, displayPrefs, saveDisplayPrefs } from './core.js?v=20261125125719';
+import { sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml, dateOfBirthFieldsHtml, readDateOfBirth, displayLogin, PHONE_LOGIN_DOMAIN, TEXT_SIZES, COLOUR_CHOICES, displayPrefs, saveDisplayPrefs } from './core.js?v=20261125143357';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -45,8 +45,11 @@ export async function renderMyProfileView(main) {
     <div class="panel" style="max-width:780px;margin:0 auto;">
       <h2>My Profile</h2>
       <div class="profile-who">
-        <div class="profile-name" dir="auto">${esc(profile.full_name) || '—'}</div>
-        <div class="profile-login">${esc(displayLogin(user.email))}</div>
+        <div class="profile-who-text">
+          <div class="profile-name" dir="auto">${esc(profile.full_name) || '—'}</div>
+          <div class="profile-login">${esc(displayLogin(user.email))}</div>
+        </div>
+        <button type="button" class="btn secondary profile-signout" id="profile-signout">Sign out</button>
       </div>
       <details class="subpanel profile-section" open><summary>Personal details</summary><div id="profile-demographics"></div></details>
       ${role === 'user' ? '' : `<div class="field-grid wide" style="margin:16px 0;">
@@ -69,10 +72,9 @@ export async function renderMyProfileView(main) {
         <summary>My activity in the archive</summary>
         <div id="profile-activity-body" style="margin-top:8px;"><div class="hint">Loading...</div></div>
       </details>
-      <div class="btn-row" style="margin-top:16px;"><button class="btn big-btn" id="profile-signout" style="flex:1;">Sign out</button></div>
     </div>`;
 
-  // Sign out is also in the top bar, which on a phone is easy to miss (owner's report 2026-10-27);
+  // Beside the name (Owner, 2026-11-25). Coordinators and Admins have it in the top bar too;
   // this clicks that same button so there is one sign-out routine (core.js), not two.
   document.getElementById('profile-signout').addEventListener('click', () => document.getElementById('logout-btn').click());
   renderDisplayChoices(document.getElementById('profile-display'));

@@ -3,14 +3,14 @@
 // `documents` table's full field set.
 
 import { quiet,
-  sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete, isCoordinator, isAdmin, docTitlesHtml, URDU_SCRIPT, docDateLabel,
+  sb, State, esc, today, labelOf, optionsHtml, canWrite, canCatalogue, canDelete, isCoordinator, isAdmin, docTitlesHtml, URDU_SCRIPT, docDateLabel,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, nameMapForEmails, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, DRIVE_AUDIO_PREFIX, mountAudioPlayer, eraseMyAudioFiles,
   textDir, readerChoices, confirmPopup, promptPopup
-} from './core.js?v=20261125125719';
+} from './core.js?v=20261125143357';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved ✓' : '☆ Save'; }
 
@@ -210,8 +210,14 @@ async function addRelatedVersion(doc, siblings) {
   const title = doc.en_title || doc.title || doc.original_title || '';
   let workId = doc.work_id;
   if (!workId) {
-    workId = await createWorkFor(title);
-    await withStatus(sb.from('documents').update({ work_id: workId }).eq('document_id', doc.document_id), 'Saving...');
+    // ensure_work_for_document (170); until it has been run, the old direct change.
+    try {
+      workId = await withStatus(sb.rpc('ensure_work_for_document', { p_document_id: doc.document_id }), 'Saving...');
+    } catch (e) {
+      if (e.code !== 'PGRST202') throw e;
+      workId = await createWorkFor(title);
+      await withStatus(sb.from('documents').update({ work_id: workId }).eq('document_id', doc.document_id), 'Saving...');
+    }
   }
   const others = [doc, ...(siblings || []).filter(s => String(s.document_id) !== String(doc.document_id))]
     .filter(v => !HIDDEN_DOC_STATUSES.includes(v.workflow_status));
@@ -795,7 +801,7 @@ export async function renderDocDetail(id, opts = {}) {
     rows.filter(r => r.char_count > 0).forEach(r => textIds.add(String(r.document_id)));
   }
 
-  if (opts.legacyFullEdit && canWrite()) {
+  if (opts.legacyFullEdit && canCatalogue()) {
     renderFullEditForm(box, id, doc, siblings, docCollections, {
       mode: 'legacy',
       onDone: () => renderDocDetail(id, { legacyFullEdit: true }),

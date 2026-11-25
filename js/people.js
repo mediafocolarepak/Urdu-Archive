@@ -8,12 +8,13 @@
 
 import {
   sb, State, esc, withStatus, isAdmin, isDeptMember, isDeptLead, labelOf, optionsHtml, logEntriesHtml, confirmPopup, promptPopup
-} from './core.js?v=20261125125719';
+} from './core.js?v=20261125143357';
 
 const STANDING_BADGE = {
   active: '',
   watch: '<span class="hint" style="color:#b8860b;">watch</span>',
   suspended: '<span class="hint" style="color:var(--danger);">suspended</span>',
+  excluded: '<span class="hint" style="color:var(--danger);">excluded</span>',
 };
 
 const ROLE_OPTIONS = [['user', 'User'], ['operator', 'Operator'], ['coordinator', 'Coordinator'], ['admin', 'Admin']];
@@ -81,6 +82,7 @@ export async function renderPeopleSection(container) {
             <option value="active" ${State.peopleFilter.standing === 'active' ? 'selected' : ''}>Active</option>
             <option value="watch" ${State.peopleFilter.standing === 'watch' ? 'selected' : ''}>Watch</option>
             <option value="suspended" ${State.peopleFilter.standing === 'suspended' ? 'selected' : ''}>Suspended</option>
+            <option value="excluded" ${State.peopleFilter.standing === 'excluded' ? 'selected' : ''}>Excluded</option>
           </select>
         </div>
         <div class="field"><label>Department</label>

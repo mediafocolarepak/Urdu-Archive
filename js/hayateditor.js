@@ -6,8 +6,8 @@
 // the meantime), per the project's "don't pollute a fixed vocabulary with unreviewed values"
 // rule that also applies to Bulk Import and the rest of this session's schema changes.
 
-import { sb, State, esc, today, canWrite, isAdmin, withStatus, withStatusCount, labelOf, extractHayatRowToDocument, SessionCache, confirmPopup } from './core.js?v=20261125125719';
-import { comboboxHtml, wireCombobox } from './combobox.js?v=20261125125719';
+import { sb, State, esc, today, canCatalogue, isCoordinator, isAdmin, withStatus, withStatusCount, labelOf, extractHayatRowToDocument, SessionCache, confirmPopup } from './core.js?v=20261125143357';
+import { comboboxHtml, wireCombobox } from './combobox.js?v=20261125143357';
 
 let currentRows = [];
 
@@ -22,10 +22,10 @@ export async function renderHayatEditorView(main) {
       </div>
       <div class="hint" id="he-progress" style="margin-bottom:10px;"></div>
       <div class="btn-row">
-        ${canWrite() ? `
+        ${canCatalogue() ? `
         <button class="btn" id="he-add-row">+ Add row</button>
         ${isAdmin() ? '<button class="btn" id="he-extract">Extract selected</button>' : ''}
-        <button class="btn danger" id="he-delete">Delete selected</button>
+        ${isCoordinator() || isAdmin() ? '<button class="btn danger" id="he-delete">Delete selected</button>' : ''}
         <button class="btn secondary" id="he-duplicate">Duplicate selected</button>
         <button class="btn secondary" id="he-import">Import CSV</button>
         <button class="btn secondary" id="he-paste-import">Paste CSV</button>
@@ -40,10 +40,10 @@ export async function renderHayatEditorView(main) {
     State.hayatEditorEdition = e.target.value;
     refreshHayatEditorGrid();
   });
-  if (canWrite()) {
+  if (canCatalogue()) {
     document.getElementById('he-add-row').addEventListener('click', addRow);
     if (isAdmin()) document.getElementById('he-extract').addEventListener('click', extractSelected);
-    document.getElementById('he-delete').addEventListener('click', deleteSelected);
+    document.getElementById('he-delete')?.addEventListener('click', deleteSelected);
     document.getElementById('he-duplicate').addEventListener('click', duplicateSelected);
     document.getElementById('he-import').addEventListener('click', () => showCsvImportModal('file'));
     document.getElementById('he-paste-import').addEventListener('click', () => showCsvImportModal('paste'));
@@ -101,7 +101,7 @@ export async function refreshHayatEditorGrid() {
   const extractedCount = currentRows.filter(r => r.estratto).length;
   document.getElementById('he-progress').textContent = `${extractedCount} of ${currentRows.length} articles extracted in this edition`;
 
-  const readOnly = !canWrite();
+  const readOnly = !canCatalogue();
   grid.innerHTML = `<thead><tr>
       <th></th><th>ID</th><th>Pagina</th><th>Autore</th><th>Titolo (Urdu)</th><th>Title (EN)</th><th>Ur-Title</th>
       <th>Categoria</th><th>Branca</th><th>Argomento</th><th>Estratto</th>

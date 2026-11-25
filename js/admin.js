@@ -1,9 +1,9 @@
-import { dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, nameMapForEmails, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261125125719';
-import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261125125719';
+import { dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, nameMapForEmails, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261125143357';
+import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261125143357';
 
 // ---------- Users ----------
 
-const STANDING_BADGE = { active: '', watch: '<span class="hint" style="color:var(--warning,#b8860b);">watch</span>', suspended: '<span class="hint" style="color:var(--danger);">suspended</span>' };
+const STANDING_BADGE = { active: '', watch: '<span class="hint" style="color:var(--warning,#b8860b);">watch</span>', suspended: '<span class="hint" style="color:var(--danger);">suspended</span>', excluded: '<span class="hint" style="color:var(--danger);">excluded</span>' };
 
 export async function renderUsersView(main) {
   if (!isAdmin()) { main.innerHTML = '<div class="empty-msg">Admin access required.</div>'; return; }
