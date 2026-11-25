@@ -295,7 +295,8 @@ export const State = {
   formationSelectedPathId: null,
   myDepartments: [],  // [{department_code, is_lead}] for the signed-in user - see GOVERNANCE.md
   policyValues: {},  // policy_values key -> integer value, cached at boot (see 80_departments_and_people_decisions.sql)
-  standing: 'active',  // user_roles.standing: active/watch/suspended
+  standing: 'active',  // user_roles.standing: active/watch/suspended/excluded
+  paused: false,       // suspended: in the app they are a User until they are reinstated (Owner, 2026-11-25; 170)
   boardPostingBlocked: false,  // user_roles.board_posting_blocked (84_boards_moderation.sql)
   boardPolicyAcked: false,  // whether user_profiles.board_policy_ack_at is set
   boardsSearch: '',  // free-text filter over the open board (84_boards_moderation.sql)
@@ -485,6 +486,9 @@ export function canWrite() { return State.currentRole === 'operator' || State.cu
 // Home is the spiritual home, the same for everyone and silent; My work is the one room an Operator has more (Owner's concept,
 // 2026-11-25). In Home an Operator sees what a User sees, without the buttons of the work. Always false for the other roles.
 export function quiet() { return State.currentRole === 'operator' && State.place !== 'work'; }
+// The archive tools (Match Review, Work Consolidation, Hayat Editor): the members of Archive & Data, Coordinators and Admins.
+// The database says the same (can_catalogue, 170).
+export function canCatalogue() { return isCoordinator() || isAdmin() || (State.currentRole === 'operator' && isDeptMember('ARCHIVE')); }
 export function canDelete() { return State.currentRole === 'admin'; }
 export function isAdmin() { return State.currentRole === 'admin'; }
 export function isCoordinator() { return State.currentRole === 'coordinator'; }
@@ -680,7 +684,7 @@ export function canApprovePolicyChange() { return isAdmin(); }
 
 const LOG_TABLE_LABELS = {
   documents: 'Document', document_texts: 'Text', document_original_texts: 'Original text',
-  document_collections: 'Collection', process_history: 'Process step', works: 'Work', tasks: 'Task',
+  document_collections: 'Collection', hayat_indice: 'Hayat index', process_history: 'Process step', works: 'Work', tasks: 'Task',
   user_roles: 'Role', user_qualifications: 'Qualification', department_members: 'Department',
 };
 const LOG_ACTION_LABELS = { insert: 'added', update: 'changed', delete: 'removed' };
@@ -1008,10 +1012,25 @@ export async function boot(renderDashboardTab) {
   });
 }
 
+// An excluded person: nothing opens but this page (the database gives them nothing either, 170).
+function showClosed() {
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('closed-screen')?.remove();
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="closed-screen" class="closed-screen"><div class="panel">
+      <h2>Digital Urdu Archive</h2>
+      <p>Your access to DUA is closed.</p>
+      <p>If you think this is a mistake, please speak with the person who invited you.</p>
+      <button type="button" class="btn big-btn" id="closed-signout">Sign out</button>
+    </div></div>`);
+  document.getElementById('closed-signout').addEventListener('click', () => document.getElementById('logout-btn').click());
+}
+
 // Before signing in, the landing page comes first (landing.js, set by app.js as window.__renderLanding); its Sign in
 // tile opens the sign-in card, whose "Back" returns to it. Without it, the sign-in card as before.
 function showLogin() {
   document.getElementById('app').style.display = 'none';
+  document.getElementById('closed-screen')?.remove();
   const landing = document.getElementById('landing-screen');
   if (landing && window.__renderLanding) {
     document.getElementById('login-screen').style.display = 'none';
@@ -1041,11 +1060,15 @@ async function showApp(session, renderDashboardTab) {
   const roleRow = roleRows && roleRows[0];
   State.currentRole = roleRow ? roleRow.role : 'user';
   State.standing = roleRow ? roleRow.standing : 'active';
+  // The same the database does (current_role_is, 170): never for an Admin.
+  if (State.currentRole !== 'admin' && State.standing === 'excluded') { showClosed(); return; }
+  State.paused = State.currentRole !== 'admin' && State.currentRole !== 'user' && State.standing === 'suspended';
+  if (State.paused) State.currentRole = 'user';
   State.boardPostingBlocked = roleRow ? !!roleRow.board_posting_blocked : false;
   document.getElementById('user-email').textContent = `${displayLogin(session.user.email)} (${State.currentRole})`;
 
   const { data: deptRows } = await sb.from('department_members').select('department_code,is_lead').eq('user_id', session.user.id);
-  State.myDepartments = deptRows || [];
+  State.myDepartments = State.paused ? [] : deptRows || [];
   const { data: policyRows } = await sb.from('policy_values').select('key,value');
   State.policyValues = {};
   for (const p of (policyRows || [])) State.policyValues[p.key] = p.value;
@@ -1066,7 +1089,7 @@ async function showApp(session, renderDashboardTab) {
     State.myBoards = new Set((State.optionListsByName.board || []).map(([code]) => code));
   } else {
     const { data: editorRows } = await sb.from('board_editors').select('board_code');
-    State.myBoards = new Set((editorRows || []).map(r => r.board_code));
+    State.myBoards = new Set(State.paused ? [] : (editorRows || []).map(r => r.board_code));
   }
   // The client-side mirror of the server's is_any_formatore() (80_departments_and_people_
   // decisions.sql), used to gate formation-path creation and the "My paths" section - "formatore"

@@ -471,8 +471,8 @@ proposed.
 | 2 | Reject an applicant | HR | — (HR decides; applicant may reapply) | — | `collaboration_applications` |
 | 3 | Assign / remove a qualification | HR (or Coordination) | Admin applies | Person concerned | `user_qualifications` + people-decision log (§5.3) |
 | 4 | Put a person on the watch list | HR | — (HR decides, must give reason) | Lead HR | people-decision log |
-| 5 | Suspend a person (no new tasks) | HR | Lead HR or Admin (not the proposer) | Coordination, person | people-decision log; `user_roles.standing` |
-| 6 | Exclude a person (remove access) | HR | Owner | All leads | people-decision log; role removal |
+| 5 | Suspend a person (no work until reinstated; reads as a User) | HR | Lead HR or Admin (not the proposer) | Coordination, person | people-decision log; `user_roles.standing` |
+| 6 | Exclude a person (no access; only an Admin takes them back) | HR | Owner | All leads | people-decision log; role removal |
 | 7 | Promote to Coordinator / Admin | Owner or Lead HR | Owner | All leads | people-decision log |
 | 8 | Appoint / replace a department lead | Owner | Owner | Everyone | `department_members` |
 | 9 | Create a task, set its credits | Coordinator | — (within rate table) | — | `tasks` |
@@ -511,9 +511,10 @@ open — two low-priority known gaps.
 
 ### 5.1 Roles and qualifications
 - `user_roles`: one row per account — `role` (user/operator/coordinator/admin), `credits`,
-  `reputation`, `standing` (`active`/`watch`/`suspended`, migration 80), `email`, `created_at`.
+  `reputation`, `standing` (`active`/`watch`/`suspended`/`excluded`, migrations 80 and 170), `email`, `created_at`.
   Only Admin changes `role` directly; `standing` changes only through `people_decisions` (§5.6).
-  A trigger blocks a suspended person from claiming or being assigned a task.
+  A suspended person counts as a User everywhere until reinstated, an excluded one reads nothing (Owner,
+  2026-11-25, migration 170); neither is ever applied to an Admin. A trigger blocks both from tasks.
 - `user_qualifications` (many-to-many, codes from `option_lists` list `operator_qualification`).
   Assigned by Admin, or proposed by HR/Coordination and applied via `people_decisions`.
   `user_qualifies_for_category()` gates task claiming by category.
@@ -540,7 +541,7 @@ open — two low-priority known gaps.
   `propose_people_decision()` and `decide_people_decision()`, which enforce who may propose, who
   may approve, and that the two are never the same person (checked in SQL, not just the UI).
   Types: `qualification_add/remove`, `watch_on/off` (applied immediately, no approval — row 4),
-  `suspend`, `reinstate`, `exclude` (role → `user`, standing → `suspended`, department/board/
+  `suspend`, `reinstate`, `exclude` (role → `user`, standing → `excluded`, department/board/
   qualification rows dropped; account and every ledger kept — §8.7), `role_change`,
   `board_misuse` / `board_block` / `board_unblock` (§5.4).
 - **People tab** (`hr_people_overview()`), visible to HR members, department leads and Admin:

@@ -730,7 +730,9 @@ input.switch:disabled { opacity: .6; cursor: wait; }
 .panel.thank-you > h2::before { display: none; }
 .thank-you p { font-size: 18px; line-height: 1.5; max-width: 32em; margin: 8px auto 18px; }
 /* My Profile: who, then sections closed under clear headings. */
-.profile-who { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin: 0 0 16px; }
+.profile-who { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin: 0 0 16px; }
+.profile-who-text { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.profile-signout { flex: 0 0 auto; width: auto; min-height: 44px; white-space: nowrap; }
 .profile-name { font-size: 22px; font-weight: 700; }
 .profile-login { font-size: 16px; color: var(--ink-soft); margin-bottom: 8px; }
 details.profile-section { margin-top: 12px; padding: 0; }
@@ -995,3 +997,6 @@ input[type="checkbox"]:not(.switch), input[type="radio"] { width: 20px; height: 
 .share-kinds .report-kind { flex-direction: column; text-align: center; justify-content: center; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
 @media (min-width: 700px) { .share-kinds { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 #swu-doc-field[hidden] { display: none; }
+.closed-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; font-size: 18px; }
+.closed-screen .panel { max-width: 460px; }
+.home-paused { margin: 0 0 12px; padding: 14px 16px; font-size: 16px; }

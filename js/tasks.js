@@ -7,7 +7,7 @@
 // un'operazione tecnica). RLS impedisce di toccare un task preso da qualcun altro (vedi
 // 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel vincolo, non lo sostituiscono.
 
-import { helpLinkHtml, popupShell, showGoodPracticesModal, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup } from './core.js?v=20261125125719';
+import { helpLinkHtml, popupShell, showGoodPracticesModal, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup, errorText } from './core.js?v=20261125143357';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -472,8 +472,16 @@ async function uploadCorrectedFile(task, file) {
   if (!orig) { alert('Original document not found.'); return; }
   const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
   const draftPath = `draft-${task.document_id}-${task.id}-${Date.now()}.${ext}`;
-  await withStatus(sb.storage.from(BUCKET).upload(draftPath, file, { upsert: true }), 'Uploading corrected file...');
+  await withStatus(sb.storage.from(BUCKET).upload(draftPath, file), 'Uploading corrected file...');
 
+  // save_task_draft (170) makes the draft, or gives it the new file, and checks that the task is one's own. Until 170 has
+  // been run it is not there: the old direct change.
+  try {
+    await withStatus(sb.rpc('save_task_draft', { p_task_id: task.id, p_path: draftPath }), 'Saving...');
+    return;
+  } catch (e) {
+    if (e.code !== 'PGRST202') throw e;
+  }
   const existing = await withStatus(sb.from('documents').select('document_id,draft_inp_path').eq('source_task_id', task.id));
   if (existing.length) {
     const old = existing[0];
@@ -539,7 +547,7 @@ function renderMineActiveList(rows, candidateByTaskId) {
     card.querySelector('.task-mine-upload-input')?.addEventListener('change', async e => {
       const file = e.target.files[0];
       if (!file) return;
-      await uploadCorrectedFile(t, file);
+      try { await uploadCorrectedFile(t, file); } catch (err) { alert(errorText(err)); }
       await renderTasksView(document.getElementById('main'));
     });
     card.querySelector('.task-mine-submit')?.addEventListener('click', async () => {

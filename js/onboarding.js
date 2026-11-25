@@ -5,9 +5,9 @@
 // Since 2026-11-23 (Owner's request) Home starts with the Word of Life of the month, as the landing page does, and with
 // "Continue" tiles: the last document opened on this device, and the formation path being read.
 
-import { sb, State, esc } from './core.js?v=20261125125719';
-import { openReadingView } from './docdetail.js?v=20261125125719';
-import { lastBookBookmark } from './books.js?v=20261125125719';
+import { sb, State, esc } from './core.js?v=20261125143357';
+import { openReadingView } from './docdetail.js?v=20261125143357';
+import { lastBookBookmark } from './books.js?v=20261125143357';
 
 // The Urdu names are the ones of the Urdu guides (Documentazione/guide-help/ur1.mjs, ur2.mjs, migration 119): Boards,
 // Formation Paths and Help have one there; the others are named in Latin letters there too, so they stand alone
@@ -110,9 +110,10 @@ function continueTileHtml(attrs, what, title) {
 export function renderOnboardingView(main) {
   main.innerHTML = `
     <div class="start-home">
+      ${State.paused ? '<p class="panel home-paused">Your work in DUA is paused at the moment. You can read as before, and write to us in Share with us.</p>' : ''}
       <div id="home-top" class="start-tiles" style="margin-bottom:10px;"></div>
       <div class="start-tiles">
-        ${HOME_TILES.filter(([tab]) => tab !== 'jointeam' || State.currentRole === 'user').map(([tab, en, ur]) => homeTileHtml(`data-start-tab="${tab}"`, tab, en, ur)).join('')}
+        ${HOME_TILES.filter(([tab]) => tab !== 'jointeam' || (State.currentRole === 'user' && !State.paused)).map(([tab, en, ur]) => homeTileHtml(`data-start-tab="${tab}"`, tab, en, ur)).join('')}
         ${State.currentRole === 'operator' ? `<button type="button" class="home-tile home-work" data-start-tab="work">${navIcon('work')}<span class="home-word-text"><span class="home-tile-en">My work</span><span class="hint" id="home-work-note"></span></span>${CHEVRON}</button>` : ''}
       </div>
     </div>`;
