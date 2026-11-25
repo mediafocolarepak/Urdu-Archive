@@ -10,7 +10,7 @@ import { quiet,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, DRIVE_AUDIO_PREFIX, mountAudioPlayer, eraseMyAudioFiles,
   textDir, readerChoices, confirmPopup, promptPopup
-} from './core.js?v=20261125122603';
+} from './core.js?v=20261125125719';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved ✓' : '☆ Save'; }
 
@@ -181,7 +181,7 @@ function openDocTextPopup(doc, text) {
       <textarea id="doc-text-popup-body" readonly dir="${textDir(text.body, doc.language)}" style="width:100%;min-height:50vh;font-size:14px;line-height:1.8;">${esc(text.body)}</textarea>
       <div class="btn-row" style="justify-content:flex-end;margin-top:8px;">
         <button class="btn secondary" id="doc-text-popup-copy">Copy</button>
-        <button class="btn secondary" id="doc-text-popup-report">Report a problem</button>
+        <button class="btn secondary" id="doc-text-popup-report">${State.currentRole === 'user' || quiet() ? 'Something to say about this text?' : 'Report a problem'}</button>
         <button class="btn" id="doc-text-popup-close">Close</button>
       </div>
       <p class="hint" style="margin-top:8px;">If you find a mistake in a paragraph of the text, please select and copy the paragraph and paste it in the message of your report.</p>
