@@ -8,7 +8,7 @@
 
 import {
   sb, State, esc, withStatus, isAdmin, isDeptMember, isDeptLead, labelOf, optionsHtml, logEntriesHtml, confirmPopup, promptPopup
-} from './core.js?v=20261125101955';
+} from './core.js?v=20261125104645';
 
 const STANDING_BADGE = {
   active: '',
@@ -72,7 +72,7 @@ export async function renderPeopleSection(container) {
 
   container.innerHTML = `
     <div class="panel">
-      <h2>People <span class="count-badge">${rows.length}</span> <span class="hint">— GOVERNANCE.md §6.2</span></h2>
+      <h2>People <span class="count-badge">${rows.length}</span> </h2>
       <div class="field-grid">
         <div class="field"><label>Search</label><input id="people-search" placeholder="Name or email..." value="${esc(State.peopleFilter.search)}"></div>
         <div class="field"><label>Standing</label>

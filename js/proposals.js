@@ -8,7 +8,7 @@ import {
   titleOverlapScore, ACCESS_LEVELS, readPdfPageCountFromBlob, getDriveAccessToken, uploadPdfToGDrive,
   AUDIO_BUCKET, AUDIO_FORMATS, audioFileProblem, audioDurationOf, HIDDEN_DOC_STATUSES, isMediaLinkOk, videoLinkHtml, mountAudioPlayer,
   helpLinkHtml, textDir, confirmPopup, promptPopup
-} from './core.js?v=20261125101955';
+} from './core.js?v=20261125104645';
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // the Supabase Free plan's limit per file
 const FORMATS = [['DOC', 'Text or PDF'], ['AUD', 'Audio'], ['VID', 'Video']];
@@ -19,6 +19,9 @@ const STATUS_LABELS = {
   published: 'Published',
   rejected: 'Rejected',
 };
+// The same colours of state as in Tasks, with a sign and a word.
+const STATUS_CLASS = { draft: 'st-grey', submitted: 'st-violet', to_correct: 'st-red', published: 'st-green', rejected: 'st-grey' };
+const STATUS_SIGN = { draft: '&#9998;', submitted: '&#8987;', to_correct: '&#8617;', published: '&#10003;', rejected: '&#10005;' };
 const EVENT_LABELS = {
   created: 'Created', submitted: 'Sent for review', resubmitted: 'Sent again after correcting',
   withdrawn: 'Taken back', discarded: 'Discarded', reminder: 'Reminder sent', claimed: 'A reviewer took it',
@@ -118,13 +121,14 @@ export async function renderProposalsView(main) {
 function mineStateHtml(r) {
   if (r.status === 'submitted') {
     const wait = r.days_waiting === 0 ? 'since today' : `for ${r.days_waiting} day${r.days_waiting === 1 ? '' : 's'}`;
-    return `Awaiting review ${wait}${r.in_review ? ' &middot; a reviewer is working on it' : ''}`;
+    return `<span class="st st-violet">&#8987; Awaiting review</span> ${wait}${r.in_review ? ' &middot; a reviewer is working on it' : ''}`;
   }
-  return esc(STATUS_LABELS[r.status] || r.status);
+  return `<span class="st ${STATUS_CLASS[r.status] || 'st-grey'}">${STATUS_SIGN[r.status] || ''} ${esc(STATUS_LABELS[r.status] || r.status)}</span>`;
 }
 
 async function renderMine(main, body) {
-  const rows = await withStatus(sb.rpc('get_my_submissions'));
+  // What must be corrected comes first.
+  const rows = (await withStatus(sb.rpc('get_my_submissions'))).slice().sort((a, b) => (b.status === 'to_correct') - (a.status === 'to_correct'));
   body.innerHTML = `
     <div class="panel">
       <div class="btn-row" style="margin-top:0;"><button class="btn" id="prop-new">+ New proposal</button></div>
@@ -345,7 +349,17 @@ async function renderForm(main, id, prefill) {
     renderWorkChoice();
     wireSearch();
   }
-  document.getElementById('pf-back').addEventListener('click', () => renderProposalsView(main));
+  // Whatever is written is not lost by leaving: the app asks first (State.unsaved, app.js).
+  State.unsaved = '';
+  const changed = () => { State.unsaved = 'This proposal has changes that are not saved. Leave it?'; };
+  const formPanel = main.querySelector('.panel');
+  formPanel.addEventListener('input', e => { if (e.target.id !== 'pf-search') changed(); });
+  formPanel.addEventListener('change', e => { if (e.target.id !== 'pf-search') changed(); });
+  document.getElementById('pf-back').addEventListener('click', async () => {
+    if (State.unsaved && !await confirmPopup(State.unsaved, { confirmLabel: 'Leave without saving', cancelLabel: 'Stay here', danger: true })) return;
+    State.unsaved = '';
+    renderProposalsView(main);
+  });
   document.getElementById('pf-add-version').addEventListener('click', () => {
     collectForm();
     form.versions.push(emptyVersion(''));
@@ -529,6 +543,7 @@ async function persist() {
     })),
   };
   form.id = await withStatus(sb.rpc('save_submission', { p_id: form.id, p_payload: payload }), 'Saving...');
+  State.unsaved = '';
   const saved = await withStatus(sb.rpc('get_submission_detail', { p_id: form.id }));
   form.versions = saved.versions.map(v => ({ ...v, body: v.body || '', file: null, audioFile: null }));
   form.work_id = saved.work_id;
