@@ -7,7 +7,7 @@
 // un'operazione tecnica). RLS impedisce di toccare un task preso da qualcun altro (vedi
 // 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel vincolo, non lo sostituiscono.
 
-import { helpLinkHtml, popupShell, showGoodPracticesModal, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup } from './core.js?v=20261125104645';
+import { helpLinkHtml, popupShell, showGoodPracticesModal, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup } from './core.js?v=20261125122603';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -91,6 +91,7 @@ export async function renderTasksView(main) {
   // A "Create task" from Messages, or "redo" from Team overview, stashes a prefill and jumps
   // here (see chat.js's startTaskFromMessage) - always land on Store, where the New task
   // popup lives, so the prefill actually gets seen.
+  if (State.tasksView) { currentView = State.tasksView; State.tasksView = null; }
   if (State.taskPrefill) currentView = 'store';
 
   const tabs = [{ id: 'store', label: 'Tasks Store' }, { id: 'mine', label: 'My Tasks' }];
@@ -952,7 +953,7 @@ function openAddFundsPopup() {
 function showTaskToast(title, message, onView) {
   document.querySelectorAll('.toast-notification').forEach(t => t.remove());
   const toast = document.createElement('div');
-  toast.className = 'toast-notification';
+  toast.className = 'toast-notification work-toast';
   toast.innerHTML = `
     <div class="toast-title">${esc(title)}</div>
     <div class="toast-body">${esc(message)}</div>

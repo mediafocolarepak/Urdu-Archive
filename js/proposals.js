@@ -8,7 +8,7 @@ import {
   titleOverlapScore, ACCESS_LEVELS, readPdfPageCountFromBlob, getDriveAccessToken, uploadPdfToGDrive,
   AUDIO_BUCKET, AUDIO_FORMATS, audioFileProblem, audioDurationOf, HIDDEN_DOC_STATUSES, isMediaLinkOk, videoLinkHtml, mountAudioPlayer,
   helpLinkHtml, textDir, confirmPopup, promptPopup
-} from './core.js?v=20261125104645';
+} from './core.js?v=20261125122603';
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // the Supabase Free plan's limit per file
 const FORMATS = [['DOC', 'Text or PDF'], ['AUD', 'Audio'], ['VID', 'Video']];
@@ -92,6 +92,15 @@ export async function renderProposalsView(main) {
     await renderForm(main, null, prefill);
     return;
   }
+  // Coming from My work: one proposal to correct, or one of the lists.
+  if (State.proposalOpen) {
+    const id = State.proposalOpen;
+    State.proposalOpen = null;
+    currentTab = 'mine';
+    await renderForm(main, id);
+    return;
+  }
+  if (State.proposalsTab) { currentTab = State.proposalsTab; State.proposalsTab = null; }
   const canReview = await withStatus(sb.rpc('can_review_submissions'));
   const tabs = [['mine', 'My proposals'], ['month', 'Word of Life']];
   if (canReview) tabs.push(['queue', 'To review']);
@@ -803,7 +812,7 @@ export async function initProposalNotifications(navigate) {
   if (c.to_correct) parts.push(`${c.to_correct} of yours to correct`);
   document.querySelectorAll('.toast-notification').forEach(t => t.remove());
   const toast = document.createElement('div');
-  toast.className = 'toast-notification';
+  toast.className = 'toast-notification work-toast';
   toast.innerHTML = `
     <div class="toast-title">Proposals</div>
     <div class="toast-body">${esc(parts.join('; '))}.</div>

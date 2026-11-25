@@ -11,7 +11,7 @@
 //   qual:<CODE>                     holds that qualification
 //   board_editor                    looks after at least one board
 
-import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20261125104645';
+import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20261125122603';
 
 const SECTIONS = [
   ['use', { en: 'Use the archive', it: 'Usare l\'archivio', ur: 'آرکائیو کا استعمال' }],
@@ -129,7 +129,7 @@ function renderList(main, rows, quals) {
   }).join('');
   main.innerHTML = `
     <div class="panel help-panel">
-      ${State.currentRole === 'user' ? '<div class="btn-row start-back-row"><button type="button" class="btn secondary back-btn" id="help-to-start">&lsaquo; Back</button></div>' : ''}
+      ${['user', 'operator'].includes(State.currentRole) ? '<div class="btn-row start-back-row"><button type="button" class="btn secondary back-btn" id="help-to-start">&lsaquo; Back</button></div>' : ''}
       <div class="help-head"><h2>${esc(ui().help)}</h2>${langSwitchHtml(languages)}</div>
       ${groups || `<div class="empty-msg">${esc(ui().empty)}</div>`}
     </div>`;

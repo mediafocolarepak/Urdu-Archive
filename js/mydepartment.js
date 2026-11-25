@@ -7,10 +7,10 @@ import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
   nameMapForEmails, nameMapForIds, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved,
   helpLinkHtml, confirmPopup, promptPopup, showLoadFailed
-} from './core.js?v=20261125104645';
-import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261125104645';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261125104645';
-import { renderApplicationsView } from './collaboration.js?v=20261125104645';
+} from './core.js?v=20261125122603';
+import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261125122603';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261125122603';
+import { renderApplicationsView } from './collaboration.js?v=20261125122603';
 
 // Each department's page opens its own guide from the "?" beside the title.
 const DEPT_GUIDES = { HR: 'dept-hr', COORD: 'dept-coordination', FORM: 'dept-formation', RF: 'dept-reward', COMM: 'dept-communication', ARCHIVE: 'dept-archive' };
@@ -1253,7 +1253,7 @@ async function markDeptSeen(code) {
 function showDeptMessageToast(deptCode, onView) {
   document.querySelectorAll('.toast-notification').forEach(t => t.remove());
   const toast = document.createElement('div');
-  toast.className = 'toast-notification';
+  toast.className = 'toast-notification work-toast';
   toast.innerHTML = `
     <div class="toast-title">New team message</div>
     <div class="toast-body">A new message in the ${esc(deptLabel(deptCode))} channel.</div>

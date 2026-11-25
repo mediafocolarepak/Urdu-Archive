@@ -8,11 +8,11 @@
 // itself, the same pattern as is_board_editor()/document_is_postable() in 71_boards.sql.
 
 import {
-  sb, State, esc, withStatus, canReviewApplications, nameMapForEmails,
+  quiet, sb, State, esc, withStatus, canReviewApplications, nameMapForEmails,
   openBoardPostPopup, likeSafe, DEFAULT_BOARD_FOR_MEMBERSHIP, BOARD_MEDIA_BUCKET, ackBoardPolicy,
   canWrite, isMediaLinkOk,
   helpLinkHtml, promptPopup
-} from './core.js?v=20261125104645';
+} from './core.js?v=20261125122603';
 
 // Shown once, before a person's first post (84_boards_moderation.sql) - keep this in sync with
 // the Help guide "boards" (116_help_redesign.sql), which says the same thing in its own section.
@@ -98,7 +98,7 @@ export async function renderBoardsView(main) {
         ${shownBoards.map(([code, label]) => `<button class="board-pill${code === active ? ' active' : ''}" data-board="${esc(code)}">${esc(label)}</button>`).join('')}
       </div>
       <div class="field" style="max-width:320px;"><input id="board-search" placeholder="Search this board..." value="${esc(State.boardsSearch)}"></div>
-      ${State.myBoards.has(active) ? '<div id="board-pending-queue" style="margin:10px 0;"></div>' : ''}
+      ${looksAfter(active) ? '<div id="board-pending-queue" style="margin:10px 0;"></div>' : ''}
       <div id="board-posts"></div>
       ${canReviewApplications() ? '<div id="board-editors-panel" style="margin-top:24px;"></div>' : ''}
     </div>`;
@@ -119,11 +119,11 @@ export async function renderBoardsView(main) {
       && (!q || p.title.toLowerCase().includes(q) || (p.body || '').toLowerCase().includes(q)));
   }
 
-  if (State.myBoards.has(active)) {
+  if (looksAfter(active)) {
     renderPendingQueue(document.getElementById('board-pending-queue'), active, posts.filter(p => p.board_code === active && p.status === 'pending'), main);
   }
   renderPostsForBoard(active, postsForActiveBoard(), docById, textById, myEmail, main);
-  renderArchiveRequests(document.getElementById('board-archive-requests'), main);
+  if (!quiet()) renderArchiveRequests(document.getElementById('board-archive-requests'), main);
 
   if (canReviewApplications()) {
     renderEditorsPanel(document.getElementById('board-editors-panel'), allBoards, active);
@@ -273,13 +273,16 @@ async function renderPostsForBoard(boardCode, posts, docById, textById, myEmail,
   wirePostActions(posts, docById, myEmail, main);
 }
 
+// Looking after a board is work: an Operator does it from My work, and in Home reads and writes like everyone (core.js quiet()).
+function looksAfter(code) { return State.myBoards.has(code) && !quiet(); }
+
 const STATUS_BADGE = {
   pending: '<span class="hint" style="color:#b8860b;">Pending review</span>',
   rejected: '<span class="hint" style="color:var(--danger);">Rejected</span>',
 };
 
 function renderPostCard(p, doc, text, myEmail, iRead, readCount, alreadyPromoted, alreadyRequested) {
-  const isModerator = State.myBoards.has(p.board_code);
+  const isModerator = looksAfter(p.board_code);
   const isMine = p.posted_by_email === myEmail;
   // Edit: the author (any role, own text) or a moderator. Delete stays narrower - unchanged
   // from before this migration - because a plain User's own post isn't theirs to remove once

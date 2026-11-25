@@ -2,7 +2,7 @@
 // PROJECT_HANDOFF_v15.md). Personal and private: each user only ever sees their own favorites,
 // enforced by RLS on user_favorites, not by anything in this module.
 
-import { sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup, openFormationPostPopup, canReviewApplications, canWrite, openTranslatePopup, docCardHtml } from './core.js?v=20261125104645';
+import { quiet, sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup, openFormationPostPopup, canReviewApplications, canWrite, openTranslatePopup, docCardHtml } from './core.js?v=20261125122603';
 
 // Since 2026-11-23 (Owner's request) the saved documents are the same large cards as the Library: a tap opens the
 // document's card. Remove is small, under each one. The tokens of appreciation are in My Profile.
@@ -15,7 +15,7 @@ export async function renderMySpaceView(main) {
     <div class="panel">
       <h2>My Space <span class="count-badge">${rows.length}</span></h2>
       <p class="hint" style="margin:-4px 0 12px;">The documents you saved with &#9734; Save.</p>
-      ${canWrite() ? '<div class="btn-row" style="margin:0 0 8px;"><button class="btn secondary" id="myspace-translate">Translate a text</button></div>' : ''}
+      ${canWrite() && !quiet() ? '<div class="btn-row" style="margin:0 0 8px;"><button class="btn secondary" id="myspace-translate">Translate a text</button></div>' : ''}
       <div id="myspace-cards"></div>
     </div>`;
   document.getElementById('myspace-translate')?.addEventListener('click', () => openTranslatePopup());
@@ -26,15 +26,15 @@ export async function renderMySpaceView(main) {
     const doc = r.documents;
     if (!doc) return '';
     docsById[doc.document_id] = doc;
-    const canAddToBoard = State.myBoards.size > 0 && isDocPostable(doc);
-    const canAddToPath = (State.isFormatore || canReviewApplications()) && isDocPostable(doc);
+    const canAddToBoard = State.myBoards.size > 0 && !quiet() && isDocPostable(doc);
+    const canAddToPath = (State.isFormatore || canReviewApplications()) && !quiet() && isDocPostable(doc);
     return docCardHtml(doc, { extra: `
       <div class="btn-row doc-card-tools">
         <button class="btn secondary" data-remove="${esc(doc.document_id)}">Remove</button>
         ${canAddToBoard ? `<button class="btn secondary" data-addboard="${esc(doc.document_id)}">+ Board</button>` : ''}
         ${canAddToPath ? `<button class="btn secondary" data-addpath="${esc(doc.document_id)}">+ Path</button>` : ''}
       </div>` });
-  }).join('') || `<div class="empty-msg">Nothing saved yet. Open a document in the ${State.currentRole === 'user' ? 'Library' : 'Dashboard'} and press &#9734; Save.</div>`;
+  }).join('') || `<div class="empty-msg">Nothing saved yet. Open a document in the ${['user', 'operator'].includes(State.currentRole) ? 'Library' : 'Dashboard'} and press &#9734; Save.</div>`;
 
   // A tap on the card opens the document itself, not the list (on a phone its card comes straight up).
   cardsBox.querySelectorAll('.doc-card-open').forEach(btn => {

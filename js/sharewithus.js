@@ -7,7 +7,7 @@
 // dispatched in app.js exactly like chat.js already splits admin/user - see renderTab('chat')
 // there for the precedent this follows.
 
-import { sb, State, esc, withStatus, nameMapForEmails, isAdmin, isAnyDeptLead, canRecordAudio, mountVoiceRecorder, uploadVoice } from './core.js?v=20261125104645';
+import { sb, State, esc, labelOf, withStatus, nameMapForEmails, isAdmin, isAnyDeptLead, canRecordAudio, mountVoiceRecorder, uploadVoice } from './core.js?v=20261125122603';
 
 function formatDateTime(iso) { return esc((iso || '').slice(0, 16).replace('T', ' ')); }
 
@@ -16,97 +16,132 @@ function formatDateTime(iso) { return esc((iso || '').slice(0, 16).replace('T', 
 // core.js mountVoiceRecorder (shared with Report a problem since 2026-11-23); not offered where the browser can't record.
 const SHARE_AUDIO_BUCKET = 'share-with-us-audio';
 
-// ---------- Compose view (anyone without a lead/admin role) ----------
-// Since 2026-11-23 (Owner's request): speaking comes first, with a large Record button, writing second; after sending,
-// a large "Thank you" with the way back to Home.
+// ---------- The one door, for Users and Operators (Owner's decision, 2026-11-25) ----------
+// "Share with us" rather than "Report a problem", because one can also speak. Inside, what it is about: an experience goes to
+// the leads of the departments and the Admins (share_with_us_messages, as before); the others are the reports of before
+// (chat_messages), read by Coordinators and Admins, and the ideas by the leads too (166_ideas_for_leads.sql). Speaking comes
+// first, writing second; after sending, a large "Thank you". The answers of both kinds are in one list.
+const SHARE_KINDS = [
+  ['EXPERIENCE', '&#128155;', 'My experience with the App'],
+  ['SUGGESTION', '&#128161;', 'How to improve the app, an idea'],
+  ['REVISION', '&#128214;', 'A mistake in a text'],
+  ['BUG', '&#9888;&#65039;', "Something doesn't work"],
+];
+const kindLabel = code => (SHARE_KINDS.find(k => k[0] === code) || [])[2] || labelOf(State.optionListsByName.report_type || [], code) || code;
+const kindSign = code => (SHARE_KINDS.find(k => k[0] === code) || [])[1] || '&#128172;';
+const REPORT_AUDIO_BUCKET = 'report-audio';
 
 export async function renderShareComposeView(main) {
   const { data: { user } } = await sb.auth.getUser();
   markShareSeen('sharer_' + user.id);
+  localStorage.setItem('chatSeenAt_user_' + user.id, new Date().toISOString());
   const voice = canRecordAudio();
+  // Coming from a document: its number, and the passage copied from its text if there is one.
+  const about = State.shareDocument || '', passage = State.chatMessagePrefill || '';
+  State.shareDocument = null;
+  State.chatMessagePrefill = null;
+  State.shareDoor = false;
+  let kind = passage ? 'REVISION' : '';
   main.innerHTML = `
-    <div class="panel">
+    <div class="panel share-door">
       <h2>Share with us</h2>
-      <p class="hint">Tell us about your experience with the archive, the paths or the community: a feeling, an idea, a difficulty, anything you'd like us to hear. For a technical problem, please use "Report a problem".</p>
+      <label id="swu-kind-label">What would you like to share?</label>
+      <div class="report-kinds share-kinds" role="group" aria-labelledby="swu-kind-label">
+        ${SHARE_KINDS.map(([code, icon, label]) => `<button type="button" class="report-kind" data-kind="${code}" aria-pressed="${code === kind}"><span class="report-kind-icon" aria-hidden="true">${icon}</span>${esc(label)}</button>`).join('')}
+      </div>
+      <p class="hint" id="swu-who"></p>
+      <div class="field" id="swu-doc-field"><label for="swu-doc">Document number <span class="hint">(if it is about a document)</span></label><input id="swu-doc" type="number" min="1" inputmode="numeric" value="${esc(about)}" style="max-width:200px;"></div>
       ${voice ? '<label>Say it</label><div id="swu-voice" class="field"></div>' : ''}
-      <div class="field"><label for="swu-text">${voice ? 'Or write it' : 'Write it'}</label><textarea id="swu-text" dir="auto" rows="4" placeholder="Share what's on your mind..."></textarea></div>
+      <div class="field"><label for="swu-text">${voice ? 'Or write it' : 'Write it'}</label><textarea id="swu-text" dir="auto" rows="4" placeholder="In the language you prefer">${esc(passage)}</textarea></div>
       <div class="btn-row"><button class="btn big-btn" id="swu-send">Send</button></div>
-      <h3 style="margin-top:20px;">What you shared</h3>
+      <h3 style="margin-top:20px;">What you shared, and our answers</h3>
       <div class="chat-thread" id="swu-thread"></div>
     </div>`;
   const recorder = voice ? mountVoiceRecorder(document.getElementById('swu-voice')) : null;
-  await refreshOwnThread();
+  const showKind = () => {
+    main.querySelectorAll('.report-kind').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.kind === kind)));
+    document.getElementById('swu-doc-field').hidden = kind === 'EXPERIENCE' || (!kind && !about);
+    document.getElementById('swu-who').textContent = !kind ? '' : kind === 'EXPERIENCE' ? 'The leads of the departments and the Admins will read or hear it.'
+      : kind === 'SUGGESTION' ? 'The Coordinators, the leads of the departments and the Admins will read or hear it.' : 'The Coordinators and the Admins will read or hear it.';
+  };
+  main.querySelectorAll('.report-kind').forEach(b => b.addEventListener('click', () => { kind = b.dataset.kind; showKind(); }));
+  showKind();
+  refreshOwnThread(user).catch(e => console.warn('Share with us:', e));
 
   document.getElementById('swu-send').addEventListener('click', async () => {
     const body = document.getElementById('swu-text').value.trim();
     const audio = recorder && recorder.audio;
+    if (!kind) { alert('Please choose first what you would like to share.'); return; }
     if (!body && !audio) { alert(voice ? 'Please record or write something first.' : 'Please write something first.'); return; }
     let audio_path = null, audio_mime_type = null;
     if (audio) {
-      try { ({ path: audio_path, mimeType: audio_mime_type } = await uploadVoice(SHARE_AUDIO_BUCKET, user.id, audio)); }
-      catch (err) { alert('Could not send the voice message: ' + err.message); return; }
+      try { ({ path: audio_path, mimeType: audio_mime_type } = await uploadVoice(kind === 'EXPERIENCE' ? SHARE_AUDIO_BUCKET : REPORT_AUDIO_BUCKET, user.id, audio)); }
+      catch (err) { alert('The voice message could not be sent. Please write your message instead. (' + err.message + ')'); return; }
     }
-    await withStatus(sb.from('share_with_us_messages').insert({
-      user_id: user.id, user_email: user.email, body: body || null, audio_path, audio_mime_type,
-    }), 'Sending...');
+    if (kind === 'EXPERIENCE') {
+      await withStatus(sb.from('share_with_us_messages').insert({ user_id: user.id, user_email: user.email, body: body || null, audio_path, audio_mime_type }), 'Sending...');
+    } else {
+      const doc = parseInt(document.getElementById('swu-doc').value, 10);
+      await withStatus(sb.from('chat_messages').insert({
+        user_id: user.id, user_email: user.email, report_type: kind, document_id: Number.isFinite(doc) ? doc : null, message_text: body || null,
+        ...(audio_path ? { audio_path, audio_mime_type } : {}),
+      }), 'Sending...');
+    }
     main.innerHTML = `
       <div class="panel thank-you">
         <div class="thank-you-mark" aria-hidden="true">&#10004;</div>
         <h2>Thank you</h2>
-        <p>What you shared has reached the team. An answer, if there is one, will appear under "What you shared".</p>
+        <p>What you shared has reached the team. Our answer, if there is one, will appear under "What you shared, and our answers".</p>
         <div class="btn-row" style="justify-content:center;">
           <button class="btn big-btn" id="ty-home">Back to Home</button>
           <button class="btn secondary" id="ty-again">See what I shared</button>
         </div>
       </div>`;
-    document.getElementById('ty-home').addEventListener('click', () => window.__renderTab(State.currentRole === 'user' ? 'onboarding' : 'dashboard'));
+    document.getElementById('ty-home').addEventListener('click', () => window.__renderTab('onboarding', 'home'));
     document.getElementById('ty-again').addEventListener('click', () => renderShareComposeView(main));
   });
 }
 
-async function refreshOwnThread() {
-  const box = document.getElementById('swu-thread');
-  if (!box) return;
-  // No explicit .eq('user_id', ...) - RLS already limits a non-lead/admin caller to their own
-  // rows (same convention chat.js's renderChatView uses for chat_messages).
-  const messages = await withStatus(sb.from('share_with_us_messages').select('*').order('created_at'));
-  if (!messages.length) { box.innerHTML = '<div class="empty-msg">Nothing shared yet.</div>'; return; }
+// What this person shared, of both kinds, the newest first, each with its answers. Asked for by person: a lead may read more.
+async function refreshOwnThread(user) {
+  const [messages, reports] = await Promise.all([
+    withStatus(sb.from('share_with_us_messages').select('*').eq('user_id', user.id).order('created_at', { ascending: false })),
+    withStatus(sb.from('chat_messages').select('*').eq('user_id', user.id).order('created_at', { ascending: false })),
+  ]);
   const ids = messages.map(m => m.id);
-  const [reactions, replies] = await Promise.all([
+  const [reactions, replies] = ids.length ? await Promise.all([
     withStatus(sb.from('share_with_us_reactions').select('*').in('message_id', ids)),
     withStatus(sb.from('share_with_us_replies').select('*').in('message_id', ids).order('created_at')),
+  ]) : [[], []];
+  const [nameMap, shareAudio, reportAudio] = await Promise.all([
+    nameMapForEmails([...reactions.map(r => r.user_email), ...replies.map(r => r.user_email)]), signedAudioUrls(messages), signedAudioUrls(reports, REPORT_AUDIO_BUCKET),
   ]);
-  const nameMap = await nameMapForEmails([...reactions.map(r => r.user_email), ...replies.map(r => r.user_email)]);
-  const audioUrlByPath = await signedAudioUrls(messages);
-
-  box.innerHTML = messages.map(m => {
-    const myReactions = reactions.filter(r => r.message_id === m.id);
-    const myReplies = replies.filter(r => r.message_id === m.id);
-    const thanks = myReactions.length ? `<div class="chat-meta" style="margin-top:4px;">&#128591; Thanked by ${myReactions.map(r => esc(nameMap[r.user_email] || r.user_email)).join(', ')}</div>` : '';
-    const replyBubbles = myReplies.map(r => `
-      <div class="chat-bubble from-other">
-        <div class="chat-meta">${esc(nameMap[r.user_email] || r.user_email)} &middot; ${formatDateTime(r.created_at)}</div>
-        ${esc(r.body)}
-      </div>`).join('');
+  const box = document.getElementById('swu-thread');
+  if (!box) return;
+  const all = [...messages.map(m => ({ kind: 'EXPERIENCE', at: m.created_at, m })), ...reports.map(m => ({ kind: m.report_type, at: m.created_at, m }))].sort((a, b) => (a.at < b.at ? 1 : -1));
+  if (!all.length) { box.innerHTML = '<div class="empty-msg">Nothing shared yet.</div>'; return; }
+  box.innerHTML = all.map(({ kind, m }) => {
+    const mine = kind === 'EXPERIENCE';
+    const thanks = mine ? reactions.filter(r => r.message_id === m.id) : [];
+    const answers = mine ? replies.filter(r => r.message_id === m.id).map(r => [nameMap[r.user_email], r.created_at, r.body]) : m.reply_text ? [['The team', m.replied_at, m.reply_text]] : [];
     return `
       <div class="chat-bubble from-me">
-        <div class="chat-meta">${formatDateTime(m.created_at)}</div>
-        ${m.body ? `<div dir="auto">${esc(m.body)}</div>` : ''}
-        ${audioPlayerHtml(m, audioUrlByPath)}
-        ${thanks}
+        <div class="chat-meta"><span aria-hidden="true">${kindSign(kind)}</span> ${esc(kindLabel(kind))}${m.document_id ? ` &middot; #${esc(m.document_id)}` : ''} &middot; ${formatDateTime(m.created_at)}</div>
+        ${m.body || m.message_text ? `<div dir="auto" style="white-space:pre-wrap;">${esc(m.body || m.message_text)}</div>` : ''}
+        ${audioPlayerHtml(m, mine ? shareAudio : reportAudio)}
+        ${thanks.length ? `<div class="chat-meta" style="margin-top:4px;">&#128591; Thanked by ${thanks.map(r => esc(nameMap[r.user_email])).join(', ')}</div>` : ''}
       </div>
-      ${replyBubbles}`;
+      ${answers.map(([who, at, text]) => `<div class="chat-bubble from-other"><div class="chat-meta">${esc(who)} &middot; ${formatDateTime(at)}</div><div dir="auto" style="white-space:pre-wrap;">${esc(text)}</div></div>`).join('')}`;
   }).join('');
-  box.scrollTop = box.scrollHeight;
 }
 
 // Shared by both views: batch-fetch signed URLs (the bucket is private) for every message that
 // has a voice recording - same createSignedUrls pattern mydepartment.js's Team channel already
 // uses for its own (also private) images.
-async function signedAudioUrls(messages) {
+async function signedAudioUrls(messages, bucket = SHARE_AUDIO_BUCKET) {
   const paths = messages.filter(m => m.audio_path).map(m => m.audio_path);
   if (!paths.length) return {};
-  const { data } = await sb.storage.from(SHARE_AUDIO_BUCKET).createSignedUrls(paths, 3600);
+  const { data } = await sb.storage.from(bucket).createSignedUrls(paths, 3600);
   const map = {};
   (data || []).forEach(d => { if (d && d.signedUrl) map[d.path] = d.signedUrl; });
   return map;
@@ -127,8 +162,25 @@ export async function renderShareInboxView(main) {
       <h2>Share with us</h2>
       <p class="hint">What people have shared - not technical reports, just experiences, feelings and ideas. Every lead and Admin sees every share; thank one, or write back, as many of you as want to.</p>
       <div id="swu-inbox"></div>
-    </div>`;
+    </div>
+    <div id="swu-ideas"></div>`;
   await refreshInbox(user);
+  refreshIdeas(document.getElementById('swu-ideas')).catch(e => console.warn('Ideas:', e));
+}
+
+// The ideas to improve the app, which the leads read too (166_ideas_for_leads.sql). Coordinators and Admins answer from Messages.
+async function refreshIdeas(box) {
+  const { data: { user } } = await sb.auth.getUser();
+  const rows = (await withStatus(sb.from('chat_messages').select('*').eq('report_type', 'SUGGESTION').eq('dismissed', false).order('created_at', { ascending: false }).limit(100))).filter(r => r.user_id !== user.id || isAdmin());
+  if (!rows.length || !box || !box.isConnected) return;
+  const [names, audio] = await Promise.all([nameMapForEmails(rows.map(r => r.user_email)), signedAudioUrls(rows, REPORT_AUDIO_BUCKET)]);
+  box.innerHTML = `<div class="panel"><h2>Ideas to improve the app <span class="count-badge">${rows.length}</span></h2>
+    <p class="hint">The Coordinators and the Admins answer them.</p>
+    ${rows.map(r => `<div class="panel" style="margin-bottom:12px;">
+      <div class="chat-meta">${esc(names[r.user_email] || '')} &middot; ${formatDateTime(r.created_at)}${r.document_id ? ` &middot; #${esc(r.document_id)}` : ''}</div>
+      ${r.message_text ? `<div dir="auto" style="margin:6px 0;white-space:pre-wrap;">${esc(r.message_text)}</div>` : ''}${audioPlayerHtml(r, audio)}
+      ${r.reply_text ? `<div class="chat-bubble from-other"><div class="chat-meta">Answered &middot; ${formatDateTime(r.replied_at)}</div><div dir="auto">${esc(r.reply_text)}</div></div>` : ''}
+    </div>`).join('')}</div>`;
 }
 
 async function refreshInbox(user) {
@@ -203,7 +255,7 @@ function markShareSeen(who) { localStorage.setItem(seenKey(who), new Date().toIS
 function showShareToast(title, message, onView) {
   document.querySelectorAll('.toast-notification').forEach(t => t.remove());
   const toast = document.createElement('div');
-  toast.className = 'toast-notification';
+  toast.className = 'toast-notification' + (isAnyDeptLead() || isAdmin() ? ' work-toast' : '');
   toast.innerHTML = `
     <div class="toast-title">${esc(title)}</div>
     <div class="toast-body">${esc(message)}</div>
@@ -240,7 +292,7 @@ export async function initShareNotifications(navigateToShare) {
     const who = 'sharer_' + user.id;
     const seenAt = getSeenAt(who);
     const [{ data: myMessages }, { data: newReplies }] = await Promise.all([
-      sb.from('share_with_us_messages').select('id'),
+      sb.from('share_with_us_messages').select('id').eq('user_id', user.id),
       sb.from('share_with_us_replies').select('message_id').gt('created_at', seenAt),
     ]);
     const myIds = new Set((myMessages || []).map(m => m.id));

@@ -1,5 +1,5 @@
-import { sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml, docCardHtml } from './core.js?v=20261125104645';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261125104645';
+import { quiet, sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml, docCardHtml } from './core.js?v=20261125122603';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261125122603';
 
 // The "From the boards" section (84_boards_moderation.sql) was removed on the Owner's request, 2026-11-18: the
 // Library shows only the archive; board posts are in the Boards tab.
@@ -25,7 +25,8 @@ export async function renderDashboardView(main) {
   const isUser = State.currentRole === 'user' || State.currentRole === 'operator';
   // Plain Users see this tab as "Library" (owner's request 2026-09-21) - Operator and everyone
   // else keeps "Dashboard", same layout either way (see isUser above).
-  const heading = State.currentRole === 'user' ? 'Library' : 'Dashboard';
+  // Operators too since 2026-11-25: the Library of Home to read, the Library of My work to work on.
+  const heading = isUser ? 'Library' : 'Dashboard';
 
   // Plain Users (and Operators, see above) land on the archive filtered to Urdu by default
   // (the vast majority of what they consult); applied once per session so a manual change to
@@ -40,7 +41,7 @@ export async function renderDashboardView(main) {
   // language chosen at first; it is not counted as a search the reader made.
   const media = State.dashFilters.withMedia;
   // Main topic and Source are not offered to readers (Owner's request, 2026-11-23); staff keep them.
-  const isReader = State.currentRole === 'user';
+  const isReader = State.currentRole === 'user' || quiet();
   if (isReader) Object.assign(State.dashFilters, { main_topic: '', source: '' });
   main.innerHTML = `
     <div class="panel${isUser ? ' dash-user' : ''}">
@@ -50,7 +51,7 @@ export async function renderDashboardView(main) {
         <input id="dash-search" type="search" enterkeyhint="search" placeholder="A title or a word" value="${esc(State.dashFilters.search)}">
         <button class="btn" id="dash-search-go">&#128269; Search</button>
         ${isAdmin() ? '<button class="btn" id="dash-new">+ New document</button>' : ''}
-        ${canWrite() ? '<button class="btn secondary" id="dash-propose">+ Propose content</button>' : ''}
+        ${canWrite() && !quiet() ? '<button class="btn secondary" id="dash-propose">+ Propose content</button>' : ''}
       </div>
       <div class="btn-row dash-media-choice" role="group" aria-label="What to show">
         <button class="btn ${media ? 'secondary' : ''}" data-media="all" aria-pressed="${!media}">Everything</button>
@@ -67,7 +68,7 @@ export async function renderDashboardView(main) {
         <div class="field"><label>Author</label><select id="f-author">${optionsHtml(State.authors, State.dashFilters.author, true, 'All')}</select></div>
         ${isReader ? '' : `<div class="field"><label>Main topic</label><select id="f-main_topic">${optionsHtml(State.mainTopics, State.dashFilters.main_topic, true, 'All')}</select></div>`}
         ${isUser ? '' : `<div class="field"><label>Workflow status</label><select id="f-status">${optionsHtml(State.statuses, State.dashFilters.workflow_status, true, 'All')}</select></div>`}
-        ${isUser && !canManageReserved() ? '' : `<div class="field"><label>Access level</label><select id="f-access">${optionsHtml(ACCESS_LEVELS, State.dashFilters.access_level, true, 'All')}</select></div>`}
+        ${isReader || (isUser && !canManageReserved()) ? '' : `<div class="field"><label>Access level</label><select id="f-access">${optionsHtml(ACCESS_LEVELS, State.dashFilters.access_level, true, 'All')}</select></div>`}
         <div class="field"><label>Recipient</label><select id="f-recipient">${optionsHtml(State.recipients, State.dashFilters.recipient, true, 'All')}</select></div>
         ${isReader ? '' : `<div class="field"><label>Source</label><select id="f-source">${optionsHtml(State.sources, State.dashFilters.source, true, 'All')}</select></div>`}
         <div class="field"><label>Collection</label><select id="f-collection">${optionsHtml(State.collections, State.dashFilters.collection, true, 'All')}</select></div>

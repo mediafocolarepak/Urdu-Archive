@@ -262,6 +262,7 @@ export const State = {
   categories: [], authors: [], mainTopics: [], recipients: [], langs: [], statuses: [],
   mediaTypes: [], sources: [], collections: [], qualities: [], operators: [],
   currentRole: 'user',
+  place: 'home',  // 'home' or 'work': which of the two places an Operator is in (app.js renderTab)
   myQualifications: new Set(),  // qualification_code set for the signed-in Operator (empty for other roles)
   myFavorites: new Set(),  // document_id set of the signed-in user's own "My Space" saves
   myBoards: new Set(),  // board_code set the signed-in user can post to (all of them for coordinator/admin)
@@ -481,6 +482,9 @@ export function optionsHtml(list, value, allowEmpty, emptyLabel = '') {
 }
 
 export function canWrite() { return State.currentRole === 'operator' || State.currentRole === 'coordinator' || State.currentRole === 'admin'; }
+// Home is the spiritual home, the same for everyone and silent; My work is the one room an Operator has more (Owner's concept,
+// 2026-11-25). In Home an Operator sees what a User sees, without the buttons of the work. Always false for the other roles.
+export function quiet() { return State.currentRole === 'operator' && State.place !== 'work'; }
 export function canDelete() { return State.currentRole === 'admin'; }
 export function isAdmin() { return State.currentRole === 'admin'; }
 export function isCoordinator() { return State.currentRole === 'coordinator'; }
@@ -727,20 +731,17 @@ const AVOID_LIST = [
 
 function repClass(rep) { return rep >= 70 ? 'rep-good' : rep >= 40 ? 'rep-ok' : 'rep-low'; }
 
-// One small button beside the app's name: the credits, and how the good practice is going. A tap opens the good practices.
-function renderStandingWidget(credits, reputation) {
-  const box = document.getElementById('standing-widget');
-  if (!box) return;
+// The credits and how the good practice is going, at the top of My work (work.js). A tap opens the good practices. Not in the
+// top bar since 2026-11-25: Home is silent, and what measures the work stays in the room of the work.
+export function standingHtml(credits, reputation) {
   const rep = Math.max(0, Math.min(100, reputation ?? 70));
-  box.style.display = 'flex';
-  box.innerHTML = `
+  return `
     <button type="button" class="standing-btn" id="good-practices-btn" title="Good practices" aria-label="${esc(credits ?? 0)} credits. Good practice: ${rep} out of 100. Open the good practices">
       <span class="credits-badge">${esc(credits ?? 0)} credits</span>
       <span class="rep-label">Good practice</span>
       <span class="rep-track"><span class="rep-fill ${repClass(rep)}" style="width:${rep}%;"></span></span>
       <span class="rep-val">${rep}</span>
     </button>`;
-  document.getElementById('good-practices-btn').addEventListener('click', showGoodPracticesModal);
 }
 
 export function showGoodPracticesModal() {
@@ -1042,7 +1043,6 @@ async function showApp(session, renderDashboardTab) {
   State.standing = roleRow ? roleRow.standing : 'active';
   State.boardPostingBlocked = roleRow ? !!roleRow.board_posting_blocked : false;
   document.getElementById('user-email').textContent = `${displayLogin(session.user.email)} (${State.currentRole})`;
-  if (State.currentRole === 'operator' && roleRow) renderStandingWidget(roleRow.credits, roleRow.reputation);
 
   const { data: deptRows } = await sb.from('department_members').select('department_code,is_lead').eq('user_id', session.user.id);
   State.myDepartments = deptRows || [];
@@ -2013,7 +2013,7 @@ export function wireAuthButtons() {
     sessionStorage.removeItem('dobAsked');
     // A fresh page after signing out, so that nothing the screens kept in memory (the Help guides, qualifications)
     // carries over to the next person who signs in on the same phone.
-    sb.auth.signOut().finally(() => location.reload());
+    sb.auth.signOut().finally(() => { history.replaceState(null, '', location.pathname); location.reload(); });
   });
 
   // An email account gets a reset link; a phone account has no email, so an Admin gives a temporary password (Users).
