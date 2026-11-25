@@ -7,10 +7,10 @@ import { authorNames,
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
   nameMapForIds, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved,
   helpLinkHtml, confirmPopup, promptPopup, showLoadFailed
-} from './core.js?v=20261125145432';
-import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261125145432';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261125145432';
-import { renderApplicationsView } from './collaboration.js?v=20261125145432';
+} from './core.js?v=20261125162405';
+import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261125162405';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261125162405';
+import { renderApplicationsView } from './collaboration.js?v=20261125162405';
 
 // Each department's page opens its own guide from the "?" beside the title.
 const DEPT_GUIDES = { HR: 'dept-hr', COORD: 'dept-coordination', FORM: 'dept-formation', RF: 'dept-reward', COMM: 'dept-communication', ARCHIVE: 'dept-archive' };
@@ -1179,7 +1179,7 @@ async function renderDeptChannel(box, code) {
       ${pinned.length ? `<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px;">${pinned.map(pinnedReminder).join('')}</div>` : ''}
       <div class="chat-thread" id="dept-chat-thread">${rows.length ? rows.map(bubble).join('') : '<div class="empty-msg">No messages yet - start the conversation below.</div>'}</div>
       <div class="field"><textarea id="dept-msg-text" dir="auto" rows="2" placeholder="Message the ${esc(deptLabel(code))} team..."></textarea></div>
-      <div class="field"><label>Image <span class="hint">(optional)</span></label><input id="dept-msg-image" type="file" accept="image/*"></div>
+      <div class="field"><label>Image <span class="hint">(optional)</span></label><input id="dept-msg-image" type="file" accept="image/jpeg,image/png,image/webp,image/gif"></div>
       <div class="hint" id="dept-msg-error"></div>
       <div class="btn-row"><button class="btn" id="dept-msg-send">Send</button></div>
     </div>`;
@@ -1373,7 +1373,7 @@ function openOnboardingCardPopup({ card = null, onSaved } = {}) {
       <div class="field">
         <label>Thumbnail <span class="hint">(optional cover image, shown on the card)</span></label>
         ${card && card.thumbnail_path ? `<div style="margin-bottom:6px;"><img src="${esc(onboardingThumbnailUrl(card.thumbnail_path))}" alt="" style="max-width:220px;border-radius:6px;display:block;"></div>` : ''}
-        <input id="oc-thumbnail" type="file" accept="image/*">
+        <input id="oc-thumbnail" type="file" accept="image/jpeg,image/png,image/webp,image/gif">
       </div>
       <div class="field-grid">
         <div class="field"><label>Order <span class="hint">(lower shows first)</span></label><input id="oc-sort" type="number" value="${card ? card.sort_order : 0}"></div>
