@@ -7,7 +7,8 @@
 // un'operazione tecnica). RLS impedisce di toccare un task preso da qualcun altro (vedi
 // 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel vincolo, non lo sostituiscono.
 
-import { helpLinkHtml, popupShell, showGoodPracticesModal, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup, errorText, archiveFileEnding, asArchiveFile, ARCHIVE_FILE_MAX } from './core.js?v=20261125165400';
+import { helpLinkHtml, popupShell, showGoodPracticesModal, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup, nameMapForIds, authorNames, errorText, archiveFileEnding, asArchiveFile, ARCHIVE_FILE_MAX } from './core.js?v=20261125200106';
+import { documentSources, fileSource, documentPane, openDocument, wireSplit } from './desk.js?v=20261125200106';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -50,7 +51,7 @@ function stateHtml(t) {
 }
 const stateClass = t => ({ red: 'st-red', amber: 'st-amber', blue: 'st-blue', violet: 'st-violet', green: 'st-green', grey: 'st-grey' })[(stateHtml(t).match(/st-(\w+)/) || [])[1]] || '';
 
-const STATUS_LABELS = { claimed: 'Claimed', submitted: 'Waiting for review', approved: 'Approved', rejected: 'Rejected', published: 'Published' };
+const STATUS_LABELS = { claimed: 'In progress', submitted: 'Waiting for review', approved: 'Approved', rejected: 'Rejected', published: 'Published' };
 
 async function fetchOperators() {
   const rows = await withStatus(sb.from('user_roles').select('user_id,email,reputation').in('role', ['operator', 'coordinator']).order('email'));
@@ -94,6 +95,11 @@ export async function renderTasksView(main) {
   if (State.tasksView) { currentView = State.tasksView; State.tasksView = null; }
   if (State.taskPrefill) currentView = 'store';
 
+  // One task has its own page and address (#task/51); a review too (#review/51).
+  const sub = /^(task|review)\/(\d+)$/.exec(State.sub || '');
+  if (sub && sub[1] === 'task') return renderTaskPage(main, sub[2], user);
+  if (sub && sub[1] === 'review' && isRevisor) return renderReviewPage(main, sub[2]);
+
   const tabs = [{ id: 'store', label: 'Tasks Store' }, { id: 'mine', label: 'My Tasks' }];
   if (manage) tabs.push({ id: 'team', label: 'Team overview' });
   if (isRevisor) tabs.push({ id: 'review', label: 'Review Tasks' });
@@ -118,7 +124,7 @@ export async function renderTasksView(main) {
   }));
 
   const body = document.getElementById('tasks-body');
-  if (currentView === 'store') await renderStoreView(body, manage, admin);
+  if (currentView === 'store') await renderStoreView(body, manage, admin, user);
   else if (currentView === 'mine') await renderMineView(body, user);
   else if (currentView === 'team') await renderTeamView(body);
   else if (currentView === 'review') await renderReviewViewBody(body);
@@ -129,50 +135,55 @@ export async function renderTasksView(main) {
 
 // ---------- Tasks Store: public, same for every role - free tasks to claim ----------
 
-async function renderStoreView(body, manage, admin) {
-  const rows = await withStatus(sb.from('tasks').select('*').eq('status', 'open').order('created_at', { ascending: false }));
-  let sortDesc = true;
+async function renderStoreView(body, manage, admin, user) {
+  const [rows, inProgress] = await Promise.all([
+    withStatus(sb.from('tasks').select('*').eq('status', 'open').order('created_at', { ascending: false })), myTasksNow(user),
+  ]);
+  let sortDesc = true, chosen = null;
 
   body.innerHTML = `
     <div class="store-filters">
-      <div class="field"><label>Category</label><select id="store-category">${optionsHtml(State.optionListsByName.task_category || [], '', true)}</select></div>
-      <div class="field"><label>Min credits</label><input id="store-mincredits" type="number" min="0" style="width:110px;"></div>
-      <div class="field"><label>Order</label><button class="btn secondary" id="store-sort-btn">Newest first</button></div>
+      <div class="field"><label for="store-category">Kind of work</label><select id="store-category">${optionsHtml(State.optionListsByName.task_category || [], '', true, 'All')}</select></div>
       ${manage ? '<div class="field"><label>&nbsp;</label><button class="btn" id="store-new-task-btn">+ New task</button></div>' : ''}
     </div>
-    <div class="task-cards" id="store-rows" style="margin-top:12px;"></div>`;
+    <details class="store-more"><summary>More options</summary><div class="store-filters">
+      <div class="field"><label for="store-mincredits">Credits, at least</label><input id="store-mincredits" type="number" min="0"></div>
+      <div class="field"><label for="store-sort-btn">Order</label><button class="btn secondary" id="store-sort-btn">Newest first</button></div></div></details>
+    <div class="task-two"><div class="task-list task-cards" id="store-rows"></div><div class="task-side" id="store-side"></div></div>`;
 
+  const side = document.getElementById('store-side');
+  function choose(t) {
+    chosen = t;
+    document.querySelectorAll('#store-rows .task-card').forEach(c => c.classList.toggle('task-chosen', !!t && c.dataset.id === String(t.id)));
+    if (t) { side.scrollTop = 0; mountTake(side, t, user, inProgress); } else side.innerHTML = '';
+  }
   function applyAndRender() {
     const cat = document.getElementById('store-category').value;
     const minCredits = parseInt(document.getElementById('store-mincredits').value, 10) || 0;
     const filtered = rows
       .filter(t => (!cat || t.category === cat) && (t.credits || 0) >= minCredits)
       .sort((a, b) => sortDesc ? new Date(b.created_at) - new Date(a.created_at) : new Date(a.created_at) - new Date(b.created_at));
-    const tbody = document.getElementById('store-rows');
-    if (!filtered.length) { tbody.innerHTML = `<div class="empty-msg">${rows.length ? 'No open tasks match this filter.' : 'No open tasks right now.'}</div>`; return; }
-    tbody.innerHTML = filtered.map(t => `
+    const list = document.getElementById('store-rows');
+    if (!filtered.length) { list.innerHTML = `<div class="empty-msg">${rows.length ? 'No task of this kind now.' : 'There are no tasks to take now.'}</div>`; choose(null); return; }
+    list.innerHTML = filtered.map(t => `
       <div class="task-card" data-id="${t.id}">
-        <div class="task-card-top"><span class="task-kind">${esc(labelOf(State.optionListsByName.task_category || [], t.category)) || 'Task'}</span><span>#${esc(t.id)} &middot; ${relativeDate(t.created_at)}</span></div>
+        <div class="task-card-top"><span class="task-kind">${esc(taskKind(t)) || 'Task'}</span><span>#${esc(t.id)} &middot; ${relativeDate(t.created_at)}</span></div>
         <div class="task-card-title" dir="auto">${esc(t.title)}</div>
-        ${t.description ? `<p class="task-card-text" dir="auto">${esc(t.description)}</p>` : ''}
         <div class="task-card-facts">${taskFacts(t)}</div>
-        <div class="btn-row"><button class="btn store-claim-btn">Claim</button>${admin ? '<button class="btn danger store-withdraw-btn">Withdraw</button>' : ''}</div>
+        <div class="btn-row"><button class="btn store-open-btn">Look at it</button>${admin ? '<button class="btn danger store-withdraw-btn">Withdraw</button>' : ''}</div>
       </div>`).join('');
-    tbody.querySelectorAll('.store-claim-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.closest('.task-card').dataset.id;
-        openClaimPopup(filtered.find(x => String(x.id) === id));
-      });
-    });
-    tbody.querySelectorAll('.store-withdraw-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const id = btn.closest('.task-card').dataset.id;
-        const t = filtered.find(x => String(x.id) === id);
-        if (!await confirmPopup(`Withdraw "${t.title}" from the Store? It moves to Withdrawn Tasks, where it can be re-enabled later.`)) return;
-        await withStatus(sb.from('tasks').update({ status: 'withdrawn' }).eq('id', id), 'Withdrawing...');
+    list.querySelectorAll('.task-card').forEach(card => {
+      const t = filtered.find(x => String(x.id) === card.dataset.id);
+      const open = () => (wide() ? choose(t) : openTask(t.id));
+      card.querySelector('.store-open-btn').addEventListener('click', open);
+      card.addEventListener('click', e => { if (!e.target.closest('button')) open(); });
+      card.querySelector('.store-withdraw-btn')?.addEventListener('click', async () => {
+        if (!await confirmPopup(`Withdraw "${t.title}" from the Store? It moves to Withdrawn Tasks, where it can be put back later.`)) return;
+        await withStatus(sb.from('tasks').update({ status: 'withdrawn' }).eq('id', t.id), 'Withdrawing...');
         await renderTasksView(document.getElementById('main'));
       });
     });
+    if (wide()) choose(filtered.find(t => chosen && t.id === chosen.id) || filtered[0]);
   }
 
   document.getElementById('store-category').addEventListener('change', applyAndRender);
@@ -204,49 +215,203 @@ async function taskStep(fn, args, oldWay, busyText) {
   return true;
 }
 
-function openClaimPopup(t) {
-  const { panel, close } = popupShell('claim-task-popup', { width: 560, label: 'Claim task', section: 'tasks' });
-  const plus = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
-  panel.innerHTML = `
-    <h2 style="margin-top:0;">Claim task <span class="hint">#${esc(t.id)}</span></h2>
-    <div class="task-card-title" dir="auto">${esc(t.title)}</div>
-    <div class="task-card-facts" style="margin:4px 0 8px;">${esc(labelOf(State.optionListsByName.task_category || [], t.category))}${t.category ? ' &middot; ' : ''}${taskFacts(t)}</div>
-    <p style="white-space:pre-wrap;margin:0 0 12px;" dir="auto">${t.description ? esc(t.description) : '<span class="hint">No description was written for this task.</span>'}</p>
-    ${t.document_id ? '<div class="btn-row" style="margin-top:0;"><button class="btn secondary" id="claim-doc">Look at the document</button></div>' : ''}
-    <div class="field">
-      <label for="claim-due">When can you finish it?</label>
-      <div class="quick-dates" role="group" aria-label="When can you finish it?">
-        <button type="button" class="btn secondary" data-days="7" aria-pressed="false">1 week</button>
-        <button type="button" class="btn secondary" data-days="14" aria-pressed="false">2 weeks</button>
-        <button type="button" class="btn secondary" data-days="30" aria-pressed="false">1 month</button>
-      </div>
-      <input id="claim-due" type="date" min="${today()}" style="max-width:240px;">
-      <div class="hint">The date stays fixed. If you cannot make it, give the task up in time: it does not affect your standing.</div>
-    </div>
-    <div class="btn-row"><button class="btn" id="claim-confirm">Claim</button><button class="btn secondary" id="claim-cancel">Cancel</button></div>`;
-  const dueInput = panel.querySelector('#claim-due');
-  const marks = () => panel.querySelectorAll('[data-days]').forEach(b => b.setAttribute('aria-pressed', String(dueInput.value === plus(+b.dataset.days))));
-  panel.querySelectorAll('[data-days]').forEach(b => b.addEventListener('click', () => { dueInput.value = plus(+b.dataset.days); marks(); }));
-  dueInput.addEventListener('input', marks);
-  panel.querySelector('#claim-doc')?.addEventListener('click', () => {
-    close();
-    State.selectedDocId = t.document_id;
-    State.dashOpenDetail = true;
-    window.__renderTab('dashboard');
+// ---------- The desk (Owner's decision, 2026-11-25; desk.js): a task is one place, with the document beside the work ----------
+
+const wide = () => window.matchMedia('(min-width: 1000px)').matches;
+const openTask = (id, kind = 'task') => window.__renderTab('tasks', State.currentRole === 'operator' ? 'work' : undefined, `${kind}/${id}`);
+const backToTasks = view => { if (view) { currentView = view; } window.__renderTab('tasks', State.currentRole === 'operator' ? 'work' : undefined); };
+const taskKind = t => labelOf(State.optionListsByName.task_category || [], t.category) || '';
+const plusDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const limitNow = () => State.policyValues?.task_max_in_progress ?? 3;
+// What step 2 is called: the work itself, in plain words.
+const WORK_WORDS = { IT_UR: ['Translate it', 'From Italian to Urdu, in Word or InPage, on your computer.'], EN_UR: ['Translate it', 'From English to Urdu, in Word or InPage, on your computer.'],
+  TYPING: ['Type it', 'In Word or InPage, on your computer.'], PROOFREAD: ['Read and correct it', 'In Word or InPage, on your computer.'], REVISION: ['Read and correct it', 'In Word or InPage, on your computer.'] };
+const workWords = t => WORK_WORDS[t.category] || ['Do the work', 'On your computer.'];
+
+function factsHtml(t) {
+  return `<div class="desk-facts">${[taskKind(t) && esc(taskKind(t)), t.document_pages != null && `${esc(t.document_pages)} page${t.document_pages === 1 ? '' : 's'}`, t.credits != null && `<b>${esc(t.credits)} credits</b>`, t.document_id && `Document #${esc(t.document_id)}`].filter(Boolean).map(x => `<span>${x}</span>`).join('')}</div>`;
+}
+function openFor(t) { const d = Math.floor((Date.now() - new Date(t.created_at).getTime()) / 86400000); return d > 0 ? `Open for ${d} day${d === 1 ? '' : 's'}` : 'New today'; }
+function infoCard(t, state = stateHtml(t)) {
+  return `<div class="panel desk-info">${state}<div class="desk-title" dir="auto">${esc(t.title)}</div>${t.description ? `<p style="white-space:pre-wrap;margin:6px 0 0;" dir="auto">${esc(t.description)}</p>` : ''}${factsHtml(t)}</div>`;
+}
+function headHtml(back, note) {
+  return `<div class="desk-head"><button type="button" class="btn secondary" id="desk-back">&lsaquo; ${esc(back)}</button><span class="desk-head-title">${esc(note)}</span></div>`;
+}
+// The two halves. With no document there is only the work.
+function deskHtml(head, hasDoc, work) {
+  return `${head}<div class="desk${hasDoc ? '' : ' desk-alone'}">${hasDoc ? '<div class="desk-doc" id="desk-doc"></div><div class="desk-split" role="separator" aria-orientation="vertical" aria-label="Make one side wider" tabindex="0"><span aria-hidden="true">&#8942;</span></div>' : ''}<div class="desk-work" id="desk-work">${work}</div></div>`;
+}
+// Beside the work on a computer; behind one button on a phone.
+function mountDocument(main, sources, first) {
+  const box = main.querySelector('#desk-doc');
+  let pane = null;
+  if (box && sources.length) {
+    const open = () => { if (!pane && wide()) { pane = documentPane(box, sources); pane.show(first && pane.keys.includes(first) ? first : pane.keys[0]); } };
+    open();
+    window.addEventListener('resize', function onResize() { if (!box.isConnected) window.removeEventListener('resize', onResize); else open(); });
+    wireSplit(main.querySelector('.desk'));
+  } else main.querySelector('.desk')?.classList.add('desk-alone');
+  main.querySelectorAll('.desk-open-doc').forEach(b => { if (!sources.length) b.remove(); else b.addEventListener('click', () => openDocument(sources, b.dataset.key || sources[0].key)); });
+  return { refresh: key => pane?.refresh(key), show: key => (pane && wide() ? pane.show(key) : openDocument(sources, key)) };
+}
+const draftOf = async taskId => (await withStatus(sb.from('documents').select('document_id,draft_inp_path,workflow_status').eq('source_task_id', taskId)))[0] || null;
+
+async function renderTaskPage(main, id, user) {
+  const t = (await withStatus(sb.from('tasks').select('*').eq('id', id)))[0];
+  if (!t) {
+    main.innerHTML = `<div class="panel"><p>This task is not here any more, or it is not for you.</p><div class="btn-row"><button class="btn" id="desk-back">Tasks</button></div></div>`;
+    main.querySelector('#desk-back').addEventListener('click', () => backToTasks());
+    return;
+  }
+  if (t.status === 'open') return renderOpenTask(main, t, user);
+  if (t.claimed_by === user.id && t.status === 'claimed') return renderMyDesk(main, t, user);
+  return renderTaskState(main, t, user);
+}
+
+// ---------- A task to take ----------
+
+async function myTasksNow(user) {
+  return (await withStatus(sb.from('tasks').select('id').eq('claimed_by', user.id).eq('status', 'claimed'))).length;
+}
+// The part that takes a task: used beside the list on a computer, and on the page of the task.
+function mountTake(box, t, user, inProgress) {
+  const full = inProgress >= limitNow();
+  box.innerHTML = `
+    ${infoCard(t, `<span class="st st-grey">${openFor(t)}</span>`)}
+    ${t.document_id ? '<div class="btn-row"><button class="btn secondary" data-look>Look at the document</button></div>' : ''}
+    <div class="panel">
+      ${full ? `<p style="margin:0;"><b>You have ${inProgress} task${inProgress === 1 ? '' : 's'} in progress.</b> Send one, or return one, and then you can take this.</p><div class="btn-row"><button class="btn secondary" data-mine>My Tasks</button></div>` : `
+      <div class="field"><label for="take-due">When can you finish it?</label>
+        <div class="quick-dates" role="group" aria-label="When can you finish it?">${[[7, '1 week'], [14, '2 weeks'], [30, '1 month']].map(([n, l]) => `<button type="button" class="btn secondary" data-days="${n}" aria-pressed="false">${l}</button>`).join('')}</div>
+        <input id="take-due" type="date" min="${today()}" style="max-width:240px;">
+        <div class="hint">The date does not change. If you cannot finish, return the task: it costs nothing.</div></div>
+      <div class="btn-row"><button class="btn big-btn" data-take>Take this task</button></div>`}
+    </div>`;
+  box.querySelector('[data-mine]')?.addEventListener('click', () => backToTasks('mine'));
+  box.querySelector('[data-look]')?.addEventListener('click', async () => {
+    const sources = await documentSources(t.document_id);
+    if (!sources.length) { alert('There is nothing to look at for this document yet.'); return; }
+    openDocument(sources);
   });
-  panel.querySelector('#claim-cancel').addEventListener('click', close);
-  panel.querySelector('#claim-confirm').addEventListener('click', async () => {
-    const due = panel.querySelector('#claim-due').value;
-    if (!due) { alert('Please choose the date by which you can finish.'); return; }
-    if (due < today()) { alert('Please choose a date from today on.'); return; }
-    const { data: { user } } = await sb.auth.getUser();
-    await taskStep('claim_task', { p_task_id: t.id, p_due_date: due }, () => sb.from('tasks').update({
-      status: 'claimed', claimed_by: user.id, claimed_by_email: user.email,
-      claimed_at: new Date().toISOString(), due_date: due,
-    }).eq('id', t.id), 'Claiming...');
-    close();
-    await renderTasksView(document.getElementById('main'));
+  if (full) return;
+  const due = box.querySelector('#take-due');
+  const marks = () => box.querySelectorAll('[data-days]').forEach(b => b.setAttribute('aria-pressed', String(due.value === plusDays(+b.dataset.days))));
+  box.querySelectorAll('[data-days]').forEach(b => b.addEventListener('click', () => { due.value = plusDays(+b.dataset.days); marks(); }));
+  due.addEventListener('input', marks);
+  box.querySelector('[data-take]').addEventListener('click', async e => {
+    if (!due.value) { alert('Please choose the date.'); return; }
+    if (due.value < today()) { alert('Please choose a date from today on.'); return; }
+    e.target.disabled = true;
+    const done = await taskStep('claim_task', { p_task_id: t.id, p_due_date: due.value }, () => sb.from('tasks').update({
+      status: 'claimed', claimed_by: user.id, claimed_by_email: user.email, claimed_at: new Date().toISOString(), due_date: due.value,
+    }).eq('id', t.id), 'Taking the task...');
+    e.target.disabled = false;
+    if (done) { currentView = 'mine'; State.mineTab = 'active'; openTask(t.id); } else if (!State.sub) renderTasksView(document.getElementById('main'));
   });
+}
+async function renderOpenTask(main, t, user) {
+  const inProgress = await myTasksNow(user);
+  main.innerHTML = `${headHtml('Tasks Store', 'Task ' + t.id)}<div class="desk-one" id="take-box"></div>`;
+  main.querySelector('#desk-back').addEventListener('click', () => backToTasks('store'));
+  mountTake(main.querySelector('#take-box'), t, user, inProgress);
+}
+
+// ---------- A task of mine, in progress ----------
+
+const gotKey = t => `taskGot_${t.id}`;
+async function renderMyDesk(main, t, user) {
+  const sources = await documentSources(t.document_id);
+  if (t.document_id) sources.push(fileSource('mine', 'My file', async () => (await draftOf(t.id))?.draft_inp_path || null));
+  main.innerHTML = deskHtml(headHtml('My Tasks', 'Task ' + t.id), sources.length > 0, '<div class="hint">Loading...</div>');
+  main.querySelector('#desk-back').addEventListener('click', () => backToTasks('mine'));
+  const work = main.querySelector('#desk-work');
+  let pane = null;
+
+  const draw = async () => {
+    const draft = t.document_id ? await draftOf(t.id) : null;
+    const got = !!draft || !!localStorage.getItem(gotKey(t));
+    const [name, how] = workWords(t);
+    const step = (n, state, title, body) => `<div class="desk-step desk-${state}"><span class="desk-num" aria-hidden="true">${state === 'done' ? '&#10003;' : n}</span><div><b>${title}${state === 'done' ? ' <span class="sr-only">(done)</span>' : ''}</b>${body}</div></div>`;
+    const fileName = draft ? `${esc((draft.draft_inp_path || '').split('.').pop().toUpperCase())} file` : '';
+    const kinds = '.inp, .doc, .docx, .pdf &middot; up to 50 MB';
+    const steps = t.document_id ? [
+      step(1, got ? 'done' : 'now', 'Get the file', `<div class="btn-row"><button class="btn ${got ? 'secondary' : ''}" data-get>${got ? 'Get it again' : 'Get the file'}</button></div>`),
+      step(2, draft ? 'done' : got ? 'now' : 'later', name, `<div class="hint">${how}</div>`),
+      step(3, draft ? 'done' : got ? 'now' : 'later', 'Upload your file', draft
+        ? `<div class="desk-file"><span aria-hidden="true">&#128196;</span><div><b>Your ${fileName} is here</b></div></div><div class="btn-row"><button class="btn secondary" data-see>Look at it</button><label class="btn secondary" style="cursor:pointer;">Replace it<input type="file" data-file accept=".inp,.doc,.docx,.pdf" hidden></label></div>`
+        : `<div class="desk-drop" data-drop><div class="desk-drop-drag">Drag your file here, or</div><label class="btn ${got ? '' : 'secondary'}" style="cursor:pointer;">Choose the file<input type="file" data-file accept=".inp,.doc,.docx,.pdf" hidden></label><div class="hint">${kinds}</div></div>`),
+      step(4, draft ? 'now' : 'later', 'Send for review', `<div class="hint">After this you cannot change it.</div><div class="btn-row"><button class="btn big-btn" data-send ${draft ? '' : 'disabled'}>Send for review</button></div>`),
+    ] : [
+      step(1, 'now', name, `<div class="hint">${how}</div>`),
+      step(2, 'now', 'Send for review', '<div class="hint">After this you cannot change it.</div><div class="btn-row"><button class="btn big-btn" data-send>Send for review</button></div>'),
+    ];
+    work.innerHTML = `${infoCard(t)}
+      ${sources.length ? '<div class="btn-row desk-phone"><button class="btn secondary desk-open-doc">Look at the document</button></div>' : ''}
+      <div class="panel desk-steps">${steps.join('')}</div>
+      <p class="hint">You cannot finish? <button type="button" class="desk-return" data-return>Return this task</button> It costs nothing.</p>
+      <div class="desk-bottom"><button type="button" class="btn big-btn" data-bottom>${t.document_id && !draft ? (got ? 'Choose the file' : 'Get the file') : 'Send for review'}</button></div>`;
+    if (pane === null) pane = mountDocument(main, sources);
+    else work.querySelectorAll('.desk-open-doc').forEach(b => b.addEventListener('click', () => openDocument(sources, sources[0].key)));
+
+    // On a phone the button of this moment stays at the bottom of the screen.
+    work.querySelector('[data-bottom]').addEventListener('click', () => work.querySelector(t.document_id && !draft ? (got ? '[data-file]' : '[data-get]') : '[data-send]').click());
+    work.querySelector('[data-get]')?.addEventListener('click', async () => { await downloadOriginalForTask(t.document_id); try { localStorage.setItem(gotKey(t), '1'); } catch { /* only the tick is lost */ } draw(); });
+    work.querySelector('[data-see]')?.addEventListener('click', () => pane.show('mine'));
+    const take = async file => {
+      if (!file) return;
+      try { await uploadCorrectedFile(t, file); } catch (err) { alert(errorText(err)); }
+      pane.refresh('mine');
+      await draw();
+    };
+    work.querySelectorAll('[data-file]').forEach(i => i.addEventListener('change', e => take(e.target.files[0])));
+    const drop = work.querySelector('[data-drop]');
+    if (drop) {
+      drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('desk-over'); });
+      drop.addEventListener('dragleave', () => drop.classList.remove('desk-over'));
+      drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('desk-over'); take(e.dataTransfer.files[0]); });
+    }
+    work.querySelector('[data-send]')?.addEventListener('click', async () => {
+      if (!await confirmPopup('Send this task for review? After this you cannot change it.', { confirmLabel: 'Send for review', cancelLabel: 'Not yet' })) return;
+      const done = await taskStep('submit_task', { p_task_id: t.id }, () => sb.from('tasks').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', t.id), 'Sending...');
+      if (!done) return;
+      try { localStorage.removeItem(gotKey(t)); } catch { /* nothing to clean */ }
+      State.mineTab = 'submitted';
+      backToTasks('mine');
+      alert('Sent. Thank you! A Revisor will look at it.');
+    });
+    work.querySelector('[data-return]').addEventListener('click', async () => {
+      const note = await promptPopup('Why do you return this task? One line is enough. It does not change your reputation.');
+      if (note === null) return;
+      if (!note.trim()) { alert('Please write one line.'); return; }
+      await withStatus(sb.rpc('give_up_task', { p_task_id: t.id, p_note: note.trim() }), 'Returning the task...');
+      backToTasks('mine');
+    });
+  };
+  // A file dropped beside the box must not open in place of the app.
+  main.querySelector('.desk').addEventListener('dragover', e => e.preventDefault());
+  main.querySelector('.desk').addEventListener('drop', e => e.preventDefault());
+  await draw();
+}
+
+// ---------- A task sent, closed, or of someone else (Coordinators and Admins) ----------
+
+async function renderTaskState(main, t, user) {
+  const mine = t.claimed_by === user.id;
+  const [sources, draft] = await Promise.all([documentSources(t.document_id), t.document_id ? draftOf(t.id) : null]);
+  if (draft?.draft_inp_path) sources.unshift(fileSource('mine', mine ? 'My file' : 'The file', draft.draft_inp_path));
+  const who = mine || !t.claimed_by ? '' : (await nameMapForIds([t.claimed_by]))[t.claimed_by];
+  const work = `${infoCard(t)}
+    ${who ? `<p class="hint">Taken by ${esc(who)}${t.due_date ? `, until ${formatDate(t.due_date)}` : ''}</p>` : ''}
+    ${t.status === 'submitted' ? `<div class="panel"><p style="margin:0;">Sent ${relativeDate(t.submitted_at)}. A Revisor will look at it. There is nothing you need to do.</p></div>` : ''}
+    ${t.status === 'approved' ? '<div class="panel"><p style="margin:0;">The Revisor has approved it. An Admin closes it, and then the credits arrive.</p></div>' : ''}
+    ${t.status === 'published' && t.credits != null ? `<div class="panel st-green desk-result"><b>+${esc(t.credits)} credits</b></div>` : ''}
+    ${t.review_notes ? `<div class="panel"><b>The Revisor's note</b><p style="white-space:pre-wrap;margin:6px 0 0;" dir="auto">${esc(t.review_notes)}</p></div>` : ''}
+    ${sources.length ? '<div class="btn-row desk-phone"><button class="btn secondary desk-open-doc">Look at the document</button></div>' : ''}`;
+  const back = mine ? 'My Tasks' : 'Tasks';
+  main.innerHTML = deskHtml(headHtml(back, 'Task ' + t.id), sources.length > 0, work);
+  main.querySelector('#desk-back').addEventListener('click', () => backToTasks(mine ? 'mine' : undefined));
+  mountDocument(main, sources);
 }
 
 function openNewTaskPopup(operators) {
@@ -344,7 +509,6 @@ function openNewTaskPopup(operators) {
     if (extraCredits !== 0 && !extraNote) { alert('Please explain why you are adding extra credits.'); return; }
     const assigneeSel = panel.querySelector('#task-new-assignee');
     const assigneeId = assigneeSel.value || null;
-    const assigneeEmail = assigneeId ? assigneeSel.selectedOptions[0].dataset.email : null;
     const dueDate = panel.querySelector('#task-new-due').value || null;
     if (assigneeId && !dueDate) { alert('Please set a due date for the person you are assigning this to.'); return; }
     const { data: { user } } = await sb.auth.getUser();
@@ -357,7 +521,7 @@ function openNewTaskPopup(operators) {
       credits: baseCredits + extraCredits,
       created_by_email: user.email,
       status: assigneeId ? 'claimed' : 'open',
-      claimed_by: assigneeId, claimed_by_email: assigneeEmail,
+      claimed_by: assigneeId,
       claimed_at: assigneeId ? new Date().toISOString() : null,
       due_date: dueDate,
     }), 'Creating task...');
@@ -370,13 +534,6 @@ function openNewTaskPopup(operators) {
 
 async function renderMineView(body, user) {
   const rows = await withStatus(sb.from('tasks').select('*').eq('claimed_by', user.id).order('created_at', { ascending: false }));
-  const docTaskIds = rows.filter(t => t.status === 'claimed' && t.document_id).map(t => t.id);
-  const candidateByTaskId = {};
-  if (docTaskIds.length) {
-    const candidates = await withStatus(sb.from('documents').select('document_id,source_task_id').in('source_task_id', docTaskIds));
-    for (const c of candidates) candidateByTaskId[c.source_task_id] = c.document_id;
-  }
-
   const active = rows.filter(t => t.status === 'claimed');
   const submitted = rows.filter(t => t.status === 'submitted');
   const closed = rows.filter(t => ['approved', 'rejected', 'published'].includes(t.status));
@@ -393,7 +550,7 @@ async function renderMineView(body, user) {
     <div id="mine-submitted-section" style="${State.mineTab === 'submitted' ? '' : 'display:none;'}"><div id="mine-submitted-list"></div></div>
     <div id="mine-closed-section" style="${State.mineTab === 'closed' ? '' : 'display:none;'}"><div id="mine-closed-list"></div></div>`;
 
-  renderMineActiveList(active, candidateByTaskId);
+  renderMineActiveList(active);
   renderMineSubmittedList(submitted);
   renderMineClosedList(closed);
 
@@ -514,71 +671,28 @@ function sortMineActive(rows) {
   });
 }
 
-function renderMineActiveList(rows, candidateByTaskId) {
-  rows = sortMineActive(rows);
-  const box = document.getElementById('mine-active-list');
-  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing in progress. Check Tasks Store to claim one.</div>'; return; }
-  box.innerHTML = rows.map(t => {
-    const hasCandidate = !!candidateByTaskId[t.id];
-    const needsFile = t.document_id;
-    return `
-    <div class="panel task-item ${stateClass(t)}" data-id="${t.id}" style="margin-bottom:12px;">
+// The lists of My Tasks: what it is, where it stands, and one button that opens it on the desk.
+function mineCard(t, button, extra = '') {
+  return `<div class="panel task-item ${stateClass(t)}" data-id="${t.id}" style="margin-bottom:12px;">
       <div class="task-card-top">${stateHtml(t)}<span>#${esc(t.id)}</span></div>
       <div class="task-card-title" dir="auto">${esc(t.title)}</div>
-      ${docLine(t)}
-      ${t.description ? `<p style="white-space:pre-wrap;" dir="auto">${esc(t.description)}</p>` : ''}
-      <p class="hint">Due ${formatDate(t.due_date)} (fixed when you claimed it)</p>
-      ${needsFile ? `
-        <div class="btn-row">
-          <button class="btn secondary task-mine-download">Download original file</button>
-          <label class="btn secondary" style="cursor:pointer;">Upload corrected file<input type="file" class="task-mine-upload-input" accept=".inp,.doc,.docx,.pdf" style="display:none;"></label>
-          ${hasCandidate ? '<button class="btn secondary task-mine-download-mine">Download my corrected file</button>' : ''}
-        </div>
-        <p class="hint">${hasCandidate ? 'Corrected file uploaded - you can still replace it above before submitting.' : 'Upload the corrected file before you can submit this for review.'}</p>` : ''}
-      <div class="btn-row">
-        <button class="btn task-mine-submit" ${needsFile && !hasCandidate ? 'disabled' : ''}>Submit for review</button>
-        <button class="btn secondary task-mine-giveup">Give up this task</button>
-      </div>
+      ${docLine(t)}${extra}
+      <div class="btn-row"><button class="btn ${button === 'Continue' ? '' : 'secondary'} mine-open">${button}</button></div>
     </div>`;
-  }).join('');
-  box.querySelectorAll('[data-id]').forEach(card => {
-    const id = card.dataset.id;
-    const t = rows.find(r => String(r.id) === id);
-    card.querySelector('.task-mine-download')?.addEventListener('click', () => downloadOriginalForTask(t.document_id));
-    card.querySelector('.task-mine-download-mine')?.addEventListener('click', () => downloadDraftFile(candidateByTaskId[t.id]));
-    card.querySelector('.task-mine-upload-input')?.addEventListener('change', async e => {
-      const file = e.target.files[0];
-      if (!file) return;
-      try { await uploadCorrectedFile(t, file); } catch (err) { alert(errorText(err)); }
-      await renderTasksView(document.getElementById('main'));
-    });
-    card.querySelector('.task-mine-submit')?.addEventListener('click', async () => {
-      if (!await confirmPopup('Submit this task for review? You will not be able to make further changes.')) return;
-      await taskStep('submit_task', { p_task_id: parseInt(id, 10) },
-        () => sb.from('tasks').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', id), 'Submitting...');
-      await renderTasksView(document.getElementById('main'));
-    });
-    card.querySelector('.task-mine-giveup')?.addEventListener('click', async () => {
-      const note = await promptPopup('Why are you giving up this task? A short line is fine - this is logged, but does not affect your standing.');
-      if (note === null) return;
-      if (!note.trim()) { alert('Please enter a reason.'); return; }
-      await withStatus(sb.rpc('give_up_task', { p_task_id: parseInt(id, 10), p_note: note.trim() }), 'Giving up task...');
-      await renderTasksView(document.getElementById('main'));
-    });
-  });
+}
+const wireMine = box => box.querySelectorAll('.mine-open').forEach(b => b.addEventListener('click', () => openTask(b.closest('[data-id]').dataset.id)));
+function renderMineActiveList(rows) {
+  const box = document.getElementById('mine-active-list');
+  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing in progress. You can take a task in Tasks Store.</div>'; return; }
+  box.innerHTML = sortMineActive(rows).map(t => mineCard(t, 'Continue')).join('');
+  wireMine(box);
 }
 
 function renderMineSubmittedList(rows) {
   const box = document.getElementById('mine-submitted-list');
-  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing waiting for review.</div>'; return; }
-  box.innerHTML = rows.map(t => `
-    <div class="panel task-item st-violet" style="margin-bottom:12px;">
-      <div class="task-card-top">${stateHtml(t)}<span>#${esc(t.id)}</span></div>
-      <div class="task-card-title" dir="auto">${esc(t.title)}</div>
-      ${docLine(t)}
-      ${t.submitted_at ? `<p class="hint">Sent ${relativeDate(t.submitted_at)}</p>` : ''}
-      <p class="hint">A Revisor will look at this next - no action needed from you for now.</p>
-    </div>`).join('');
+  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing is waiting for review.</div>'; return; }
+  box.innerHTML = rows.map(t => mineCard(t, 'Look at it', t.submitted_at ? `<p class="hint">Sent ${relativeDate(t.submitted_at)}. A Revisor will look at it.</p>` : '')).join('');
+  wireMine(box);
 }
 
 function renderMineClosedList(rows) {
@@ -587,13 +701,8 @@ function renderMineClosedList(rows) {
   const PAGE = 30;
   let shown = PAGE;
   const draw = () => {
-    box.innerHTML = rows.slice(0, shown).map(t => `
-    <div class="panel task-item ${stateClass(t)}" style="margin-bottom:12px;">
-      <div class="task-card-top">${stateHtml(t)}<span>#${esc(t.id)}</span></div>
-      <div class="task-card-title" dir="auto">${esc(t.title)}</div>
-      ${docLine(t)}
-      ${t.review_notes ? `<p style="white-space:pre-wrap;margin:6px 0 0;" dir="auto"><b>The Revisor's note:</b> ${esc(t.review_notes)}</p>` : ''}
-    </div>`).join('') + (rows.length > shown ? `<div class="btn-row"><button class="btn secondary" id="mine-closed-more">Show more (${rows.length - shown})</button></div>` : '');
+    box.innerHTML = rows.slice(0, shown).map(t => mineCard(t, 'Look at it', `${t.status === 'published' && t.credits != null ? `<p class="st st-green" style="margin:6px 0 0;">+${esc(t.credits)} credits</p>` : ''}${t.review_notes ? `<p style="white-space:pre-wrap;margin:6px 0 0;" dir="auto"><b>The Revisor's note:</b> ${esc(t.review_notes)}</p>` : ''}`)).join('') + (rows.length > shown ? `<div class="btn-row"><button class="btn secondary" id="mine-closed-more">Show more (${rows.length - shown})</button></div>` : '');
+    wireMine(box);
     document.getElementById('mine-closed-more')?.addEventListener('click', () => { shown += PAGE; draw(); });
   };
   draw();
@@ -607,7 +716,7 @@ async function renderTeamView(body) {
     withStatus(sb.from('tasks').select('*').neq('status', 'open').neq('claimed_by', user.id).order('created_at', { ascending: false })),
     fetchOperators(),
   ]);
-  const nameMap = await nameMapForEmails(rows.flatMap(t => [t.claimed_by_email, t.created_by_email]));
+  const nameMap = await nameMapForIds(rows.map(t => t.claimed_by));
 
   body.innerHTML = `
     <div class="field-grid">
@@ -616,7 +725,18 @@ async function renderTeamView(body) {
       <div class="field"><label>Operator</label><select id="team-operator"><option value="">All operators</option>${operators.map(o => `<option value="${o.user_id}">${esc(o.displayName)}</option>`).join('')}</select></div>
       <div class="field"><label>Status</label><select id="team-status"><option value="">All statuses</option>${Object.entries(STATUS_LABELS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
     </div>
+    <div class="panel team-limit"><label for="team-limit">Tasks in progress for each person, at most</label>
+      <div class="btn-row" style="margin:6px 0 0;"><input id="team-limit" type="number" min="1" max="20" value="${esc(limitNow())}" style="width:90px;"><button class="btn secondary" id="team-limit-save">Save</button><span class="hint" id="team-limit-status" role="status"></span></div>
+      <div class="hint">You can still give a task to someone who has reached it.</div></div>
     <div id="team-list" style="margin-top:12px;"></div>`;
+  document.getElementById('team-limit-save').addEventListener('click', async () => {
+    const value = parseInt(document.getElementById('team-limit').value, 10), status = document.getElementById('team-limit-status');
+    status.textContent = '';
+    if (!(value >= 1 && value <= 20)) { alert('Please choose a number from 1 to 20.'); return; }
+    try { await withStatus(sb.rpc('set_task_limit', { p_value: value }), 'Saving...'); } catch (e) { alert(e.code === 'PGRST202' ? 'This is not ready yet. An Admin has one step to do.' : errorText(e)); return; }
+    State.policyValues.task_max_in_progress = value;
+    status.textContent = 'Saved \u2713';
+  });
 
   const apply = () => {
     const overdueOnly = document.getElementById('team-overdue').checked;
@@ -649,7 +769,7 @@ function renderTeamList(rows, operators, nameMap) {
     return `
     <div class="panel" data-id="${t.id}" style="margin-bottom:12px;position:relative;${isOverdue(t) || lowRep ? 'border-color:var(--danger);' : ''}">
       ${taskIdBadge(t)}
-      <div class="chat-meta"><b>${esc(t.title)}</b> · ${esc(nameMap[t.claimed_by_email] || t.claimed_by_email)} · ${esc(STATUS_LABELS[t.status] || t.status)}${t.status === 'claimed' ? ` · due ${formatDate(t.due_date)}` : ''} ${isOverdue(t) ? '<span class="chat-tag" style="color:var(--danger);">Overdue</span>' : ''} ${lowRep ? `<span class="chat-tag" style="color:var(--danger);">Low reputation (${esc(rep)})</span>` : ''}</div>
+      <div class="chat-meta"><b>${esc(t.title)}</b> · ${esc(nameMap[t.claimed_by] || '')} · ${esc(STATUS_LABELS[t.status] || t.status)}${t.status === 'claimed' ? ` · due ${formatDate(t.due_date)}` : ''} ${isOverdue(t) ? '<span class="chat-tag" style="color:var(--danger);">Overdue</span>' : ''} ${lowRep ? `<span class="chat-tag" style="color:var(--danger);">Low reputation (${esc(rep)})</span>` : ''}</div>
       ${docLine(t)}
       ${t.description ? `<p>${esc(t.description)}</p>` : ''}
       ${t.review_notes ? `<p class="hint">${esc(t.review_notes)}</p>` : ''}
@@ -677,7 +797,7 @@ function renderTeamList(rows, operators, nameMap) {
       const sel = card.querySelector('.task-team-reassign');
       if (!sel.value) { alert('Choose someone to reassign this task to.'); return; }
       await withStatus(sb.from('tasks').update({
-        claimed_by: sel.value, claimed_by_email: sel.selectedOptions[0].dataset.email, claimed_at: new Date().toISOString(),
+        claimed_by: sel.value, claimed_at: new Date().toISOString(),
       }).eq('id', id), 'Reassigning...');
       await renderTasksView(document.getElementById('main'));
     });
@@ -719,40 +839,67 @@ async function renderReviewViewBody(body) {
 async function refreshReviewQueue() {
   const rows = await withStatus(sb.rpc('get_review_queue'));
   const box = document.getElementById('tasks-review-list');
-  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing waiting for review right now.</div>'; return; }
-  box.innerHTML = rows.map(t => `
-    <div class="panel" data-id="${t.id}" style="margin-bottom:12px;position:relative;">
-      ${taskIdBadge(t)}
-      <b>${esc(t.title)}</b>
-      ${docLine(t)}
-      ${t.description ? `<p>${esc(t.description)}</p>` : ''}
-      ${t.candidate_document_id ? `<div class="btn-row"><button class="btn secondary review-open-file">Open corrected file</button></div>` : ''}
-      <div class="field"><label>Notes for the operator <span class="hint">(optional)</span></label><textarea class="review-notes" rows="2"></textarea></div>
-      <div class="btn-row">
-        <button class="btn review-ok">OK</button>
-        <button class="btn secondary review-okbut">OK, but...</button>
-        <button class="btn danger review-fail">Fail</button>
-      </div>
-    </div>`).join('');
-  box.querySelectorAll('[data-id]').forEach(card => {
-    const id = parseInt(card.dataset.id, 10);
-    const t = rows.find(r => r.id === id);
-    const notes = () => card.querySelector('.review-notes').value.trim() || null;
-    card.querySelector('.review-open-file')?.addEventListener('click', async () => {
-      const docRows = await withStatus(sb.rpc('get_review_document', { p_document_id: t.candidate_document_id }));
-      const draftPath = docRows[0]?.draft_inp_path;
-      if (!draftPath) { alert('No file found for this revision.'); return; }
-      const { data } = await sb.storage.from(BUCKET).createSignedUrl(draftPath, 60);
-      if (data?.signedUrl) window.open(data.signedUrl, '_blank');
-    });
-    const submitVerdict = async (verdict, confirmMsg) => {
-      if (confirmMsg && !await confirmPopup(confirmMsg)) return;
-      await withStatus(sb.rpc('submit_task_review', { p_task_id: id, p_verdict: verdict, p_notes: notes() }), 'Submitting review...');
-      await renderTasksView(document.getElementById('main'));
-    };
-    card.querySelector('.review-ok').addEventListener('click', () => submitVerdict('ok'));
-    card.querySelector('.review-okbut').addEventListener('click', () => submitVerdict('ok_but'));
-    card.querySelector('.review-fail').addEventListener('click', () => submitVerdict('fail', 'Mark this as failed? The task will close and a new open task will be created for someone else to redo (not the same operator).'));
+  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing is waiting for review.</div>'; return; }
+  box.innerHTML = `<div class="task-cards">${rows.map(t => `
+    <div class="task-card" data-id="${t.id}">
+      <div class="task-card-top"><span class="task-kind">${esc(taskKind(t)) || 'Task'}</span><span>#${esc(t.id)} &middot; sent ${relativeDate(t.submitted_at)}</span></div>
+      <div class="task-card-title" dir="auto">${esc(t.title)}</div>
+      <div class="task-card-facts">${taskFacts(t)}</div>
+      <div class="btn-row"><button class="btn">Review</button></div>
+    </div>`).join('')}</div>`;
+  box.querySelectorAll('[data-id] .btn').forEach(b => b.addEventListener('click', () => openTask(b.closest('[data-id]').dataset.id, 'review')));
+}
+
+// One review on the desk: the file and the document on one side, the decision on the other. It is sent with "Send", not at
+// the first touch. Who did the work is not shown, and the queue of the database does not say it.
+const VERDICTS = [['ok', 'OK', 'Good work. It goes to the Admin.', 'green'], ['ok_but', 'OK, but...', 'Good, but write what to look at. It goes to the Admin.', 'violet'], ['fail', 'Fail', 'Not good enough. Write why. Someone else will do it again.', 'red']];
+async function renderReviewPage(main, id) {
+  const queue = await withStatus(sb.rpc('get_review_queue'));
+  const t = queue.find(x => String(x.id) === String(id));
+  if (!t) {
+    main.innerHTML = '<div class="panel"><p>This task is not waiting for your review any more.</p><div class="btn-row"><button class="btn" id="desk-back">Review Tasks</button></div></div>';
+    main.querySelector('#desk-back').addEventListener('click', () => backToTasks('review'));
+    return;
+  }
+  const sources = await documentSources(t.document_id);
+  if (t.candidate_document_id) sources.unshift(fileSource('mine', 'The file', async () => (await withStatus(sb.rpc('get_review_document', { p_document_id: t.candidate_document_id })))[0]?.draft_inp_path || null));
+  const work = `${infoCard(t, `<span class="st st-violet"><span aria-hidden="true">&#128065;</span> Sent ${esc(relativeDate(t.submitted_at))}</span>`)}
+    <div class="btn-row">${sources.length ? '<button class="btn secondary desk-open-doc desk-phone">Look at the file</button>' : ''}${t.candidate_document_id ? '<button class="btn secondary" id="review-download">Download the file</button>' : ''}</div>
+    <div class="panel">
+      <fieldset class="desk-choices"><legend>Your decision</legend>${VERDICTS.map(([v, l, text, tone]) => `<label class="desk-choice st-${tone}"><input type="radio" name="verdict" value="${v}"><span><b>${l}</b><span class="hint">${text}</span></span></label>`).join('')}</fieldset>
+      <div class="field"><label for="review-note">Note <span class="hint" id="review-note-hint">(if you want)</span></label><textarea id="review-note" rows="4" dir="auto" placeholder="Write as you would speak to them"></textarea></div>
+      <div class="btn-row"><button class="btn big-btn" id="review-send" disabled>Send</button></div>
+    </div>`;
+  main.innerHTML = deskHtml(headHtml('Review Tasks', `Task ${t.id}, ${queue.indexOf(t) + 1} of ${queue.length}`), sources.length > 0, work);
+  mountDocument(main, sources, 'mine');
+  const note = main.querySelector('#review-note'), send = main.querySelector('#review-send');
+  const verdict = () => main.querySelector('[name="verdict"]:checked')?.value || '';
+  const mark = () => {
+    const v = verdict(), needed = v === 'ok_but' || v === 'fail';
+    main.querySelector('#review-note-hint').textContent = needed ? '(needed)' : '(if you want)';
+    main.querySelectorAll('.desk-choice').forEach(l => l.classList.toggle('desk-chosen', l.querySelector('input').checked));
+    send.disabled = !v || (needed && !note.value.trim());
+    State.unsaved = v || note.value.trim() ? 'Your review has not been sent yet.' : '';
+  };
+  main.querySelectorAll('[name="verdict"]').forEach(r => r.addEventListener('change', mark));
+  note.addEventListener('input', mark);
+  main.querySelector('#desk-back').addEventListener('click', () => backToTasks('review'));
+  main.querySelector('#review-download')?.addEventListener('click', async () => {
+    const path = (await withStatus(sb.rpc('get_review_document', { p_document_id: t.candidate_document_id })))[0]?.draft_inp_path;
+    if (!path) { alert('There is no file for this task.'); return; }
+    const { data } = await sb.storage.from(BUCKET).createSignedUrl(path, 60);
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+  });
+  send.addEventListener('click', async () => {
+    const v = verdict();
+    if (v === 'fail' && !await confirmPopup('Send "Fail"? The task closes, and a new one opens for someone else.', { confirmLabel: 'Send', cancelLabel: 'Not yet', danger: true })) return;
+    send.disabled = true;
+    try {
+      await withStatus(sb.rpc('submit_task_review', { p_task_id: t.id, p_verdict: v, p_notes: note.value.trim() || null }), 'Sending...');
+    } catch (e) { send.disabled = false; alert(errorText(e)); return; }
+    State.unsaved = '';
+    backToTasks('review');
+    alert('Sent. Thank you!');
   });
 }
 
@@ -910,7 +1057,7 @@ async function renderBudgetView(body) {
         ${tile('Budget', budget)}
         ${tile('Available', available)}
         ${tile('Posted, not claimed', openCredits)}
-        ${tile('Claimed, in progress', inProgressCredits)}
+        ${tile('In progress', inProgressCredits)}
         ${tile('Approved, to redeem', toRedeemCredits)}
         ${tile('Redeemed', redeemedCredits)}
       </div>

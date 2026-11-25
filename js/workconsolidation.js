@@ -9,7 +9,7 @@
 // management lives on the document detail page (Other Versions table) rather than duplicated
 // here.
 
-import { sb, esc, canCatalogue, withStatus, labelOf, State, downloadFromGDrive, mergeWorks, titleOverlapScore, confirmPopup } from './core.js?v=20261125165400';
+import { sb, esc, canCatalogue, withStatus, labelOf, State, downloadFromGDrive, mergeWorks, titleOverlapScore, confirmPopup } from './core.js?v=20261125200106';
 
 const SIMILARITY_THRESHOLD = 0.6;
 const MAX_FOR_SUGGESTIONS = 1500; // guard against an O(n^2) scan over a very large catalogue
