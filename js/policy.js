@@ -6,7 +6,7 @@
 // People: any department lead or Admin) and from admin.js (per-row "Propose..." buttons that
 // replace the old direct-edit inputs on the reputation-tiers/policy-values/task-category panels).
 
-import { sb, State, esc, withStatus, canProposePolicyChange, canApprovePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261125143357';
+import { authorNames, sb, State, esc, withStatus, canProposePolicyChange, canApprovePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261125145432';
 
 // Who may propose a change to each policy_values key (GOVERNANCE.md §2.8 "who owns which
 // policy table"). task_category_rates and task_reputation_tiers are Reward's alone.
@@ -120,6 +120,7 @@ export async function renderPolicySection(container, { departmentFilter } = {}) 
   const history = proposals.filter(p => p.status !== 'pending');
   const { data: { user } } = await sb.auth.getUser();
   const myEmail = user.email;
+  const ratedBy = await authorNames(rates, 'updated_by', 'updated_by_email');
   const depts = State.optionListsByName.department || [];
   const canProposeAny = owners => owners.some(d => canProposePolicyChange(d));
   // In a department-scoped view (My Department), a table/row is shown only if this department
@@ -132,7 +133,7 @@ export async function renderPolicySection(container, { departmentFilter } = {}) 
       <div class="grid-wrap"><table class="grid">
         <thead><tr><th>Category</th><th>Credits/page</th><th>Last updated by</th><th></th></tr></thead>
         <tbody>${rates.map(r => `<tr>
-          <td>${esc(r.category)}</td><td>${esc(r.credits_per_page)}</td><td>${esc(r.updated_by_email || '')}</td>
+          <td>${esc(r.category)}</td><td>${esc(r.credits_per_page)}</td><td>${esc(ratedBy(r))}</td>
           <td>${canProposeAny(ownersFor('task_category_rates'))
             ? `<button class="btn secondary pp-propose-rate" style="padding:4px 10px;" data-category="${esc(r.category)}" data-rate="${esc(r.credits_per_page)}">Propose change</button>`
             : `<span class="hint">Owned by ${ownersFor('task_category_rates').map(deptLabel).join(' / ')}</span>`}</td>

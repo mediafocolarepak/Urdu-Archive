@@ -1,4 +1,4 @@
-import { sb, State, esc, labelOf, optionsHtml, withStatus, withStatusCount, isDeptMember, isAdmin, reportTable, nameMapForEmails } from './core.js?v=20261125143357';
+import { authorNames, sb, State, esc, labelOf, optionsHtml, withStatus, withStatusCount, isDeptMember, isAdmin, reportTable, nameMapForEmails } from './core.js?v=20261125145432';
 
 const APPLICATION_STATUS_LABEL = {
   pending: 'Pending', recommended: 'Recommended to Admin', approved: 'Approved', rejected: 'Rejected',
@@ -105,12 +105,12 @@ async function generatePersonnelReport(mode) {
   const team = decorated.filter(p => p.role && p.role !== 'user').sort((a, b) => (a.full_name || a.email).localeCompare(b.full_name || b.email));
   const users = decorated.filter(p => !p.role || p.role === 'user').sort((a, b) => (a.full_name || a.email).localeCompare(b.full_name || b.email));
 
-  const nameMap = await nameMapForEmails(applications.map(a => a.user_email));
+  const [nameMap, recommender, decider] = await Promise.all([nameMapForEmails(applications.map(a => a.user_email)), authorNames(applications, 'recommended_by', 'recommended_by_email'), authorNames(applications, 'reviewed_by', 'reviewed_by_email')]);
   const appCols = [
     { key: 'nameLabel', label: 'Applicant' }, { key: 'user_email', label: 'Email' },
     { key: 'statusLabel', label: 'Status' }, { key: 'submittedLabel', label: 'Submitted' },
-    { key: 'recommended_by_email', label: 'Recommended by' },
-    { key: 'reviewed_by_email', label: 'Decided by' }, { key: 'coordinator_note', label: 'Note' },
+    { key: 'recommenderLabel', label: 'Recommended by' },
+    { key: 'deciderLabel', label: 'Decided by' }, { key: 'coordinator_note', label: 'Note' },
   ];
   // Open requests (pending/recommended) first - the ones a meeting actually needs to act on -
   // then the historical record, newest first within each group.
@@ -118,6 +118,7 @@ async function generatePersonnelReport(mode) {
   const appRows = applications.map(a => ({
     ...a,
     nameLabel: nameMap[a.user_email] || '—',
+    recommenderLabel: recommender(a), deciderLabel: ['approved', 'rejected'].includes(a.status) ? decider(a) : '',
     statusLabel: APPLICATION_STATUS_LABEL[a.status] || a.status,
     submittedLabel: (a.created_at || '').slice(0, 10),
   })).sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9) || (b.created_at || '').localeCompare(a.created_at || ''));

@@ -7,7 +7,7 @@
 // dispatched in app.js exactly like chat.js already splits admin/user - see renderTab('chat')
 // there for the precedent this follows.
 
-import { sb, State, esc, labelOf, withStatus, nameMapForEmails, isAdmin, isAnyDeptLead, canRecordAudio, mountVoiceRecorder, uploadVoice } from './core.js?v=20261125143357';
+import { nameMapForIds, sb, State, esc, labelOf, withStatus, isAdmin, isAnyDeptLead, canRecordAudio, mountVoiceRecorder, uploadVoice } from './core.js?v=20261125145432';
 
 function formatDateTime(iso) { return esc((iso || '').slice(0, 16).replace('T', ' ')); }
 
@@ -79,7 +79,7 @@ export async function renderShareComposeView(main) {
       catch (err) { alert('The voice message could not be sent. Please write your message instead. (' + err.message + ')'); return; }
     }
     if (kind === 'EXPERIENCE') {
-      await withStatus(sb.from('share_with_us_messages').insert({ user_id: user.id, user_email: user.email, body: body || null, audio_path, audio_mime_type }), 'Sending...');
+      await withStatus(sb.from('share_with_us_messages').insert({ user_id: user.id, body: body || null, audio_path, audio_mime_type }), 'Sending...');
     } else {
       const doc = parseInt(document.getElementById('swu-doc').value, 10);
       await withStatus(sb.from('chat_messages').insert({
@@ -114,7 +114,7 @@ async function refreshOwnThread(user) {
     withStatus(sb.from('share_with_us_replies').select('*').in('message_id', ids).order('created_at')),
   ]) : [[], []];
   const [nameMap, shareAudio, reportAudio] = await Promise.all([
-    nameMapForEmails([...reactions.map(r => r.user_email), ...replies.map(r => r.user_email)]), signedAudioUrls(messages), signedAudioUrls(reports, REPORT_AUDIO_BUCKET),
+    nameMapForIds([...reactions.map(r => r.user_id), ...replies.map(r => r.user_id)]), signedAudioUrls(messages), signedAudioUrls(reports, REPORT_AUDIO_BUCKET),
   ]);
   const box = document.getElementById('swu-thread');
   if (!box) return;
@@ -123,13 +123,13 @@ async function refreshOwnThread(user) {
   box.innerHTML = all.map(({ kind, m }) => {
     const mine = kind === 'EXPERIENCE';
     const thanks = mine ? reactions.filter(r => r.message_id === m.id) : [];
-    const answers = mine ? replies.filter(r => r.message_id === m.id).map(r => [nameMap[r.user_email], r.created_at, r.body]) : m.reply_text ? [['The team', m.replied_at, m.reply_text]] : [];
+    const answers = mine ? replies.filter(r => r.message_id === m.id).map(r => [nameMap[r.user_id], r.created_at, r.body]) : m.reply_text ? [['The team', m.replied_at, m.reply_text]] : [];
     return `
       <div class="chat-bubble from-me">
         <div class="chat-meta"><span aria-hidden="true">${kindSign(kind)}</span> ${esc(kindLabel(kind))}${m.document_id ? ` &middot; #${esc(m.document_id)}` : ''} &middot; ${formatDateTime(m.created_at)}</div>
         ${m.body || m.message_text ? `<div dir="auto" style="white-space:pre-wrap;">${esc(m.body || m.message_text)}</div>` : ''}
         ${audioPlayerHtml(m, mine ? shareAudio : reportAudio)}
-        ${thanks.length ? `<div class="chat-meta" style="margin-top:4px;">&#128591; Thanked by ${thanks.map(r => esc(nameMap[r.user_email])).join(', ')}</div>` : ''}
+        ${thanks.length ? `<div class="chat-meta" style="margin-top:4px;">&#128591; Thanked by ${thanks.map(r => esc(nameMap[r.user_id])).join(', ')}</div>` : ''}
       </div>
       ${answers.map(([who, at, text]) => `<div class="chat-bubble from-other"><div class="chat-meta">${esc(who)} &middot; ${formatDateTime(at)}</div><div dir="auto" style="white-space:pre-wrap;">${esc(text)}</div></div>`).join('')}`;
   }).join('');
@@ -173,11 +173,11 @@ async function refreshIdeas(box) {
   const { data: { user } } = await sb.auth.getUser();
   const rows = (await withStatus(sb.from('chat_messages').select('*').eq('report_type', 'SUGGESTION').eq('dismissed', false).order('created_at', { ascending: false }).limit(100))).filter(r => r.user_id !== user.id || isAdmin());
   if (!rows.length || !box || !box.isConnected) return;
-  const [names, audio] = await Promise.all([nameMapForEmails(rows.map(r => r.user_email)), signedAudioUrls(rows, REPORT_AUDIO_BUCKET)]);
+  const [names, audio] = await Promise.all([nameMapForIds(rows.map(r => r.user_id)), signedAudioUrls(rows, REPORT_AUDIO_BUCKET)]);
   box.innerHTML = `<div class="panel"><h2>Ideas to improve the app <span class="count-badge">${rows.length}</span></h2>
     <p class="hint">The Coordinators and the Admins answer them.</p>
     ${rows.map(r => `<div class="panel" style="margin-bottom:12px;">
-      <div class="chat-meta">${esc(names[r.user_email] || '')} &middot; ${formatDateTime(r.created_at)}${r.document_id ? ` &middot; #${esc(r.document_id)}` : ''}</div>
+      <div class="chat-meta">${esc(names[r.user_id] || '')} &middot; ${formatDateTime(r.created_at)}${r.document_id ? ` &middot; #${esc(r.document_id)}` : ''}</div>
       ${r.message_text ? `<div dir="auto" style="margin:6px 0;white-space:pre-wrap;">${esc(r.message_text)}</div>` : ''}${audioPlayerHtml(r, audio)}
       ${r.reply_text ? `<div class="chat-bubble from-other"><div class="chat-meta">Answered &middot; ${formatDateTime(r.replied_at)}</div><div dir="auto">${esc(r.reply_text)}</div></div>` : ''}
     </div>`).join('')}</div>`;
@@ -193,9 +193,7 @@ async function refreshInbox(user) {
     withStatus(sb.from('share_with_us_reactions').select('*').in('message_id', ids)),
     withStatus(sb.from('share_with_us_replies').select('*').in('message_id', ids).order('created_at')),
   ]);
-  const nameMap = await nameMapForEmails([
-    ...messages.map(m => m.user_email), ...reactions.map(r => r.user_email), ...replies.map(r => r.user_email),
-  ]);
+  const nameMap = await nameMapForIds([...messages, ...reactions, ...replies].map(r => r.user_id));
   const audioUrlByPath = await signedAudioUrls(messages);
 
   box.innerHTML = messages.map(m => {
@@ -204,17 +202,17 @@ async function refreshInbox(user) {
     const iThanked = msgReactions.some(r => r.user_id === user.id);
     return `
       <div class="panel" style="margin-bottom:12px;" data-msg-id="${m.id}">
-        <div class="chat-meta">${esc(nameMap[m.user_email] || m.user_email)} &middot; ${formatDateTime(m.created_at)}</div>
+        <div class="chat-meta">${esc(nameMap[m.user_id] || '')} &middot; ${formatDateTime(m.created_at)}</div>
         ${m.body ? `<div dir="auto" style="margin:6px 0;">${esc(m.body)}</div>` : ''}
         ${audioPlayerHtml(m, audioUrlByPath)}
         <div class="btn-row" style="align-items:center;">
           <button class="btn ${iThanked ? '' : 'secondary'} swu-thank-btn" style="padding:4px 10px;" data-id="${m.id}" data-next="${!iThanked}">&#128591; ${iThanked ? 'Thanked' : 'Thank you'}</button>
-          ${msgReactions.length ? `<span class="hint">${msgReactions.map(r => esc(nameMap[r.user_email] || r.user_email)).join(', ')}</span>` : ''}
+          ${msgReactions.length ? `<span class="hint">${msgReactions.map(r => esc(nameMap[r.user_id] || '')).join(', ')}</span>` : ''}
         </div>
         <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
           ${msgReplies.map(r => `
             <div class="chat-bubble from-other" style="align-self:flex-start;">
-              <div class="chat-meta">${esc(nameMap[r.user_email] || r.user_email)} &middot; ${formatDateTime(r.created_at)}</div>
+              <div class="chat-meta">${esc(nameMap[r.user_id] || '')} &middot; ${formatDateTime(r.created_at)}</div>
               ${esc(r.body)}
             </div>`).join('')}
         </div>
@@ -228,7 +226,7 @@ async function refreshInbox(user) {
   box.querySelectorAll('.swu-thank-btn').forEach(btn => btn.addEventListener('click', async () => {
     const id = btn.dataset.id;
     if (btn.dataset.next === 'true') {
-      await withStatus(sb.from('share_with_us_reactions').insert({ message_id: id, user_id: user.id, user_email: user.email }), 'Saving...');
+      await withStatus(sb.from('share_with_us_reactions').insert({ message_id: id, user_id: user.id }), 'Saving...');
     } else {
       await withStatus(sb.from('share_with_us_reactions').delete().eq('message_id', id).eq('user_id', user.id), 'Saving...');
     }
@@ -240,7 +238,7 @@ async function refreshInbox(user) {
     const panel = box.querySelector(`[data-msg-id="${id}"]`);
     const body = panel.querySelector('.swu-reply-input').value.trim();
     if (!body) { alert('Please write a reply first.'); return; }
-    await withStatus(sb.from('share_with_us_replies').insert({ message_id: id, user_id: user.id, user_email: user.email, body }), 'Sending...');
+    await withStatus(sb.from('share_with_us_replies').insert({ message_id: id, user_id: user.id, body }), 'Sending...');
     await refreshInbox(user);
   }));
 }

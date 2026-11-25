@@ -11,7 +11,7 @@
 //   qual:<CODE>                     holds that qualification
 //   board_editor                    looks after at least one board
 
-import { sb, State, esc, isAdmin, withStatus } from './core.js?v=20261125143357';
+import { authorNames, sb, State, esc, isAdmin, withStatus } from './core.js?v=20261125145432';
 
 const SECTIONS = [
   ['use', { en: 'Use the archive', it: 'Usare l\'archivio', ur: 'آرکائیو کا استعمال' }],
@@ -166,11 +166,13 @@ async function renderGuide(main, rows) {
   const languages = rows.filter(r => r.guide_key === helpView.key).map(r => r.language);
   let body = bodyCache.get(row.slug);
   if (!body) {
-    const found = await withStatus(sb.from('help_pages').select('html_content,updated_at,updated_by_email').eq('slug', row.slug));
+    const found = await withStatus(sb.from('help_pages').select('*').eq('slug', row.slug));
     body = found[0] || { html_content: '' };
     bodyCache.set(row.slug, body);
   }
   const updated = body.updated_at ? new Date(body.updated_at).toLocaleDateString() : '';
+  // A migration signs with its number; a person is shown by name.
+  const updatedBy = !isAdmin() ? '' : (await authorNames([body], 'updated_by', 'updated_by_email'))(body) || (/^migration /.test(body.updated_by_email || '') ? body.updated_by_email : '');
   const rtl = row.language === 'ur' ? 'dir="rtl"' : '';
   main.innerHTML = `
     <div class="panel help-panel">
@@ -194,7 +196,7 @@ async function renderGuide(main, rows) {
           <button class="btn secondary" id="help-edit-toggle" type="button">${esc(helpView.editing ? ui().cancel : ui().edit)}</button>
           ${helpView.editing ? `<button class="btn" id="help-save" type="button">${esc(ui().save)}</button>` : ''}
         </div>
-        ${updated ? `<p class="hint">${esc(ui().updated)}: ${esc(updated)}${body.updated_by_email ? ` ${esc(ui().by)} ${esc(body.updated_by_email)}` : ''}</p>` : ''}` : ''}
+        ${updated ? `<p class="hint">${esc(ui().updated)}: ${esc(updated)}${updatedBy ? ` ${esc(ui().by)} ${esc(updatedBy)}` : ''}</p>` : ''}` : ''}
     </div>`;
   wireLangSwitch(main);
   document.getElementById('help-back').addEventListener('click', goBackToList);
@@ -209,10 +211,10 @@ async function renderGuide(main, rows) {
     const { data: { user } } = await sb.auth.getUser();
     const updated_at = new Date().toISOString();
     try {
-      await withStatus(sb.from('help_pages').update({ html_content, title, summary, updated_at, updated_by_email: user.email }).eq('slug', row.slug), 'Saving...');
+      await withStatus(sb.from('help_pages').update({ html_content, title, summary, updated_at }).eq('slug', row.slug), 'Saving...');
     } catch (err) { alert('Save failed: ' + err.message); return; }
     Object.assign(row, { title, summary });
-    bodyCache.set(row.slug, { html_content, updated_at, updated_by_email: user.email });
+    bodyCache.set(row.slug, { html_content, updated_at, updated_by: user.id });
     helpView.editing = false;
     renderUserGuideView(main);
   });
