@@ -1,5 +1,5 @@
-import { passwordProblem, authorNames, dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261125200106';
-import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261125200106';
+import { passwordProblem, authorNames, dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261125223139';
+import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261125223139';
 
 // ---------- Users ----------
 
@@ -176,8 +176,8 @@ export async function renderOptionsView(main) {
       <div id="dept-editor"></div>
     </div>
     <div class="panel">
-      <h2>Policy <span class="hint">— task category rates, reputation tiers and thresholds</span></h2>
-      <p class="hint">These moved to a propose/approve workflow (GOVERNANCE.md §2.8): no one, including Admin, edits them directly here any more. See <strong>People</strong> to view current values, propose a change (department leads), or approve/reject a pending proposal (Admin).</p>
+      <h2>Rules <span class="hint">— the numbers of the project</span></h2>
+      <p class="hint">The lead of a department proposes a change, an Admin decides: <strong>My Department, Rules</strong>. Nobody changes them here.</p>
     </div>
     <div class="panel">
       <h2>Maintenance <span class="hint">— one-off data cleanup tools</span></h2>

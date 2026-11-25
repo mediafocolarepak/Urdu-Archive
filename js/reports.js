@@ -1,4 +1,5 @@
-import { authorNames, sb, State, esc, labelOf, optionsHtml, withStatus, withStatusCount, isDeptMember, isAdmin, reportTable, nameMapForEmails } from './core.js?v=20261125200106';
+import { authorNames, sb, State, esc, labelOf, optionsHtml, withStatus, withStatusCount, isDeptMember, isAdmin, reportTable } from './core.js?v=20261125223139';
+import { namesByIds } from './deptui.js?v=20261125223139';
 
 const APPLICATION_STATUS_LABEL = {
   pending: 'Pending', recommended: 'Recommended to Admin', approved: 'Approved', rejected: 'Rejected',
@@ -80,7 +81,7 @@ function explodeGrouped(rows, field, optionListName, noneLabel) {
       out.push({ ...r, groupLabel: label, isLead, sortKey: label });
     }
   }
-  return out.sort((a, b) => a.sortKey.localeCompare(b.sortKey) || (a.full_name || a.email).localeCompare(b.full_name || b.email));
+  return out.sort((a, b) => a.sortKey.localeCompare(b.sortKey) || (a.full_name || '').localeCompare(b.full_name || ''));
 }
 
 async function generatePersonnelReport(mode) {
@@ -92,8 +93,10 @@ async function generatePersonnelReport(mode) {
     withStatus(sb.from('collaboration_applications').select('*').order('created_at', { ascending: false })),
   ]);
 
+  // Names only, as in My Department (179): a printed list carries no login.
   const decorated = people.map(p => ({
     ...p,
+    full_name: (p.full_name || '').trim() || '(no name)',
     roleLabel: p.role ? p.role.charAt(0).toUpperCase() + p.role.slice(1) : '—',
     standingLabel: p.standing ? p.standing.charAt(0).toUpperCase() + p.standing.slice(1) : '—',
     sinceLabel: (p.since || '').slice(0, 10),
@@ -102,12 +105,12 @@ async function generatePersonnelReport(mode) {
   // "Team" = everyone with actual responsibilities (operator and up); plain Users are the
   // general readership, kept out of the roster proper so a HR/Admin printout isn't mostly
   // people they don't manage.
-  const team = decorated.filter(p => p.role && p.role !== 'user').sort((a, b) => (a.full_name || a.email).localeCompare(b.full_name || b.email));
-  const users = decorated.filter(p => !p.role || p.role === 'user').sort((a, b) => (a.full_name || a.email).localeCompare(b.full_name || b.email));
+  const team = decorated.filter(p => p.role && p.role !== 'user').sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
+  const users = decorated.filter(p => !p.role || p.role === 'user').sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
 
-  const [nameMap, recommender, decider] = await Promise.all([nameMapForEmails(applications.map(a => a.user_email)), authorNames(applications, 'recommended_by', 'recommended_by_email'), authorNames(applications, 'reviewed_by', 'reviewed_by_email')]);
+  const [name, recommender, decider] = await Promise.all([namesByIds(applications.map(a => a.user_id)), authorNames(applications, 'recommended_by', 'recommended_by_email'), authorNames(applications, 'reviewed_by', 'reviewed_by_email')]);
   const appCols = [
-    { key: 'nameLabel', label: 'Applicant' }, { key: 'user_email', label: 'Email' },
+    { key: 'nameLabel', label: 'Applicant' },
     { key: 'statusLabel', label: 'Status' }, { key: 'submittedLabel', label: 'Submitted' },
     { key: 'recommenderLabel', label: 'Recommended by' },
     { key: 'deciderLabel', label: 'Decided by' }, { key: 'coordinator_note', label: 'Note' },
@@ -117,7 +120,7 @@ async function generatePersonnelReport(mode) {
   const statusOrder = { pending: 0, recommended: 1, approved: 2, rejected: 3 };
   const appRows = applications.map(a => ({
     ...a,
-    nameLabel: nameMap[a.user_email] || '—',
+    nameLabel: name(a.user_id),
     recommenderLabel: recommender(a), deciderLabel: ['approved', 'rejected'].includes(a.status) ? decider(a) : '',
     statusLabel: APPLICATION_STATUS_LABEL[a.status] || a.status,
     submittedLabel: (a.created_at || '').slice(0, 10),
@@ -127,7 +130,7 @@ async function generatePersonnelReport(mode) {
   if (mode === 'department') {
     const rows = explodeGrouped(team, 'departments', 'department', '— No department —').map(r => ({ ...r, leadLabel: r.isLead ? 'Lead' : '' }));
     const cols = [
-      { key: 'full_name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'leadLabel', label: '' },
+      { key: 'full_name', label: 'Name' }, { key: 'leadLabel', label: '' },
       { key: 'roleLabel', label: 'Role' }, { key: 'qualifications', label: 'Qualifications' }, { key: 'standingLabel', label: 'Standing' },
     ];
     area.innerHTML = reportTable('Team by Department', rows, cols, 'groupLabel') + applicationsHtml;
@@ -136,7 +139,7 @@ async function generatePersonnelReport(mode) {
   if (mode === 'qualification') {
     const rows = explodeGrouped(team, 'qualifications', 'operator_qualification', '— No qualification —');
     const cols = [
-      { key: 'full_name', label: 'Name' }, { key: 'email', label: 'Email' },
+      { key: 'full_name', label: 'Name' },
       { key: 'roleLabel', label: 'Role' }, { key: 'departments', label: 'Departments' }, { key: 'standingLabel', label: 'Standing' },
     ];
     area.innerHTML = reportTable('Team by Qualification', rows, cols, 'groupLabel') + applicationsHtml;
@@ -144,7 +147,7 @@ async function generatePersonnelReport(mode) {
   }
 
   const teamCols = [
-    { key: 'full_name', label: 'Name' }, { key: 'email', label: 'Email' },
+    { key: 'full_name', label: 'Name' },
     { key: 'roleLabel', label: 'Role' }, { key: 'departments', label: 'Departments' },
     { key: 'qualifications', label: 'Qualifications' }, { key: 'standingLabel', label: 'Standing' },
     { key: 'credits', label: 'Credits' }, { key: 'reputation', label: 'Reputation' },
@@ -153,7 +156,7 @@ async function generatePersonnelReport(mode) {
   // Compact columns for Users - this table can run to hundreds/thousands of rows, and none of
   // the team-specific columns (departments, qualifications, credits...) ever apply to them.
   const userCols = [
-    { key: 'full_name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'sinceLabel', label: 'Since' },
+    { key: 'full_name', label: 'Name' }, { key: 'sinceLabel', label: 'Since' },
   ];
   area.innerHTML = reportTable(`Team Roster (${team.length})`, team, teamCols)
     + reportTable(`Users (${users.length})`, users, userCols)

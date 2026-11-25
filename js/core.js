@@ -327,8 +327,7 @@ export const State = {
   matchSort: { col: 'document_id', asc: false },
   matchSelectedId: null,
   usersSort: { col: 'full_name', asc: true },
-  peopleSort: { col: 'full_name', asc: true },
-  peopleFilter: { search: '', standing: '', atRiskOnly: false, department: '', role: '', qualification: '' },
+  peopleFilter: { search: '', who: '', department: '', role: '', qualification: '', order: 'name' },
   optionsSelectedList: 'category',
   deptEditorSelected: null,  // department_code currently shown in Options -> Departments
   myDeptSelected: null,  // department_code currently shown in My Department (mydepartment.js)
@@ -1465,15 +1464,16 @@ export async function nameMapForEmails(emails) {
 }
 
 // Names by account id, for path owners, co-authors and assignees. Every id asked for has an answer in the map.
-export async function nameMapForIds(ids) {
+// logins: false leaves out a person without a name, for everyone (My Department: names only).
+export async function nameMapForIds(ids, { logins = true } = {}) {
   const { unique, found } = await namesFor('ids', ids);
   const missing = unique.filter(id => !found.has(id));
   // An old account may have no name yet: Coordinators and Admins, who may read the profile, see its login.
-  if (missing.length && canReviewApplications()) {
+  if (missing.length && logins && canReviewApplications()) {
     const { data } = await sb.from('user_profiles').select('user_id,email').in('user_id', missing);
     for (const r of data || []) if (r.email) found.set(r.user_id, displayLogin(r.email));
   }
-  return Object.fromEntries(unique.map(id => [id, found.get(id) || NAMELESS]));
+  return Object.fromEntries(unique.map(id => [id, found.get(id) || (logins ? NAMELESS : '')]));
 }
 
 // The names of those who wrote some rows, by account, as a function of the row. Until 173_who_writes.sql has been run some rows

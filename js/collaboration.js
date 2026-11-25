@@ -5,7 +5,8 @@
 // the UI) - only Admin can set 'approved', paired with the actual role promotion in
 // user_roles (already an admin-only action, see 05_roles_and_permissions.sql).
 
-import { authorNames, sb, State, esc, canReviewTeamApplications, isAdmin, withStatus, nameMapForEmails, confirmPopup } from './core.js?v=20261125200106';
+import { authorNames, sb, State, esc, canReviewTeamApplications, isAdmin, withStatus, confirmPopup, displayLogin } from './core.js?v=20261125223139';
+import { namesByIds, agoText } from './deptui.js?v=20261125223139';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -136,14 +137,25 @@ export async function renderJoinTeamView(main) {
   });
 }
 
-// ---------- Review queue (Coordinator + Admin) ----------
+// ---------- Review queue (HR and Admin) ----------
+
+// For "Today" of HR: who waits for an answer. HR recommends, an Admin approves.
+export async function loadApplicationItems(open) {
+  const rows = await withStatus(sb.from('collaboration_applications').select('id,user_id,status,created_at').in('status', ['pending', 'recommended']).order('created_at'));
+  const name = await namesByIds(rows.map(r => r.user_id));
+  return rows.map(r => {
+    const can = r.status === 'pending' || isAdmin();
+    return { tone: 'blue', title: `${name(r.user_id)} wants to join`, can,
+      by: `Asked ${agoText(r.created_at)}${r.status === 'recommended' ? (can ? '. HR recommends this person.' : '. Recommended. An Admin decides.') : ''}`,
+      buttons: [{ label: 'Read', kind: can ? '' : 'secondary', run: () => { open(); return false; } }] };
+  });
+}
 
 export async function renderApplicationsView(main) {
   if (!canReviewTeamApplications()) { main.innerHTML = '<div class="empty-msg">HR or Admin access required.</div>'; return; }
   main.innerHTML = `
     <div class="panel">
-      <h2>Team Applications</h2>
-      <p class="hint">${isAdmin()
+      <p class="hint" style="margin-top:0;">${isAdmin()
         ? 'HR recommends candidates here; approving promotes them to Operator directly.'
         : 'Review requests and recommend candidates to an Admin - only an Admin can give final approval.'}</p>
       <div class="field-grid">
@@ -171,11 +183,12 @@ async function refreshApplications() {
 
   const list = document.getElementById('apps-list');
   if (!rows.length) { list.innerHTML = '<div class="empty-msg">No applications match this filter.</div>'; return; }
-  const [nameMap, recommender] = await Promise.all([nameMapForEmails(rows.map(r => r.user_email)), authorNames(rows, 'recommended_by', 'recommended_by_email')]);
+  const [name, recommender] = await Promise.all([namesByIds(rows.map(r => r.user_id)), authorNames(rows, 'recommended_by', 'recommended_by_email')]);
 
   list.innerHTML = rows.map(r => `
     <div class="panel" data-id="${r.id}" style="margin-bottom:12px;">
-      <div class="chat-meta"><b>${esc(nameMap[r.user_email] || r.user_email)}</b> · ${formatDate(r.created_at)} · <span class="chat-tag">${esc(STATUS_LABEL[r.status] || r.status)}</span></div>
+      <div class="chat-meta"><b>${esc(name(r.user_id))}</b> · ${formatDate(r.created_at)} · <span class="chat-tag">${esc(STATUS_LABEL[r.status] || r.status)}</span></div>
+      <details class="dep-more"><summary>Contact</summary><div class="hint">Login: ${esc(displayLogin(r.user_email))}</div></details>
       <p><b>Academic level:</b> ${esc(ACADEMIC_LEVELS.find(([c]) => c === r.academic_level)?.[1] || r.academic_level || '—')}</p>
       ${r.experience ? `<p><b>Experience:</b> ${esc(r.experience)}</p>` : ''}
       ${r.skills ? `<p><b>Skills:</b> ${esc(r.skills)}</p>` : ''}

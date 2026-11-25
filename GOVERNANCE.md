@@ -1,7 +1,10 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.26 (2026-11-25) — decisions taken by the Owner; all of phases 1 through 3 are built and
+**Status: v1.27 (2026-11-25) — decisions taken by the Owner; all of phases 1 through 3 are built and
 merged (migrations 80–115). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.27:** My Department in four tabs (§5.3, migration 179): the list of People is for HR and Admins only, a person's
+login is read one at a time by HR and Admins, the proposals on the rules are read by the team, and people are known by name.
 
 **What changed in v1.26:** the task desk (§5.12, migration 176): at most 3 tasks in progress, a note needed with OK, but... and Fail.
 
@@ -546,16 +549,22 @@ open — two low-priority known gaps.
   `suspend`, `reinstate`, `exclude` (role → `user`, standing → `excluded`, department/board/
   qualification rows dropped; account and every ledger kept — §8.7), `role_change`,
   `board_misuse` / `board_block` / `board_unblock` (§5.4).
-- **People tab** (`hr_people_overview()`), visible to HR members, department leads and Admin:
-  role, standing, credits, reputation, qualifications, departments, last event, negative events
+- **People** (`hr_people_overview()`), visible to HR members and Admin (Owner's decision, 2026-11-25; until
+  migration 179 also to the lead of any department). It carries no login, telephone or city: the login of one
+  person is asked one at a time with `person_contact()`, by HR members and Admin. Role, standing, credits, reputation, qualifications, departments, last event, negative events
   in the window, open tasks, pending decisions, and a **computed** `at_risk` badge (reputation <
   40, or ≥ 2 negative events in 60 days — all three numbers live in `policy_values`, §5.6). The
   stored thing is the HR decision (`watch`), never the heuristic itself.
-- **My Department**: one screen per department (HR, Coordination, Formation, Reward), each
-  showing that department's own working view (roster, applications/People for HR, task-flow
-  overview for Coordination, course pipeline for Formation, credit circulation for Reward), a
-  shared **Team channel** (below) and the shared Policy section (§5.6). Team Applications no
-  longer exists as a separate top-level tab — it lives inside My Department → HR.
+- **My Department**: four tabs for each department (Owner's decisions, 2026-11-25). **Today**: what waits for
+  this person's decision, what waits for others, the state of the department and what matters now (§5.9).
+  **Team and chat**: the Team channel (below) and the members. **Tools**: one screen for each tool, with its own
+  address (`#department/HR/people`) — People, Applications and Decisions taken for HR; Task flow for
+  Coordination; Credits, Compensation runs, Unusual credits, Tokens, Public thanks and Certificates for Reward;
+  Paths in preparation and Reserved documents for Formation; Start Here cards for Communication; the archive
+  tools for Archive & Data. **Rules**: the numbers in plain sentences (§5.6). Whoever decides reads what exactly
+  they decide (from which role to which, which qualification), and the Formation lead finds the board decisions
+  in their own Today. People are shown by name, never by login; a person is chosen by name (`find_people()`:
+  Coordinators, Admin, department leads, Reward).
 - **Team channel** (migration 94, `department_messages`): the internal team communications
   deferred since v26/§6.8 of earlier versions — a private message thread per department, visible
   only to that department's members and Admin, distinct from Boards (§2.6, public and moderated)
@@ -639,7 +648,7 @@ open — two low-priority known gaps.
   the same credits being counted into two runs. This is the "credits earned vs. credits paid"
   reconciliation v1.0 asked for; `docs/REWARD_POLICY.md` still governs the conversion rate itself
   (§2.8, §8 item 6), the schema only records that a conversion happened.
-- **Anomaly report (migration 91, §2.4):** `reward_extra_credit_tasks()` lists every task that
+- **Unusual credits (until v1.26 "Anomaly report"; migration 91, §2.4):** `reward_extra_credit_tasks()` lists every task that
   ever carried extra credits, whatever its approval status; `reward_operator_credit_anomalies()`
   flags an operator once their approved-but-unpublished credits exceed both their published
   credits and a policy floor (`reward_anomaly_backlog_credits`, default 100). Both are read-only
@@ -661,23 +670,21 @@ open — two low-priority known gaps.
   `apply_policy_change()`, `security definer`, reachable only from `decide_policy_change()`. This
   is the one governance rule (§8 item 8) verified end-to-end at the database level, not just by
   team discipline.
-- UI (My Department → Policy): read-only current values for everyone signed in, a "Propose
-  change" action for department leads, a pending-proposals queue for Admin, and a per-department
-  history view.
+- UI (My Department → Rules): each rule as a plain sentence, **Change** for the lead of the owning department,
+  the proposals waiting for an Admin (also in the Admin's Today), and the past decisions. The values in force are
+  readable by everyone signed in; the proposals by the team (Operator and up, and department members).
 
 ### 5.7 Who sees what today
-- **People tab** (My Department → HR): HR members, department leads, Admin.
+- **People** (My Department → HR): HR members and Admin. A person's login: the same, one at a time.
 - **Personnel & Team Applications report** (Print Reports, migration-free, reuses `hr_people_
-  overview()` and `collaboration_applications`): HR members and Admin only — deliberately
-  narrower than the People tab's own gate, since `collaboration_applications`' RLS only lets HR
-  and Admin read it, not every department lead. Three views of the same data (v1.3): a **Team
+  overview()` and `collaboration_applications`): HR members and Admin only; names, no login. Three views of the same data (v1.3): a **Team
   Roster** (operator and up only) kept separate from a compact **Users** table (plain Users, the
   general readership, can run to hundreds/thousands of rows and have no team-specific columns to
   show); **by department** and **by qualification**, each exploding `hr_people_overview()`'s
   comma-joined summary columns back into one row per membership and grouping with the resolved
   option-list label, not the raw code. Team Applications is included in every view. All printable
   for a meeting or a periodic review.
-- **Policy** (current values + propose/approve): read by everyone; propose by department leads;
+- **Rules**: values in force read by everyone, proposals by the team; propose by department leads;
   decide by Admin (not the proposer).
 - Team Applications: HR members + Admin (My Department → HR), no longer a separate tab.
 - Budget (top-up), Options (option lists, departments): Admin only. Reward members get a

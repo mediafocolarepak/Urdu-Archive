@@ -1,16 +1,19 @@
-// "My Department" (migration 87, GOVERNANCE.md §2.7/§2.8): a single screen for a department
-// lead (or Admin) to keep an eye on their own team and policy without hunting across tabs.
-// Department list is fully data-driven from option_lists ('department') and department_members
-// - departments can be added, renamed or retired from Options without touching this file.
+// "My Department" (migration 87, GOVERNANCE.md §2.7/§2.8). Since phase 4 (Owner's decisions, 2026-11-25) four tabs instead of one
+// long page: Today (what waits for a decision, the state of the department, what matters now), Team and chat, Tools (one screen
+// for each tool) and Rules. Each has its address: #department/HR/people. People are shown by name, never by login.
+// The list of departments is driven by option_lists ('department') and department_members: departments can be added, renamed
+// or retired from Options without touching this file.
 
 import { authorNames,
-  sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
-  nameMapForIds, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved,
-  helpLinkHtml, confirmPopup, promptPopup, showLoadFailed
-} from './core.js?v=20261125200106';
-import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261125200106';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261125200106';
-import { renderApplicationsView } from './collaboration.js?v=20261125200106';
+  sb, State, esc, today, withStatus, isAdmin, isDeptLead, labelOf,
+  nameMapForIds, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved, canReviewApplications, canReviewTeamApplications,
+  helpLinkHtml, confirmPopup, promptPopup, popupShell, showLoadFailed, errorText
+} from './core.js?v=20261125223139';
+import { renderRules, loadRuleItems } from './policy.js?v=20261125223139';
+import { renderPeopleTool, renderDecisionsTool, loadPeopleItems } from './people.js?v=20261125223139';
+import { renderCredits, renderRuns, renderUnusual, renderTokens, renderThanks, renderCertificates, loadRewardItems } from './reward.js?v=20261125223139';
+import { renderApplicationsView, loadApplicationItems } from './collaboration.js?v=20261125223139';
+import { deptLabel, plural, st, itemHtml, wireItems, tableHtml, namesByIds, nameOnly, personSearch, agoText, dayText } from './deptui.js?v=20261125223139';
 
 // Each department's page opens its own guide from the "?" beside the title.
 const DEPT_GUIDES = { HR: 'dept-hr', COORD: 'dept-coordination', FORM: 'dept-formation', RF: 'dept-reward', COMM: 'dept-communication', ARCHIVE: 'dept-archive' };
@@ -20,449 +23,524 @@ function myDepartmentCodes() {
   return State.myDepartments.map(d => d.department_code);
 }
 
-function deptLabel(code) {
-  const depts = State.optionListsByName.department || [];
-  const hit = depts.find(([c]) => c === code);
-  return hit ? hit[1] : code;
+// The address of a page of a department: go('HR'), go('HR', 'people'), go('HR', 'people', id).
+const go = (code, ...rest) => window.__renderTab('mydepartment', undefined, ['department', code, ...rest.filter(Boolean)].join('/'));
+
+const TABS = [['today', 'Today', ''], ['team', 'Team', ' and chat'], ['tools', 'Tools', ''], ['rules', 'Rules', '']];
+
+// The tools of a department: { key, name, note, draw(box, ctx) } opens its screen; { open } leaves for another section.
+function toolsOf(code) {
+  const section = (id, name, note) => ({ key: id, name, note, open: () => window.__renderTab(id) });
+  switch (code) {
+    case 'HR': return [
+      { key: 'people', name: 'People', note: 'Who is on the team, and how it goes', draw: (box, c) => renderPeopleTool(box, { id: c.id, open: id => go(code, 'people', id), show: c.address }) },
+      { key: 'applications', name: 'Applications', note: 'New people who want to join', draw: box => renderApplicationsView(box) },
+      { key: 'decisions', name: 'Decisions taken', note: 'What was decided, by whom and why', draw: box => renderDecisionsTool(box) },
+    ];
+    case 'COORD': return [
+      { key: 'flow', name: 'Task flow', note: 'Open, in progress, in review, late', draw: box => renderTaskFlow(box) },
+      ...(canReviewApplications() ? [{ key: 'overview', name: 'Team overview', note: 'In Tasks: give a task to someone else, take it back', open: () => { State.tasksView = 'team'; window.__renderTab('tasks'); } }] : []),
+    ];
+    case 'RF': return [
+      { key: 'credits', name: 'Credits', note: 'The budget, and the credits of the tasks', draw: renderCredits },
+      { key: 'runs', name: 'Compensation runs', note: 'When credits become money', draw: renderRuns },
+      { key: 'unusual', name: 'Unusual credits', note: 'What to look at with care', draw: renderUnusual },
+      { key: 'tokens', name: 'Tokens', note: 'What people gave outside the tasks', draw: renderTokens },
+      { key: 'thanks', name: 'Public thanks', note: 'The list for a month', draw: renderThanks },
+      { key: 'certificates', name: 'Certificates', note: 'Milestones, texts, and checking a code', draw: renderCertificates },
+    ];
+    case 'FORM': return [
+      { key: 'paths', name: 'Paths in preparation', note: 'Every path: being written, published, archived', draw: renderPaths },
+      ...(canManageReserved() ? [{ key: 'reserved', name: 'Reserved documents', note: 'Who can read them', draw: renderReservedAccess }] : []),
+    ];
+    case 'COMM': return [{ key: 'cards', name: 'Start Here cards', note: 'What Users see in Start Here', draw: renderOnboardingCardsManager }];
+    // "Archive & Data" (owner's request 2026-09-20): the cataloguing tools stay their own sections.
+    case 'ARCHIVE': return [
+      section('hayat', 'Hayat Index', 'Browse the original Hayat register'),
+      section('matchreview', 'Match Review', 'Check and confirm the automatic matches'),
+      section('workconsolidation', 'Work Consolidation', 'Bring together entries of the same document'),
+      section('hayateditor', 'Hayat Editor', 'Correct an entry of the Hayat register'),
+      ...(isAdmin() ? [
+        section('bulkimport', 'Bulk Import', 'Add many documents from a spreadsheet'),
+        { key: 'deleted', name: 'Deleted documents', note: 'See them, and restore them', draw: renderDeletedDocuments },
+        { key: 'prompt', name: 'Translation prompt', note: 'What the Translate button copies', draw: renderTranslationPromptEditor },
+      ] : []),
+    ];
+    default: return [];
+  }
 }
+
+// What waits in a department: { can: to decide here, others: waiting for someone else }.
+async function loadWaiting(code) {
+  const open = (...rest) => go(code, ...rest);
+  const parts = [loadRuleItems(code)];
+  if (code === 'HR') { parts.push(loadPeopleItems('HR')); if (canReviewTeamApplications()) parts.push(loadApplicationItems(() => open('applications'))); }
+  if (code === 'FORM' && (isAdmin() || isDeptLead('FORM'))) parts.push(loadPeopleItems('FORM'));
+  if (code === 'COORD') parts.push(loadFlowItems(open));
+  if (code === 'RF') parts.push(loadRewardItems(open));
+  const done = await Promise.allSettled(parts);
+  done.filter(r => r.status === 'rejected').forEach(r => console.warn('My Department, waiting:', r.reason));
+  // The rules come last: they are the same for everyone, what is about a person comes first.
+  const items = done.flatMap((r, i) => (i && r.status === 'fulfilled' ? r.value : [])).concat(done[0].status === 'fulfilled' ? done[0].value : []);
+  return { can: items.filter(x => x.can), others: items.filter(x => !x.can), failed: done.some(r => r.status === 'rejected') };
+}
+
+let focusTab = false; // after a tab is chosen with the keyboard, it stays in focus
 
 export async function renderMyDepartmentView(main) {
   const codes = myDepartmentCodes();
   if (!codes.length) {
-    main.innerHTML = '<div class="panel"><h2>My Department</h2><div class="empty-msg">You are not a member of any department yet - see Options &rarr; Departments (Admin) to be added.</div></div>';
+    main.innerHTML = '<div class="panel"><h2>My Department</h2><div class="empty-msg">You are not in a department yet. An Admin can add you.</div></div>';
     return;
   }
-  const selected = codes.includes(State.myDeptSelected) ? State.myDeptSelected : codes[0];
-  State.myDeptSelected = selected;
+  const [, askedCode, askedPage, id] = (State.sub || '').split('/');
+  const known = codes.includes(askedCode);
+  const code = known ? askedCode : codes.includes(State.myDeptSelected) ? State.myDeptSelected : codes[0];
+  State.myDeptSelected = code;
+  const tools = toolsOf(code);
+  const tool = known ? tools.find(t => t.key === askedPage && t.draw) : null;
+  const tab = tool ? 'tools' : known && TABS.some(([k]) => k === askedPage) ? askedPage : 'today';
 
   main.innerHTML = `
-    <div class="panel">
-      <h2>My Department ${helpLinkHtml(DEPT_GUIDES[selected] || 'my-department')}</h2>
+    <div class="panel dep-head ${tool ? 'dep-in-tool' : ''}">
+      <h2>My Department ${helpLinkHtml(DEPT_GUIDES[code] || 'my-department')}</h2>
       ${codes.length > 1
-        ? `<div class="field" style="max-width:280px;"><label>Department</label><select id="mydept-select">${codes.map(c => `<option value="${esc(c)}" ${c === selected ? 'selected' : ''}>${esc(deptLabel(c))}</option>`).join('')}</select></div>`
-        : `<p class="hint">${esc(deptLabel(selected))}</p>`}
+        ? `<label class="sr-only" for="mydept-select">Department</label><select id="mydept-select">${codes.map(c => `<option value="${esc(c)}" ${c === code ? 'selected' : ''}>${esc(deptLabel(c))}</option>`).join('')}</select>`
+        : `<span class="dep-name">${esc(deptLabel(code))}</span>`}
+      <div class="dep-tabs" role="tablist" aria-label="${esc(deptLabel(code))}">
+      ${TABS.map(([k, label, rest]) => `<button type="button" class="dep-tab" role="tab" id="dep-tab-${k}" data-tab-key="${k}" aria-selected="${k === tab}" tabindex="${k === tab ? 0 : -1}">${label}${rest ? `<span class="dep-long">${rest}</span>` : ''} <span class="dep-n" data-n="${k}" hidden></span></button>`).join('')}
+      </div>
     </div>
-    <div id="mydept-status-box"></div>
-    <div id="mydept-roster-box"></div>
-    <div id="mydept-channel-box"></div>
-    ${selected === 'HR' ? '<div id="mydept-applications-box"></div>' : ''}
-    ${selected === 'HR' ? '<div id="mydept-people-box"></div>' : ''}
-    ${selected === 'HR' ? '<div class="panel"><h2>Pending decisions</h2><div id="people-pending-box"><div class="hint">Loading...</div></div></div>' : ''}
-    ${selected === 'RF' ? '<div id="mydept-credits-box"></div>' : ''}
-    ${selected === 'RF' ? '<div id="mydept-compensation-box"></div>' : ''}
-    ${selected === 'RF' ? '<div id="mydept-anomalies-box"></div>' : ''}
-    ${selected === 'RF' ? '<div id="mydept-tokens-box"></div>' : ''}
-    ${selected === 'COORD' ? '<div id="mydept-tasks-box"></div>' : ''}
-    ${selected === 'FORM' ? '<div id="mydept-formation-box"></div>' : ''}
-    ${selected === 'FORM' && canManageReserved() ? '<div id="mydept-reserved-box"></div>' : ''}
-    ${selected === 'COMM' ? '<div id="mydept-onboarding-box"></div>' : ''}
-    ${selected === 'ARCHIVE' ? '<div id="mydept-archive-box"></div>' : ''}
-    ${selected === 'ARCHIVE' && isAdmin() ? '<div id="mydept-translation-box"></div>' : ''}
-    <div id="mydept-policy-box"></div>`;
+    <div class="dep-body" role="tabpanel" aria-labelledby="dep-tab-${tab}">
+      ${tool ? `<div class="dep-tool-head"><button type="button" class="btn secondary" id="dep-back">&lsaquo; ${tool.key === 'people' && id ? '<span class="dep-narrow">People</span><span class="dep-wide">Tools</span>' : 'Tools'}</button><h3 ${tool.key === 'people' && id ? 'class="dep-wide"' : ''}>${esc(tool.name)}</h3></div>` : ''}
+      <div id="dep-main"></div>
+    </div>`;
 
-  if (codes.length > 1) {
-    document.getElementById('mydept-select').addEventListener('change', e => {
-      State.myDeptSelected = e.target.value;
-      renderMyDepartmentView(main);
+  main.querySelector('#mydept-select')?.addEventListener('change', e => go(e.target.value, tool ? 'tools' : tab === 'today' ? '' : tab));
+  const tabs = [...main.querySelectorAll('.dep-tab')];
+  tabs.forEach((b, i) => {
+    b.addEventListener('click', () => { focusTab = document.activeElement === b; go(code, b.dataset.tabKey === 'today' ? '' : b.dataset.tabKey); });
+    b.addEventListener('keydown', e => {
+      const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+      if (!step) return;
+      e.preventDefault();
+      focusTab = true;
+      go(code, ...[TABS[(i + step + TABS.length) % TABS.length][0]].filter(k => k !== 'today'));
     });
-  }
+  });
+  if (focusTab) { focusTab = false; main.querySelector('.dep-tab[aria-selected="true"]').focus({ preventScroll: true }); }
+  main.querySelector('#dep-back')?.addEventListener('click', () => (tool.key === 'people' && id && !matchMedia('(min-width: 1000px)').matches ? go(code, 'people') : go(code, 'tools')));
 
-  // Every part loads by itself, all together: one that cannot be read says so, with Try again, and the others are there.
-  const parts = [];
-  const part = (boxId, draw) => {
-    const box = document.getElementById(boxId);
-    if (!box) return;
-    const run = async () => { try { await draw(box); } catch (e) { if (box.isConnected) showLoadFailed(box, e, run); } };
-    parts.push(run());
+  const box = main.querySelector('#dep-main');
+  const draw = async () => {
+    try {
+      box.innerHTML = '<div class="hint">Loading...</div>';
+      if (tool) await tool.draw(box, { id, address: uid => setAddress(`department/${code}/${tool.key}/${uid}`) });
+      else if (tab === 'today') await renderToday(box, code);
+      else if (tab === 'team') await renderTeam(box, code);
+      else if (tab === 'tools') renderTools(box, code, tools);
+      else await renderRules(box, code);
+    } catch (e) { if (box.isConnected) showLoadFailed(box, e, draw); }
   };
-  part('mydept-status-box', box => renderDepartmentStatus(box, selected));
-  part('mydept-roster-box', () => renderRoster(selected));
-  part('mydept-channel-box', box => renderDeptChannel(box, selected));
-  // HR's work starts with Team Applications (screening candidates before they're even Operators)
-  // and continues with the People roster (GOVERNANCE.md §6.2) once they're on the team - both
-  // belong here, per the owner's request 2026-09-17/18, so an HR lead doesn't have to bounce
-  // between My Department and two separate standalone tabs. Reused as-is (same component the
-  // standalone Team Applications tab uses), not duplicated.
-  part('mydept-applications-box', box => renderApplicationsView(box));
-  // Pending decisions (people_decisions - suspend/reinstate/qualification/role-change proposals)
-  // used to live only in the standalone People tab; that tab is gone now (owner's request
-  // 2026-09-20, redundant with this page), so it's embedded here instead.
-  part('mydept-people-box', async box => { await renderPeopleSection(box); await renderPendingDecisions(); });
-  // Reward needs to see credits in circulation to tune rates/tiers and, later, plan compensation
-  // runs (GOVERNANCE.md §6.4, migration 88) - same numbers Admin already sees in Tasks -> Budget,
-  // read-only here (topping up the budget stays an Owner/Admin action, decision matrix row 16).
-  part('mydept-credits-box', box => renderRewardCredits(box));
-  // GOVERNANCE.md §6.4 (migration 91): "credits earned" vs "credits paid" reconciliation and an
-  // anomaly report - the two pieces migration 88 left open.
-  part('mydept-compensation-box', box => renderCompensationRuns(box));
-  part('mydept-anomalies-box', box => renderRewardAnomalies(box));
-  // Tokens of appreciation (docs/TOKEN_POLICY.md, migration 127): what people gave outside tasks.
-  part('mydept-tokens-box', box => renderRewardTokens(box));
-  // Coordination needs a live flow overview - counts plus who to follow up with - since
-  // Tasks -> Team overview (js/tasks.js) only ever shows a filtered list, no counts, and
-  // excludes open (unclaimed) tasks entirely. Read-only here: reassigning/reclaiming a task
-  // stays in Team overview, which already does it correctly against the real RLS.
-  part('mydept-tasks-box', box => renderCoordinationOverview(box));
-  // Formation needs the pipeline (what's being written, what's published) and a way into each
-  // path to actually coordinate/help - a FORM lead already has full read access to every path
-  // (including drafts) and the formatori-only chat channel via existing RLS (is_any_formatore()
-  // == FORM membership since migration 80), so no new migration is needed here, only the view.
-  part('mydept-formation-box', box => renderFormationPipeline(box));
-  part('mydept-reserved-box', box => renderReservedAccess(box));
-  // Communication authors the "Start Here" cards (95_onboarding_and_share_with_us.sql) from here -
-  // onboarding.js only ever reads onboarding_cards, this is the one place that writes it.
-  part('mydept-onboarding-box', box => renderOnboardingCardsManager(box));
-  // "Archive & Data" department (owner's request 2026-09-20): the cataloguing tools that used to be a flat,
-  // qualification-gated set of Operator tabs (Hayat Index/Match Review/Work Consolidation/Hayat
-  // Editor/Bulk Import) are now grouped here for whoever is a member of this department - launch
-  // buttons only, the tools themselves stay their own tabs/modules (window.__renderTab, same
-  // escape hatch docdetail.js/onboarding.js already use to jump tabs without a circular import).
-  part('mydept-archive-box', box => renderArchiveTools(box));
-  part('mydept-translation-box', box => renderTranslationPromptEditor(box));
-  part('mydept-policy-box', box => renderPolicySection(box, { departmentFilter: selected }));
-  await Promise.all(parts);
+  await draw();
+  await showCounts(main, code, tab);
+}
+
+// On a computer a person is chosen without leaving the list: the address follows, so reloading opens the same person.
+function setAddress(sub) {
+  State.sub = sub;
+  history.replaceState({ ...history.state, sub }, '', '#' + sub);
+}
+
+function setCount(main, key, n, word) {
+  const el = main.querySelector(`[data-n="${key}"]`);
+  if (!el) return;
+  el.hidden = !n;
+  el.textContent = n;
+  el.setAttribute('aria-label', `, ${n} ${word}`);
+}
+let counts = null; // { code, at, n }: not asked again at each tab
+async function showCounts(main, code, tab) {
+  try {
+    if (tab !== 'today' && !(counts && counts.code === code && Date.now() - counts.at < 60000)) counts = { code, at: Date.now(), n: (await loadWaiting(code)).can.length };
+    if (counts && counts.code === code) setCount(main, 'today', counts.n, 'to decide');
+    if (tab !== 'team') setCount(main, 'team', await unseenMessages(code), 'new');
+  } catch (e) { console.warn('My Department, counts:', e); }
+}
+async function unseenMessages(code) {
+  const { data: { user } } = await sb.auth.getUser();
+  const { data } = await sb.from('department_messages').select('id').eq('department_code', code).neq('user_id', user.id).gt('created_at', getDeptSeenAt(code, user.id));
+  return (data || []).length;
+}
+
+// ---------- Tools ----------
+
+function renderTools(box, code, tools) {
+  box.innerHTML = tools.length ? `<div class="dep-tiles">${tools.map(t => `<button type="button" class="dep-tile" data-tool="${esc(t.key)}"><b>${esc(t.name)}</b><span class="hint">${esc(t.note)}</span></button>`).join('')}</div>`
+    : '<div class="panel empty-msg">This department has no tools of its own.</div>';
+  box.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => { const t = tools.find(x => x.key === b.dataset.tool); if (t.open) t.open(); else go(code, t.key); }));
+}
+
+// ---------- Today ----------
+
+async function renderToday(box, code) {
+  box.innerHTML = `<div class="dep-two"><section id="dep-decide"><div class="hint">Loading...</div></section><section id="dep-status"></section></div>`;
+  const decide = box.querySelector('#dep-decide'), status = box.querySelector('#dep-status');
+  const drawDecide = async () => {
+    const w = await loadWaiting(code);
+    if (!decide.isConnected) return;
+    counts = { code, at: Date.now(), n: w.can.length };
+    const main = box.closest('main, #main') || document.getElementById('main');
+    setCount(main, 'today', w.can.length, 'to decide');
+    decide.innerHTML = `
+      <h3 class="dep-h">To decide ${w.can.length ? `<span class="dep-n">${w.can.length}</span>` : ''}</h3>
+      ${w.failed ? '<div class="panel load-failed"><p style="margin:0 0 10px;">A part could not be read.</p><button type="button" class="btn secondary" id="dep-again">Try again</button></div>' : ''}
+      <div id="dep-can">${w.can.map(itemHtml).join('') || (w.failed ? '' : '<div class="panel work-clear"><span aria-hidden="true">&#10003;</span> Nothing waits for your decision.</div>')}</div>
+      ${w.others.length ? `<details class="subpanel work-waiting" ${w.can.length ? '' : 'open'}><summary>Waiting for others <span class="count-badge">${w.others.length}</span></summary><div id="dep-others">${w.others.map(itemHtml).join('')}</div></details>` : ''}`;
+    wireItems(decide.querySelector('#dep-can'), w.can, drawDecide);
+    if (w.others.length) wireItems(decide.querySelector('#dep-others'), w.others, drawDecide);
+    decide.querySelector('#dep-again')?.addEventListener('click', drawDecide);
+  };
+  const drawStatus = async () => { try { await renderDepartmentStatus(status, code); } catch (e) { if (status.isConnected) showLoadFailed(status, e, drawStatus); } };
+  await Promise.all([drawDecide(), drawStatus()]);
 }
 
 // ---------- "Department Pulse" (migration 98, owner's request 2026-09-20) ----------
-// A lead-managed status (on_track/slowing/stalled) + a short priorities/deadlines list, so every
-// member sees at a glance how their department is doing and what matters right now - deliberately
-// manual, not computed: a wrong automatic signal is worse than an honestly subjective one. The
-// lead (or Admin) sets it; members read it. See also renderDepartmentsOverviewView below, the
-// Admin-only roll-up across every department - a separate tab, not part of this page.
+// A lead-managed status (on_track/slowing/stalled) and a short list of priorities, set by the lead (or Admin) and read by the
+// members - deliberately by hand, not computed. The hint of migration 99 is never applied by itself (GOVERNANCE.md §5.9).
 
 const STATUS_META = {
-  on_track: { label: 'On track', color: '#4a8f4a' },
-  slowing:  { label: 'Slowing down', color: '#d19a2e' },
-  stalled:  { label: 'Stalled', color: 'var(--danger)' },
+  on_track: { label: 'On track', tone: 'green', sign: '&#9679;', color: 'var(--st-green)' },
+  slowing:  { label: 'Slowing down', tone: 'amber', sign: '&#9680;', color: 'var(--st-amber)' },
+  stalled:  { label: 'Stalled', tone: 'red', sign: '&#9632;', color: 'var(--st-red)' },
 };
 
 async function renderDepartmentStatus(box, code) {
-  if (!box) return;
   const canManage = isAdmin() || isDeptLead(code);
   const [statusRows, priorities, suggestionRows] = await Promise.all([
     withStatus(sb.from('department_status').select('*').eq('department_code', code)),
     withStatus(sb.from('department_priorities').select('*').eq('department_code', code).order('done').order('sort_order').order('created_at')),
-    // Phase 2 (migration 99): a computed hint alongside the lead's own manual pick - never
-    // applied automatically, see GOVERNANCE.md §5.9/§8 item 11. Only Coordination/Reward/HR/
-    // Formation/Communication have a signal defined; other departments get no rows back.
-    withStatus(sb.rpc('department_pulse_suggested_status', { p_code: code })),
+    sb.rpc('department_pulse_suggested_status', { p_code: code }).then(r => r.data || [], () => []),
   ]);
-  const status = statusRows[0] || { status: 'on_track', note: null, updated_by_email: null, updated_at: null };
+  const status = statusRows[0] || { status: 'on_track', note: null, updated_at: null };
   const meta = STATUS_META[status.status] || STATUS_META.on_track;
   const suggestion = suggestionRows[0] || null;
-  const updatedBy = (await authorNames([status], 'updated_by', 'updated_by_email'))(status);
-
-  const priorityRow = p => `
-    <div class="btn-row" style="align-items:center;justify-content:space-between;padding:4px 0;${p.done ? 'opacity:.6;' : ''}">
-      <label style="display:flex;align-items:center;gap:8px;font-weight:normal;text-transform:none;margin:0;flex:1;">
-        <input type="checkbox" class="dept-priority-done" data-id="${p.id}" ${p.done ? 'checked' : ''} ${canManage ? '' : 'disabled'}>
-        <span style="${p.done ? 'text-decoration:line-through;' : ''}">${esc(p.title)}</span>
-        ${p.due_date ? `<span class="hint">— due ${esc(p.due_date)}</span>` : ''}
-      </label>
-      ${canManage ? `<button class="btn danger dept-priority-delete" data-id="${p.id}" style="padding:2px 8px;">Remove</button>` : ''}
-    </div>`;
+  const name = await namesByIds([status.updated_by]);
+  const again = () => renderDepartmentStatus(box, code);
 
   box.innerHTML = `
-    <div class="panel" style="border-left:4px solid ${meta.color};">
-      <div class="btn-row" style="justify-content:space-between;align-items:center;">
-        <h2 style="margin:0;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${meta.color};margin-right:6px;"></span>${esc(meta.label)}</h2>
-        ${canManage ? '<button class="btn secondary" id="dept-status-edit">Update status</button>' : ''}
-      </div>
-      ${status.note ? `<p style="margin:6px 0 0;">${esc(status.note)}</p>` : (canManage ? '<p class="hint" style="margin:6px 0 0;">No note yet - click "Update status" to add one.</p>' : '')}
-      ${status.updated_at ? `<p class="hint" style="margin:4px 0 0;">Updated by ${esc(updatedBy) || '—'} on ${esc((status.updated_at || '').slice(0, 10))}</p>` : ''}
-      ${suggestion ? `<p class="hint" style="margin:4px 0 0;">Data suggests: <strong>${esc(STATUS_META[suggestion.suggested]?.label || suggestion.suggested)}</strong> — ${esc(suggestion.reason)}</p>` : ''}
-      <h3 style="margin:14px 0 4px;">Priorities</h3>
-      <div id="dept-priorities-list">${priorities.length ? priorities.map(priorityRow).join('') : '<p class="hint">Nothing pinned right now.</p>'}</div>
-      ${canManage ? `
-        <div class="btn-row" style="margin-top:8px;">
-          <input id="dept-priority-title" placeholder="New priority..." style="flex:1;">
-          <input id="dept-priority-due" type="date" style="max-width:160px;">
-          <button class="btn secondary" id="dept-priority-add">Add</button>
-        </div>` : ''}
+    <div class="panel dep-state st-${meta.tone}">
+      <div class="dep-state-top">${st(meta.tone, meta.sign, meta.label)}${canManage ? '<button type="button" class="btn secondary" id="dep-status-edit">Change</button>' : ''}</div>
+      ${status.note ? `<p dir="auto">${esc(status.note)}</p>` : ''}
+      ${status.updated_at ? `<p class="hint">${[name(status.updated_by), agoText(status.updated_at)].filter(Boolean).map(esc).join(', ')}</p>` : ''}
+      ${suggestion && suggestion.suggested !== status.status ? `<p class="hint">The numbers say: <b>${esc(STATUS_META[suggestion.suggested]?.label || suggestion.suggested)}</b> (${esc(suggestion.reason)}).</p>` : ''}
+    </div>
+    <div class="panel">
+      <h3 style="margin-top:0;">What matters now</h3>
+      ${priorities.map(p => `<div class="dep-prio ${p.done ? 'dep-done' : ''}">
+        <label><input type="checkbox" data-done="${p.id}" ${p.done ? 'checked' : ''} ${canManage ? '' : 'disabled'}><span dir="auto">${esc(p.title)}${p.due_date ? ` <span class="hint">until ${esc(dayText(p.due_date))}</span>` : ''}</span></label>
+        ${canManage ? `<button type="button" class="btn secondary" data-delete="${p.id}" aria-label="Remove: ${esc(p.title)}">Remove</button>` : ''}
+      </div>`).join('') || '<p class="hint">Nothing yet.</p>'}
+      ${canManage ? `<details class="dep-more"><summary>+ Add</summary>
+        <div class="field"><label>What<input id="dep-prio-title" dir="auto"></label></div>
+        <div class="field"><label>Until <span class="hint">(if needed)</span><input id="dep-prio-due" type="date"></label></div>
+        <div class="btn-row"><button type="button" class="btn" id="dep-prio-add">Add</button></div></details>` : ''}
     </div>`;
 
-  if (canManage) {
-    document.getElementById('dept-status-edit').addEventListener('click', () => openDepartmentStatusPopup(code, status, suggestion, () => renderDepartmentStatus(box, code)));
-    document.getElementById('dept-priority-add').addEventListener('click', async () => {
-      const title = document.getElementById('dept-priority-title').value.trim();
-      if (!title) return;
-      const due_date = document.getElementById('dept-priority-due').value || null;
-      await withStatus(sb.from('department_priorities').insert({
-        department_code: code, title, due_date, sort_order: priorities.length,
-      }), 'Saving...');
-      renderDepartmentStatus(box, code);
-    });
-    box.querySelectorAll('.dept-priority-done').forEach(cb => cb.addEventListener('change', async () => {
-      await withStatus(sb.from('department_priorities').update({
-        done: cb.checked, done_at: cb.checked ? new Date().toISOString() : null,
-      }).eq('id', cb.dataset.id), 'Saving...');
-      renderDepartmentStatus(box, code);
-    }));
-    box.querySelectorAll('.dept-priority-delete').forEach(btn => btn.addEventListener('click', async () => {
-      if (!await confirmPopup('Remove this priority?')) return;
-      await withStatus(sb.from('department_priorities').delete().eq('id', btn.dataset.id), 'Removing...');
-      renderDepartmentStatus(box, code);
-    }));
-  }
+  if (!canManage) return;
+  box.querySelector('#dep-status-edit').addEventListener('click', () => openDepartmentStatusPopup(code, status, again));
+  box.querySelector('#dep-prio-add').addEventListener('click', async () => {
+    const title = box.querySelector('#dep-prio-title').value.trim();
+    if (!title) return;
+    await withStatus(sb.from('department_priorities').insert({ department_code: code, title, due_date: box.querySelector('#dep-prio-due').value || null, sort_order: priorities.length }), 'Saving...');
+    again();
+  });
+  box.querySelectorAll('[data-done]').forEach(cb => cb.addEventListener('change', async () => {
+    await withStatus(sb.from('department_priorities').update({ done: cb.checked, done_at: cb.checked ? new Date().toISOString() : null }).eq('id', cb.dataset.done), 'Saving...');
+    again();
+  }));
+  box.querySelectorAll('[data-delete]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!await confirmPopup('Remove this line?')) return;
+    await withStatus(sb.from('department_priorities').delete().eq('id', btn.dataset.delete), 'Removing...');
+    again();
+  }));
 }
 
-function openDepartmentStatusPopup(code, current, suggestion, onSaved) {
-  document.getElementById('dept-status-popup')?.remove();
-  const backdrop = document.createElement('div');
-  backdrop.id = 'dept-status-popup';
-  backdrop.className = 'overlay-backdrop';
-  backdrop.innerHTML = `
-    <div class="panel overlay-panel">
-      <h2 style="margin-top:0;">Update status</h2>
-      ${suggestion ? `<p class="hint">Data suggests <strong>${esc(STATUS_META[suggestion.suggested]?.label || suggestion.suggested)}</strong> — ${esc(suggestion.reason)}. You decide - this is only a hint.</p>` : ''}
-      <div class="field"><label>Status</label>
-        <select id="dsp-status">${Object.entries(STATUS_META).map(([code2, m]) => `<option value="${code2}" ${code2 === current.status ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select>
-      </div>
-      <div class="field"><label>Note <span class="hint">(what the team should know)</span></label>
-        <textarea id="dsp-note" rows="3">${esc(current.note) || ''}</textarea></div>
-      <div class="btn-row" style="justify-content:flex-end;">
-        <button class="btn secondary" id="dsp-cancel">Cancel</button>
-        <button class="btn" id="dsp-save">Save</button>
-      </div>
+function openDepartmentStatusPopup(code, current, onSaved) {
+  const { panel, close } = popupShell('dept-status-popup', { label: 'How is the department doing?', section: 'mydepartment' });
+  panel.innerHTML = `
+    <h2 style="margin-top:0;">How is the department doing?</h2>
+    <fieldset class="desk-choices"><legend class="sr-only">State</legend>
+      ${Object.entries(STATUS_META).map(([k, m]) => `<label class="desk-choice st-${m.tone}"><input type="radio" name="dsp" value="${k}" ${k === current.status ? 'checked' : ''}><span><b>${esc(m.label)}</b></span></label>`).join('')}
+    </fieldset>
+    <div class="field"><label>Note for the team<textarea id="dsp-note" rows="3" dir="auto">${esc(current.note || '')}</textarea></label></div>
+    <div class="btn-row" style="justify-content:flex-end;">
+      <button type="button" class="btn secondary" id="dsp-cancel">Cancel</button>
+      <button type="button" class="btn" id="dsp-save">Save</button>
     </div>`;
-  document.body.appendChild(backdrop);
-  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
-  document.getElementById('dsp-cancel').addEventListener('click', () => backdrop.remove());
-  document.getElementById('dsp-save').addEventListener('click', async () => {
-    const { data: { user } } = await sb.auth.getUser();
+  panel.querySelector('#dsp-cancel').addEventListener('click', close);
+  panel.querySelector('#dsp-save').addEventListener('click', async () => {
     await withStatus(sb.from('department_status').upsert({
-      department_code: code,
-      status: document.getElementById('dsp-status').value,
-      note: document.getElementById('dsp-note').value.trim() || null,
-      updated_by_email: user.email,
-      updated_at: new Date().toISOString(),
+      department_code: code, status: panel.querySelector('[name=dsp]:checked').value, note: panel.querySelector('#dsp-note').value.trim() || null, updated_at: new Date().toISOString(),
     }), 'Saving...');
-    backdrop.remove();
+    close();
     onSaved();
   });
 }
 
-// ---------- Admin-only roll-up across every department (its own tab, see app.js) ----------
+// ---------- Team and chat ----------
 
-export async function renderDepartmentsOverviewView(main) {
-  main.innerHTML = '<div class="panel"><h2>Project overview</h2><div class="empty-msg">Loading...</div></div>';
-  const depts = State.optionListsByName.department || [];
-  const [statusRows, priorityRows, suggestionResults] = await Promise.all([
-    withStatus(sb.from('department_status').select('*')),
-    withStatus(sb.from('department_priorities').select('department_code,title,due_date,done').eq('done', false).order('sort_order')),
-    // Phase 2 (migration 99): one RPC call per department, in parallel - no set-returning
-    // "every department at once" function exists, and this list is short (a handful of rows).
-    Promise.all(depts.map(([code]) => withStatus(sb.rpc('department_pulse_suggested_status', { p_code: code })).then(rows => [code, rows[0] || null]))),
-  ]);
-  const statusByCode = {};
-  for (const s of statusRows) statusByCode[s.department_code] = s;
-  const openPriorityCount = {};
-  for (const p of priorityRows) openPriorityCount[p.department_code] = (openPriorityCount[p.department_code] || 0) + 1;
-  const suggestionByCode = Object.fromEntries(suggestionResults);
-
-  const card = ([code, label]) => {
-    const status = statusByCode[code] || { status: 'on_track', note: null, updated_at: null };
-    const meta = STATUS_META[status.status] || STATUS_META.on_track;
-    const suggestion = suggestionByCode[code];
-    return `
-      <div class="panel" style="border-left:4px solid ${meta.color};cursor:pointer;" data-open-dept="${esc(code)}">
-        <div class="btn-row" style="justify-content:space-between;align-items:center;">
-          <h3 style="margin:0;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${meta.color};margin-right:6px;"></span>${esc(label)}</h3>
-          <span class="hint">${esc(meta.label)}</span>
-        </div>
-        ${status.note ? `<p style="margin:6px 0 0;font-size:13px;">${esc(status.note)}</p>` : '<p class="hint" style="margin:6px 0 0;">No status set yet.</p>'}
-        <p class="hint" style="margin:6px 0 0;">${openPriorityCount[code] || 0} open ${openPriorityCount[code] === 1 ? 'priority' : 'priorities'}${status.updated_at ? ` &middot; updated ${esc((status.updated_at || '').slice(0, 10))}` : ''}</p>
-        ${suggestion ? `<p class="hint" style="margin:4px 0 0;">Data suggests: ${esc(STATUS_META[suggestion.suggested]?.label || suggestion.suggested)}</p>` : ''}
-      </div>`;
-  };
-
-  main.innerHTML = `
-    <div class="panel">
-      <div class="btn-row" style="justify-content:space-between;align-items:center;">
-        <h2 style="margin:0;">Project overview <span class="hint">— every department at a glance, click one to open it</span></h2>
-        <button class="btn danger" id="dept-overview-reset">Reset all statuses</button>
-      </div>
-    </div>
-    <div class="field-grid wide">${depts.map(card).join('') || '<p class="hint">No departments configured yet.</p>'}</div>
-    <div id="dept-overview-users-box"></div>`;
-
-  main.querySelectorAll('[data-open-dept]').forEach(el => el.addEventListener('click', () => {
-    State.myDeptSelected = el.dataset.openDept;
-    window.__renderTab('mydepartment');
-  }));
-
-  // Admin-only escape hatch (owner's request 2026-09-20): bulk-clear every department's manual
-  // status/note back to the table default (on_track, no note) - e.g. after a trial run of Phase
-  // 2, or to stop a stale color misleading members. Does not touch priorities, only status.
-  document.getElementById('dept-overview-reset').addEventListener('click', async () => {
-    if (!await confirmPopup('Reset every department\'s status to "On track" with no note? This cannot be undone.')) return;
-    const { data: { user } } = await sb.auth.getUser();
-    const rows = depts.map(([code]) => ({
-      department_code: code, status: 'on_track', note: null, updated_by_email: user.email, updated_at: new Date().toISOString(),
-    }));
-    await withStatus(sb.from('department_status').upsert(rows), 'Resetting...');
-    renderDepartmentsOverviewView(main);
-  });
-
-  await renderUsersStatsPanel(document.getElementById('dept-overview-users-box'));
+async function renderTeam(box, code) {
+  box.innerHTML = '<div class="dep-two dep-two-chat"><section id="dep-chat"></section><section id="dep-roster"></section></div>';
+  const part = (el, draw) => { const run = async () => { try { await draw(el, code); } catch (e) { if (el.isConnected) showLoadFailed(el, e, run); } }; return run(); };
+  await Promise.all([part(box.querySelector('#dep-chat'), renderDeptChannel), part(box.querySelector('#dep-roster'), renderRoster)]);
 }
 
-// ---------- Users & activity panel (migration 100, owner's request 2026-09-20) ----------
-// Headcount/demographics come straight from user_roles/user_profiles - Admin already reads both
-// tables directly client-side (same access admin.js's Users view relies on), no RPC needed.
-// Formation Paths enrollment counts are the one gap: formation_enrollments' only select policy is
-// "your own row" (74_formation_enrollments.sql), so those come from admin_project_stats().
-// Login/access tracking was asked about but isn't included - Supabase's own sign-in timestamps
-// aren't exposed anywhere in this app today, and whether/how to surface them is a separate,
-// privacy-sensitive decision, not folded silently into this panel.
-async function renderUsersStatsPanel(box) {
-  if (!box) return;
-  box.innerHTML = '<div class="panel"><h2>Users</h2><div class="empty-msg">Loading...</div></div>';
-  const [roleRows, profileRows, statsRows, bracketRows] = await Promise.all([
-    withStatus(sb.from('user_roles').select('role,standing,created_at')),
-    withStatus(sb.from('user_profiles').select('gender')),
-    withStatus(sb.rpc('admin_project_stats')),
-    withStatus(sb.rpc('people_age_brackets')),
-  ]);
-  const fromDate = bracketRows.filter(r => r.from_date).length;
-  const stats = statsRows[0] || { total_active_enrollments: 0, distinct_enrolled_users: 0, enrollments_by_path: [] };
-
-  const countBy = (rows, key) => {
-    const m = {};
-    for (const r of rows) { const v = r[key] || 'not_set'; m[v] = (m[v] || 0) + 1; }
-    return m;
-  };
-  const byRole = countBy(roleRows, 'role');
-  const byStanding = countBy(roleRows, 'standing');
-  const byGender = countBy(profileRows, 'gender');
-  const byAgeBracket = countBy(bracketRows, 'age_bracket');
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
-  const newLast30 = roleRows.filter(r => (r.created_at || '') >= thirtyDaysAgo).length;
-
-  const tile = (label, value) => `<div class="field"><label>${esc(label)}</label><div style="font-size:20px;font-weight:600;">${esc(value)}</div></div>`;
-  const ROLE_LABELS = { user: 'Users', operator: 'Operators', coordinator: 'Coordinators', admin: 'Admins' };
-  const GENDER_LABELS = { M: 'Male', F: 'Female', not_set: 'Not set' };
-  const ageBracketOptions = State.optionListsByName.age_bracket || [];
-  const ageBracketLabel = code => code === 'not_set' ? 'Not set' : (labelOf(ageBracketOptions, code) || code);
-  // Fixed-width count column (not justify-content:space-between, which stretched the number
-  // to the far edge of the whole .field-grid cell instead of sitting next to its own label -
-  // found from the owner's screenshot 2026-09-20).
-  const breakdownList = (m, labelFn) => Object.entries(m).sort((a, b) => b[1] - a[1])
-    .map(([k, v]) => `<div style="display:flex;gap:8px;padding:2px 0;"><span class="hint" style="min-width:24px;text-align:right;">${esc(v)}</span><span>${esc(labelFn(k))}</span></div>`).join('');
+async function renderRoster(box, code) {
+  const canManage = isAdmin() || isDeptLead(code);
+  const members = await withStatus(sb.from('department_members').select('user_id,is_lead').eq('department_code', code));
+  // Names of every member, for any member of the department (107).
+  const roster = members.length ? await withStatus(sb.rpc('department_roster', { p_dept: code })).catch(() => []) : [];
+  const nameOf = id => (roster.find(r => r.user_id === id)?.full_name || '').trim() || '(no name)';
+  members.sort((a, b) => (b.is_lead - a.is_lead) || nameOf(a.user_id).localeCompare(nameOf(b.user_id)));
+  const again = () => renderRoster(box, code);
 
   box.innerHTML = `
     <div class="panel">
-      <h2>Users <span class="hint">— headcount, demographics, Formation Paths enrollment</span></h2>
-      <div class="field-grid">
-        ${tile('Total accounts', roleRows.length)}
-        ${Object.entries(ROLE_LABELS).map(([code, label]) => tile(label, byRole[code] || 0)).join('')}
-        ${tile('New in last 30 days', newLast30)}
-      </div>
-      <div class="field-grid" style="margin-top:10px;">
-        <div class="field"><label>Standing</label>${breakdownList(byStanding, k => k === 'not_set' ? 'Not set' : k)}</div>
-        <div class="field"><label>Gender</label>${breakdownList(byGender, k => GENDER_LABELS[k] || k)}</div>
-        <div class="field" style="grid-column:span 2;"><label>Age bracket</label>${breakdownList(byAgeBracket, ageBracketLabel)}<div class="hint">${fromDate} of ${bracketRows.length} from a date of birth; the others as declared, or not set.</div></div>
-      </div>
-      <h3 style="margin:16px 0 4px;">Formation Paths enrollment</h3>
-      <div class="field-grid">
-        ${tile('Active enrollments', stats.total_active_enrollments)}
-        ${tile('Distinct enrolled users', stats.distinct_enrolled_users)}
-      </div>
-      ${(stats.enrollments_by_path || []).length ? `
-        <div class="grid-wrap" style="margin-top:8px;"><table class="grid">
-          <thead><tr><th>Path</th><th>Enrolled</th></tr></thead>
-          <tbody>${stats.enrollments_by_path.map(p => `<tr><td>${esc(p.title)}</td><td>${esc(p.enrolled)}</td></tr>`).join('')}</tbody>
-        </table></div>` : '<p class="hint" style="margin-top:8px;">No active enrollments yet.</p>'}
-      <p class="hint" style="margin-top:10px;">Login/access history isn't tracked yet - ask if this would be useful and it can be added as its own piece (it touches privacy considerations worth a separate decision).</p>
+      <h3 style="margin-top:0;">Team <span class="count-badge">${members.length}</span></h3>
+      ${members.map(m => `<div class="dep-member"><span><span dir="auto">${esc(nameOf(m.user_id))}</span>${m.is_lead ? ' <span class="dep-chip">Lead</span>' : ''}</span>
+        ${canManage && !m.is_lead ? `<button type="button" class="btn secondary" data-remove="${esc(m.user_id)}" aria-label="Remove ${esc(nameOf(m.user_id))}">Remove</button>` : ''}</div>`).join('') || '<p class="hint">Nobody yet.</p>'}
+      ${canManage ? `<details class="dep-more"><summary>+ Add a person</summary><div id="dep-add"></div></details><p class="hint">An Admin chooses the lead, in Options.</p>` : ''}
     </div>`;
+  if (!canManage) return;
+  personSearch(box.querySelector('#dep-add'), { label: 'Name', onPick: async p => {
+    if (!await confirmPopup(`Add ${p.full_name} to ${deptLabel(code)}?`)) return;
+    const { error } = await sb.from('department_members').insert({ department_code: code, user_id: p.user_id });
+    if (error && error.code !== '23505') { alert(errorText(error)); return; } // 23505: already a member
+    again();
+  } });
+  box.querySelectorAll('[data-remove]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!await confirmPopup(`Remove ${nameOf(btn.dataset.remove)} from the department?`)) return;
+    const { error } = await sb.from('department_members').delete().eq('department_code', code).eq('user_id', btn.dataset.remove);
+    if (error) { alert(errorText(error)); return; }
+    again();
+  }));
 }
 
-// ---------- Who can read reserved documents (111_access_levels.sql) ----------
-// Admin and Formation members can always read them; everyone else is enabled here, one by one.
+// The team's chat (94_department_messages.sql): one thread for each department, read by its members and Admins. Any member
+// writes; the lead (or Admin) pins; the author corrects or deletes within 15 minutes - the server's rule is the real gate.
+const DEPT_MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
 
+function deptChatDateTime(iso) { return esc((iso || '').slice(0, 16).replace('T', ' ')); }
+
+async function renderDeptChannel(box, code) {
+  markDeptSeen(code);
+  const canPin = isDeptLead(code) || isAdmin();
+  const { data: { user } } = await sb.auth.getUser();
+  const rows = await withStatus(sb.from('department_messages').select('*').eq('department_code', code).order('created_at'));
+  const name = await namesByIds(rows.map(r => r.user_id));
+
+  const imagePaths = rows.filter(r => r.image_path).map(r => r.image_path);
+  const signedUrlByPath = {};
+  if (imagePaths.length) {
+    const { data } = await sb.storage.from(DEPARTMENT_MEDIA_BUCKET).createSignedUrls(imagePaths, 3600);
+    (data || []).forEach(d => { if (d && d.signedUrl) signedUrlByPath[d.path] = d.signedUrl; });
+  }
+
+  // Each message is there once with its buttons; a pinned one has also a reminder above, without buttons.
+  const bubble = r => {
+    const mine = r.user_id === user.id, early = mine && (Date.now() - new Date(r.created_at).getTime()) < DEPT_MESSAGE_EDIT_WINDOW_MS;
+    const img = r.image_path && signedUrlByPath[r.image_path] ? `<img class="dep-img" src="${esc(signedUrlByPath[r.image_path])}" alt="Picture">` : '';
+    const btns = [early ? ['edit', 'Correct'] : 0, early ? ['delete', 'Delete'] : 0, canPin ? ['pin', r.pinned ? 'Unpin' : 'Pin'] : 0].filter(Boolean);
+    return `
+      <div class="chat-bubble ${mine ? 'from-me' : 'from-other'} ${r.pinned ? 'pinned' : ''}" data-msg-id="${r.id}">
+        <div class="chat-meta">${mine ? 'You' : esc(name(r.user_id))} &middot; ${deptChatDateTime(r.created_at)}${r.edited_at ? ' &middot; corrected' : ''}${r.pinned ? ' &middot; &#128204; pinned' : ''}</div>
+        <div class="dept-msg-body" dir="auto" style="white-space:pre-wrap;">${esc(r.body)}</div>
+        ${img}
+        ${btns.length ? `<div class="dep-msg-btns">${btns.map(([k, l]) => `<button type="button" data-act="${k}">${l}</button>`).join('')}</div>` : ''}
+      </div>`;
+  };
+  const pinned = rows.filter(r => r.pinned);
+
+  box.innerHTML = `
+    <div class="panel dep-chat">
+      <h3 style="margin-top:0;">Chat <span class="hint">only for ${esc(deptLabel(code))}</span></h3>
+      ${pinned.map(r => `<div class="dep-pinned"><span aria-hidden="true">&#128204;</span> <span dir="auto">${esc(r.body)}</span> <span class="hint">${esc(name(r.user_id))}</span></div>`).join('')}
+      <div class="chat-thread" id="dept-chat-thread" tabindex="0" aria-label="Messages">${rows.map(bubble).join('') || '<div class="empty-msg">No messages yet.</div>'}</div>
+      <label class="sr-only" for="dept-msg-text">Write a message</label>
+      <textarea id="dept-msg-text" dir="auto" rows="2" placeholder="Write a message"></textarea>
+      <div class="dep-send">
+        <label class="btn secondary" tabindex="-1">&#128247; Picture<input id="dept-msg-image" class="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/gif"></label>
+        <span class="hint" id="dept-msg-file"></span>
+        <button type="button" class="btn" id="dept-msg-send">Send</button>
+      </div>
+      <div class="hint dep-error" id="dept-msg-error" role="alert"></div>
+    </div>`;
+  const $ = id => box.querySelector('#' + id);
+  const thread = $('dept-chat-thread');
+  thread.scrollTop = thread.scrollHeight;
+  const again = () => renderDeptChannel(box, code);
+
+  $('dept-msg-image').addEventListener('change', e => { $('dept-msg-file').textContent = e.target.files[0]?.name || ''; });
+  $('dept-msg-send').addEventListener('click', async () => {
+    const errBox = $('dept-msg-error'), body = $('dept-msg-text').value.trim(), file = $('dept-msg-image').files[0];
+    errBox.textContent = '';
+    if (!body && !file) { errBox.textContent = 'Please write a message, or choose a picture.'; return; }
+    $('dept-msg-send').disabled = true;
+    try {
+      let image_path = null;
+      if (file) {
+        const path = `${code}/${Date.now()}-${file.name}`.replace(/[^a-zA-Z0-9._/-]/g, '_');
+        const { error } = await sb.storage.from(DEPARTMENT_MEDIA_BUCKET).upload(path, file, { upsert: true });
+        if (error) { errBox.textContent = 'The picture could not be sent. ' + error.message; return; }
+        image_path = path;
+      }
+      await withStatus(sb.from('department_messages').insert({ department_code: code, user_id: user.id, body: body || null, image_path }), 'Sending...');
+      await again();
+    } finally { if ($('dept-msg-send')) $('dept-msg-send').disabled = false; }
+  });
+
+  box.querySelectorAll('[data-msg-id]').forEach(el => {
+    const r = rows.find(x => String(x.id) === el.dataset.msgId);
+    el.querySelector('[data-act=edit]')?.addEventListener('click', () => {
+      el.querySelector('.dept-msg-body').outerHTML = `
+        <textarea class="dept-msg-edit-input" dir="auto" rows="2" style="width:100%;">${esc(r.body || '')}</textarea>
+        <div class="btn-row"><button type="button" class="btn secondary" data-cancel>Cancel</button><button type="button" class="btn" data-save>Save</button></div>`;
+      el.querySelector('[data-cancel]').addEventListener('click', again);
+      el.querySelector('[data-save]').addEventListener('click', async () => {
+        const next = el.querySelector('.dept-msg-edit-input').value.trim();
+        if (!next && !r.image_path) { alert('A message cannot be empty.'); return; }
+        await withStatus(sb.from('department_messages').update({ body: next || null }).eq('id', r.id), 'Saving...');
+        await again();
+      });
+    });
+    el.querySelector('[data-act=delete]')?.addEventListener('click', async () => {
+      if (!await confirmPopup('Delete this message? This cannot be undone.', { danger: true, confirmLabel: 'Delete' })) return;
+      await withStatus(sb.from('department_messages').delete().eq('id', r.id), 'Deleting...');
+      await again();
+    });
+    el.querySelector('[data-act=pin]')?.addEventListener('click', async () => {
+      await withStatus(sb.from('department_messages').update({ pinned: !r.pinned }).eq('id', r.id), 'Saving...');
+      await again();
+    });
+  });
+}
+
+// ---------- Coordination: the task flow ----------
+
+const isLate = r => r.status === 'claimed' && r.due_date && r.due_date < today();
+async function loadFlowItems(open) {
+  const rows = await withStatus(sb.rpc('coordination_task_overview'));
+  const can = isDeptLead('COORD') || isAdmin();
+  const items = rows.filter(r => r.extra_credits_status === 'pending').map(r => ({
+    tone: 'violet', title: r.title, text: `Extra credits: <b>${esc(r.extra_credits)}</b>, on a base of ${esc(r.base_credits ?? 0)}`, quote: r.extra_credits_note, can,
+    by: `${nameOnly(r.created_by_email) ? `Proposed by ${r.created_by_email}` : ''}${can ? '' : ' Waiting for the Coordination lead or an Admin.'}`.trim(),
+    buttons: can ? [{ label: 'Approve', run: async () => {
+      if (!await confirmPopup('Approve these extra credits?', { confirmLabel: 'Approve' })) return false;
+      const { error } = await sb.rpc('approve_task_extra_credits', { p_task_id: r.id });
+      if (error) { alert(errorText(error)); return false; }
+      return true;
+    } }] : [],
+  }));
+  const late = rows.filter(isLate).length;
+  if (late) items.push({ tone: 'red', title: plural(late, 'task is late', 'tasks are late'), can: true, buttons: [{ label: 'Look', run: () => { State.myDeptCoordTab = 'overdue'; open('flow'); return false; } }] });
+  return items;
+}
+
+async function renderTaskFlow(box) {
+  const rows = await withStatus(sb.rpc('coordination_task_overview'));
+  const name = await namesByIds(rows.map(r => r.claimed_by));
+  const nearDays = State.policyValues.task_near_due_days ?? 3;
+  const days = due => Math.round((new Date(due) - new Date(today())) / 86400000);
+  const soon = r => r.status === 'claimed' && r.due_date && !isLate(r) && days(r.due_date) <= nearDays;
+  const kinds = State.optionListsByName.task_category || [];
+  const LISTS = [
+    ['open', 'Open', rows.filter(r => r.status === 'open')], ['claimed', 'In progress', rows.filter(r => r.status === 'claimed')],
+    ['submitted', 'In review', rows.filter(r => r.status === 'submitted')], ['approved', 'To publish', rows.filter(r => r.status === 'approved')],
+    ['overdue', 'Late', rows.filter(isLate)], ['neardue', 'Due soon', rows.filter(soon)],
+  ];
+  const [key, , list] = LISTS.find(([k]) => k === State.myDeptCoordTab) || LISTS[0];
+  const due = r => (!r.due_date ? '' : r.status !== 'claimed' ? esc(dayText(r.due_date)) : isLate(r) ? `${esc(dayText(r.due_date))} ${st('red', '&#9888;', `${plural(-days(r.due_date), 'day', 'days')} late`)}`
+    : `${esc(dayText(r.due_date))} ${soon(r) ? st('amber', '&#9200;', days(r.due_date) ? `in ${plural(days(r.due_date), 'day', 'days')}` : 'today') : ''}`);
+  const title = r => `<span dir="auto">${esc(r.title)}</span>`, kind = r => esc(labelOf(kinds, r.category) || r.category);
+  box.innerHTML = `
+    <div class="panel">
+      <div class="dep-lists" role="group" aria-label="Which tasks">${LISTS.map(([k, label, l]) => `<button type="button" class="btn ${k === key ? '' : 'secondary'}" data-list="${k}" aria-pressed="${k === key}">${label} <span class="count-badge">${l.length}</span></button>`).join('')}</div>
+      ${key === 'open' ? tableHtml(['Task', 'Kind of work'], list.map(r => [title(r), kind(r)]), 'Nothing here.')
+        : tableHtml(['Task', 'Kind of work', 'Who', 'Date'], list.map(r => [title(r), kind(r), esc(name(r.claimed_by)), due(r)]), 'Nothing here.')}
+      ${canReviewApplications() ? '<p class="hint">To give a task to someone else, or take it back: Tools, Team overview.</p>' : ''}
+    </div>`;
+  box.querySelectorAll('[data-list]').forEach(b => b.addEventListener('click', () => { State.myDeptCoordTab = b.dataset.list; renderTaskFlow(box); }));
+}
+
+// ---------- Formation ----------
+
+// A lead of Formation reads every path, drafts included, and the formatori chat (is_any_formatore(), migration 80).
+async function renderPaths(box) {
+  const [paths, editorRows, chatRows] = await Promise.all([
+    withStatus(sb.from('formation_paths').select('id,title,target_audience,status,owner_id,course_starts_at,course_ends_at').order('created_at', { ascending: false })),
+    withStatus(sb.from('formation_path_editors').select('path_id,user_id')),
+    withStatus(sb.from('formation_chat_messages').select('path_id,created_at').eq('channel', 'formatori').order('created_at', { ascending: false })),
+  ]);
+  const name = await namesByIds(paths.map(p => p.owner_id));
+  const count = {}, writers = {}, last = {};
+  for (const e of editorRows) writers[e.path_id] = (writers[e.path_id] || 0) + 1;
+  for (const m of chatRows) { count[m.path_id] = (count[m.path_id] || 0) + 1; last[m.path_id] ||= m.created_at; } // newest first
+  const part = (title, list) => `<h3>${title} <span class="count-badge">${list.length}</span></h3>
+    ${tableHtml(['Path', 'For', 'Who leads it', 'Other writers', 'Dates', 'Formatori chat', ''], list.map(p => [
+      `<span dir="auto">${esc(p.title)}</span>`, esc(p.target_audience), esc(name(p.owner_id)), esc(writers[p.id] || 0),
+      p.course_starts_at || p.course_ends_at ? `${esc(dayText(p.course_starts_at) || '?')} &rarr; ${esc(dayText(p.course_ends_at) || '?')}` : '',
+      count[p.id] ? `${esc(plural(count[p.id], 'message', 'messages'))}<div class="hint">last ${esc(agoText(last[p.id]))}</div>` : '',
+      `<button type="button" class="btn secondary" data-path="${p.id}">Open</button>`]), 'None.')}`;
+  const archived = paths.filter(p => p.status === 'archived');
+  box.innerHTML = `<div class="panel">${part('Being written', paths.filter(p => p.status === 'draft'))}${part('Published', paths.filter(p => p.status === 'published'))}${archived.length ? part('Archived', archived) : ''}</div>`;
+  box.querySelectorAll('[data-path]').forEach(btn => btn.addEventListener('click', () => {
+    State.formationSelectedPathId = parseInt(btn.dataset.path, 10);
+    window.__renderTab('formation', State.currentRole === 'operator' ? 'work' : undefined);
+  }));
+}
+
+// Who can read reserved documents (111_access_levels.sql). Admins and Formation always can; the others are enabled here, one by one.
 async function renderReservedAccess(box) {
   box.innerHTML = `
     <div class="panel">
-      <h2>Access to reserved documents</h2>
-      <p class="hint">Listed below: everyone who can read reserved documents. Search for a person to enable them. For anyone else, a reserved document does not appear anywhere in the app. PDFs stay on Drive, where anyone with the link can open them: keep only the text here if a document is very delicate.</p>
-      <div class="searchbar"><input id="reserved-search" placeholder="Search by name or email..."></div>
-      <div id="reserved-list"><div class="hint">Loading...</div></div>
+      <p class="hint">Here are the people who can read reserved documents. Search for a person to enable them. For anyone else a reserved document does not appear in the app. Its PDF stays on Drive, where anyone with the link can open it: if a document is very delicate, keep only its text.</p>
+      <div class="field"><label>Search a name<input id="reserved-search" type="search" autocomplete="off"></label></div>
+      <div id="reserved-list" aria-live="polite"><div class="hint">Loading...</div></div>
     </div>`;
-  const search = document.getElementById('reserved-search');
-  let timer = null;
-  search.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => refreshReservedAccess(search.value), 300); });
-  await refreshReservedAccess('');
+  const search = box.querySelector('#reserved-search'), out = box.querySelector('#reserved-list');
+  let timer = null, turn = 0;
+  const refresh = async () => {
+    const mine = ++turn;
+    const rows = await withStatus(sb.rpc('list_reserved_access', { p_query: search.value.trim() || null }));
+    if (mine !== turn) return;
+    const who = r => (r.full_name || '').trim() || '(no name)';
+    out.innerHTML = tableHtml(['Person', 'Access', 'Enabled', ''], rows.map((r, i) => [
+      `<span dir="auto">${esc(who(r))}</span>`, r.automatic ? st('green', '&#10003;', 'Always (Admin or Formation)') : r.enabled ? st('green', '&#10003;', 'Enabled') : st('grey', '&#8226;', 'Not enabled'),
+      r.enabled && !r.automatic ? esc([nameOnly(r.granted_by_email) ? `by ${r.granted_by_email}` : '', dayText(r.granted_at)].filter(Boolean).join(', ')) : ' ',
+      r.automatic ? ' ' : `<button type="button" class="btn secondary" data-i="${i}">${r.enabled ? 'Take away' : 'Enable'}</button>`]), 'Nobody found.');
+    out.querySelectorAll('[data-i]').forEach(btn => btn.addEventListener('click', async () => {
+      const r = rows[+btn.dataset.i];
+      const reason = await promptPopup(r.enabled ? `Take away the access of ${who(r)}? A short reason, if you want:` : `Let ${who(r)} read reserved documents? A short reason, if you want:`, '', { okLabel: r.enabled ? 'Take away' : 'Enable' });
+      if (reason === null) return;
+      await withStatus(sb.rpc('set_reserved_access', { p_user_id: r.user_id, p_enabled: !r.enabled, p_reason: reason }), 'Saving...');
+      await refresh();
+    }));
+  };
+  search.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(refresh, 300); });
+  await refresh();
 }
 
-async function refreshReservedAccess(query) {
-  const list = document.getElementById('reserved-list');
-  const rows = await withStatus(sb.rpc('list_reserved_access', { p_query: query || null }));
-  if (!rows.length) { list.innerHTML = '<div class="empty-msg">Nobody found.</div>'; return; }
-  list.innerHTML = `
-    <div class="grid-wrap"><table class="grid">
-      <thead><tr><th>Name</th><th>Email</th><th>Access</th><th>Enabled by</th><th></th></tr></thead>
-      <tbody>${rows.map(r => `<tr>
-        <td>${esc(r.full_name) || '<span class="hint">(name not set)</span>'}</td>
-        <td>${esc(r.email)}</td>
-        <td>${r.automatic ? 'Always (Admin or Formation)' : (r.enabled ? 'Enabled' : 'Not enabled')}</td>
-        <td>${r.enabled && !r.automatic ? `${esc(r.granted_by_email)} &middot; ${esc((r.granted_at || '').slice(0, 10))}` : ''}</td>
-        <td>${r.automatic ? '' : `<button class="btn ${r.enabled ? 'danger' : ''}" data-reserved-user="${esc(r.user_id)}" data-reserved-enable="${!r.enabled}" style="padding:2px 8px;">${r.enabled ? 'Take away' : 'Enable'}</button>`}</td>
-      </tr>`).join('')}</tbody>
-    </table></div>`;
-  list.querySelectorAll('[data-reserved-user]').forEach(btn => btn.addEventListener('click', async () => {
-    const enable = btn.dataset.reservedEnable === 'true';
-    const reason = await promptPopup(enable ? 'Enable this person for reserved documents? A short reason (optional):' : 'Take away access to reserved documents? A short reason (optional):');
-    if (reason === null) return;
-    await withStatus(sb.rpc('set_reserved_access', { p_user_id: btn.dataset.reservedUser, p_enabled: enable, p_reason: reason }), 'Saving...');
-    await refreshReservedAccess(document.getElementById('reserved-search').value);
-  }));
-}
-
-const ARCHIVE_TOOLS = [
-  ['hayat', 'Hayat Index', 'Browse the original Hayat register.'],
-  ['matchreview', 'Match Review', 'Review and confirm automatic matches against existing documents.'],
-  ['workconsolidation', 'Work Consolidation', 'Merge duplicate/split entries into a single document.'],
-  ['hayateditor', 'Hayat Editor', 'Correct a Hayat register entry directly.'],
-  ['bulkimport', 'Bulk Import', 'Import a batch of new documents from a spreadsheet.'],
-];
-
-function renderArchiveTools(box) {
-  if (!box) return;
-  box.innerHTML = `
-    <div class="panel">
-      <h2>Archive tools</h2>
-      <p class="hint">Data cataloguing tools for this department - open one to work on it.</p>
-      <div class="field-grid wide">${ARCHIVE_TOOLS.filter(([id]) => id !== 'bulkimport' || isAdmin()).map(([id, label, desc]) => `
-        <div class="panel" style="cursor:pointer;" data-open-tab="${id}">
-          <div style="font-weight:600;">${esc(label)}</div>
-          <div class="hint">${esc(desc)}</div>
-        </div>`).join('')}</div>
-    </div>
-    ${isAdmin() ? '<div id="mydept-deleted-documents"></div>' : ''}`;
-  box.querySelectorAll('[data-open-tab]').forEach(el => el.addEventListener('click', () => window.__renderTab(el.dataset.openTab)));
-  if (isAdmin()) renderDeletedDocuments(document.getElementById('mydept-deleted-documents'));
-}
+// ---------- Archive & Data ----------
 
 // Deleting leaves the record in place, hidden from everyone (110_doors_and_archive_log.sql).
 async function renderDeletedDocuments(box) {
   const rows = await withStatus(sb.rpc('get_deleted_documents'));
-  box.innerHTML = `
-    <div class="panel">
-      <h2>Deleted documents</h2>
-      ${rows.length ? `<div class="grid-wrap"><table class="grid">
-        <thead><tr><th>Document</th><th>Title</th><th>Deleted</th><th>By</th><th>Reason</th><th></th></tr></thead>
-        <tbody>${rows.map(r => `<tr>
-          <td>#${esc(r.document_id)}</td>
-          <td dir="auto">${esc(r.title)}</td>
-          <td>${esc((r.deleted_at || '').slice(0, 10))}</td>
-          <td>${esc(r.deleted_by_email)}</td>
-          <td style="white-space:normal;">${esc(r.deleted_reason)}</td>
-          <td><button class="btn secondary" data-restore-document="${esc(r.document_id)}" style="padding:2px 8px;">Restore</button></td>
-        </tr>`).join('')}</tbody>
-      </table></div>` : '<div class="empty-msg">No deleted documents.</div>'}
-    </div>`;
-  box.querySelectorAll('[data-restore-document]').forEach(btn => btn.addEventListener('click', async () => {
-    await withStatus(sb.rpc('restore_document', { p_document_id: parseInt(btn.dataset.restoreDocument, 10) }), 'Restoring...');
+  box.innerHTML = `<div class="panel">${tableHtml(['Document', 'Title', 'Deleted', 'By', 'Why', ''], rows.map(r => [
+    '#' + esc(r.document_id), `<span dir="auto">${esc(r.title)}</span>`, esc(dayText(r.deleted_at)), esc(nameOnly(r.deleted_by_email)), `<span dir="auto">${esc(r.deleted_reason)}</span>`,
+    `<button type="button" class="btn secondary" data-restore="${esc(r.document_id)}">Restore</button>`]), 'No deleted documents.')}</div>`;
+  box.querySelectorAll('[data-restore]').forEach(btn => btn.addEventListener('click', async () => {
+    await withStatus(sb.rpc('restore_document', { p_document_id: parseInt(btn.dataset.restore, 10) }), 'Restoring...');
     await renderDeletedDocuments(box);
   }));
 }
@@ -481,7 +559,6 @@ async function renderTranslationPromptEditor(box) {
   const savedBy = await authorNames(versions, 'created_by', 'created_by_email');
   box.innerHTML = `
     <div class="panel">
-      <h2>Translation prompt <span class="hint">&mdash; what the Translate button copies</span></h2>
       <p class="hint">Saving adds a new version; older ones are kept and the newest is the one in force. Keep it in step with the style guide: when the manual changes a canonical term, change it here and say in one line what changed.</p>
       ${active ? '' : '<p class="hint" style="color:var(--danger, #b3261e);">No prompt in the database yet: paste one below and save it as the first version.</p>'}
       <div class="field"><label>Version</label><input id="tp-version" value="${esc(active ? active.version : '')}" placeholder="e.g. prompt-core v3 (2026-11-02, manual v3.5)"></div>
@@ -524,718 +601,6 @@ async function renderTranslationPromptEditor(box) {
     await withStatus(sb.from('translation_prompts').insert({ version, body, change_note }), 'Saving...');
     renderTranslationPromptEditor(box);
   });
-}
-
-async function renderFormationPipeline(box) {
-  const [paths, editorRows, chatRows] = await Promise.all([
-    withStatus(sb.from('formation_paths').select('id,title,target_audience,status,owner_id,course_starts_at,course_ends_at').order('created_at', { ascending: false })),
-    withStatus(sb.from('formation_path_editors').select('path_id,user_id')),
-    withStatus(sb.from('formation_chat_messages').select('path_id,created_at').eq('channel', 'formatori').order('created_at', { ascending: false })),
-  ]);
-  const ownerIds = [...new Set(paths.map(p => p.owner_id))];
-  const ownerNames = await nameMapForIds(ownerIds);
-  const coAuthorCount = {};
-  for (const e of editorRows) coAuthorCount[e.path_id] = (coAuthorCount[e.path_id] || 0) + 1;
-  const activityCount = {};
-  const lastActivity = {};
-  for (const m of chatRows) { // rows are newest-first, so the first hit per path is the last activity
-    activityCount[m.path_id] = (activityCount[m.path_id] || 0) + 1;
-    if (!lastActivity[m.path_id]) lastActivity[m.path_id] = m.created_at;
-  }
-  const ownerName = uid => ownerNames[uid] || '—';
-
-  const row = p => `<tr>
-    <td>${esc(p.title)}</td>
-    <td>${esc(p.target_audience) || '<span class="hint">—</span>'}</td>
-    <td>${esc(ownerName(p.owner_id))}</td>
-    <td>${coAuthorCount[p.id] || 0}</td>
-    <td>${p.course_starts_at || p.course_ends_at ? `${esc(p.course_starts_at) || '?'} &rarr; ${esc(p.course_ends_at) || '?'}` : '<span class="hint">not scheduled yet</span>'}</td>
-    <td>${activityCount[p.id] ? `${activityCount[p.id]} msgs &middot; last ${esc((lastActivity[p.id] || '').slice(0, 10))}` : '<span class="hint">none yet</span>'}</td>
-    <td><button class="btn secondary mydept-open-path-btn" data-id="${p.id}" style="padding:4px 10px;">Open</button></td>
-  </tr>`;
-  const section = (title, hint, rows) => `
-    <h3 style="margin-top:16px;">${esc(title)} <span class="count-badge">${rows.length}</span> ${hint ? `<span class="hint">${esc(hint)}</span>` : ''}</h3>
-    <div class="grid-wrap"><table class="grid">
-      <thead><tr><th>Title</th><th>Audience</th><th>Owner</th><th>Co-authors</th><th>Course dates</th><th>Formatori chat</th><th></th></tr></thead>
-      <tbody>${rows.length ? rows.map(row).join('') : '<tr><td colspan="7" class="hint">None.</td></tr>'}</tbody>
-    </table></div>`;
-
-  box.innerHTML = `
-    <div class="panel">
-      <h2>Formation pipeline <span class="hint">— every path, open one to coordinate or help tune it</span></h2>
-      ${section('In progress', '— being written, not yet published (drafts)', paths.filter(p => p.status === 'draft'))}
-      ${section('Published', '', paths.filter(p => p.status === 'published'))}
-      ${(() => { const arch = paths.filter(p => p.status === 'archived'); return arch.length ? section('Archived', '', arch) : ''; })()}
-    </div>`;
-
-  box.querySelectorAll('.mydept-open-path-btn').forEach(btn => btn.addEventListener('click', () => {
-    State.formationSelectedPathId = parseInt(btn.dataset.id, 10);
-    document.querySelector('.tab-btn[data-tab="formation"]')?.click();
-  }));
-}
-
-async function renderCoordinationOverview(box) {
-  const rows = await withStatus(sb.rpc('coordination_task_overview'));
-  const pendingExtraCredits = rows.filter(r => r.extra_credits_status === 'pending');
-  const claimedIds = [...new Set(rows.filter(r => r.claimed_by).map(r => r.claimed_by))];
-  const assigneeNames = await nameMapForIds(claimedIds);
-
-  const nearDueDays = State.policyValues.task_near_due_days ?? 3;
-  const todayStr = today();
-  const nearDueLimit = new Date(); nearDueLimit.setDate(nearDueLimit.getDate() + nearDueDays);
-
-  const isOverdue = r => r.status === 'claimed' && r.due_date && r.due_date < todayStr;
-  const isNearDue = r => r.status === 'claimed' && r.due_date && !isOverdue(r) && new Date(r.due_date) <= nearDueLimit;
-
-  const open = rows.filter(r => r.status === 'open');
-  const claimed = rows.filter(r => r.status === 'claimed');
-  const submitted = rows.filter(r => r.status === 'submitted');
-  const approved = rows.filter(r => r.status === 'approved');
-  const overdue = claimed.filter(isOverdue);
-  const nearDue = claimed.filter(isNearDue);
-
-  const whoName = uid => assigneeNames[uid] || '—';
-  const daysDiff = due => Math.round((new Date(due) - new Date(todayStr)) / 86400000);
-  const dueCell = r => {
-    if (!r.due_date) return '<span class="hint">—</span>';
-    if (r.status !== 'claimed') return esc(r.due_date);
-    const d = daysDiff(r.due_date);
-    return d < 0 ? `${esc(r.due_date)} <span style="color:var(--danger);font-weight:600;">(${-d}d overdue)</span>`
-      : `${esc(r.due_date)} <span class="hint">(in ${d}d)</span>`;
-  };
-
-  const TABS = [
-    { id: 'open', label: 'Open', rows: open, showAssignee: false, showDue: false },
-    { id: 'claimed', label: 'In progress', rows: claimed, showAssignee: true, showDue: true },
-    { id: 'submitted', label: 'Awaiting review', rows: submitted, showAssignee: true, showDue: true },
-    { id: 'approved', label: 'Awaiting publish', rows: approved, showAssignee: true, showDue: true },
-    { id: 'overdue', label: 'Overdue', rows: overdue, showAssignee: true, showDue: true },
-    { id: 'neardue', label: `Near due (≤${nearDueDays}d)`, rows: nearDue, showAssignee: true, showDue: true },
-  ];
-  const activeTab = TABS.find(t => t.id === State.myDeptCoordTab) || TABS[0];
-
-  const rowHtml = (r, t) => `<tr>
-    <td>${esc(r.title)}</td>
-    <td>${esc(r.category)}</td>
-    ${t.showAssignee ? `<td>${esc(whoName(r.claimed_by))}</td>` : ''}
-    ${t.showDue ? `<td>${dueCell(r)}</td>` : ''}
-  </tr>`;
-
-  // Decision matrix row 10 (GOVERNANCE.md §4/§8.3, migration 90): extra credits above the
-  // policy threshold can't be paid out until the Coordination lead approves them. Shown here,
-  // not folded into a TABS entry, because it cuts across every status bucket above (a task can
-  // be 'claimed' or 'submitted' and still be pending on its extra credits at the same time) and
-  // it's the one place in this panel with a real write action, not just a read-only overview.
-  const canApproveExtraCredits = isDeptLead('COORD') || isAdmin();
-  const extraCreditsRowHtml = r => `<tr>
-    <td>${esc(r.title)}</td>
-    <td>${esc(r.category)}</td>
-    <td>${esc(r.base_credits ?? 0)}</td>
-    <td>${esc(r.extra_credits)}</td>
-    <td>${esc(r.extra_credits_note) || '—'}</td>
-    <td>${esc(r.created_by_email) || '—'}</td>
-    <td>${canApproveExtraCredits ? `<button class="btn mydept-approve-extra-btn" data-id="${esc(r.id)}" style="padding:2px 8px;">Approve</button>` : '<span class="hint">Coordination lead only</span>'}</td>
-  </tr>`;
-
-  box.innerHTML = `
-    ${pendingExtraCredits.length ? `<div class="panel">
-      <h2>Extra credits awaiting approval <span class="count-badge">${pendingExtraCredits.length}</span></h2>
-      <p class="hint">Above the threshold shown in Policy, below: these tasks can't be given a passing review verdict until approved here. The proposer can't approve their own task.</p>
-      <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>Task</th><th>Category</th><th>Base</th><th>Extra</th><th>Reason</th><th>Proposed by</th><th></th></tr></thead>
-        <tbody>${pendingExtraCredits.map(extraCreditsRowHtml).join('')}</tbody>
-      </table></div>
-    </div>` : ''}
-    <div class="panel">
-      <h2>Task flow <span class="hint">— live overview of the open pipeline, same buckets as Tasks</span></h2>
-      <div class="btn-row" style="margin-bottom:12px;flex-wrap:wrap;">
-        ${TABS.map(t => `<button class="btn ${t.id === activeTab.id ? '' : 'secondary'} mydept-coord-tab-btn" data-tab="${t.id}">${t.label} <span class="count-badge">${t.rows.length}</span></button>`).join('')}
-      </div>
-      <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>Task</th><th>Category</th>${activeTab.showAssignee ? '<th>Assignee</th>' : ''}${activeTab.showDue ? '<th>Due</th>' : ''}</tr></thead>
-        <tbody>${activeTab.rows.length ? activeTab.rows.map(r => rowHtml(r, activeTab)).join('') : `<tr><td colspan="${2 + (activeTab.showAssignee ? 1 : 0) + (activeTab.showDue ? 1 : 0)}" class="empty-msg">Nothing here.</td></tr>`}</tbody>
-      </table></div>
-      <p class="hint" style="margin-top:8px;">Read-only - reassign, reclaim, review or publish a task from the Tasks tab, where those actions already work against the real permissions.</p>
-    </div>`;
-
-  box.querySelectorAll('.mydept-coord-tab-btn').forEach(btn => btn.addEventListener('click', () => {
-    State.myDeptCoordTab = btn.dataset.tab;
-    renderCoordinationOverview(box);
-  }));
-
-  box.querySelectorAll('.mydept-approve-extra-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if (!await confirmPopup('Approve these extra credits? This lets the task be given a passing review verdict.')) return;
-    const { error } = await sb.rpc('approve_task_extra_credits', { p_task_id: parseInt(btn.dataset.id, 10) });
-    if (error) { alert(error.message); return; }
-    renderCoordinationOverview(box);
-  }));
-}
-
-async function renderRewardCredits(box) {
-  const [overviewRows, ledgerRows] = await Promise.all([
-    withStatus(sb.rpc('reward_credit_overview')),
-    withStatus(sb.from('budget_ledger').select('*').order('created_at', { ascending: false })),
-  ]);
-  const o = overviewRows[0] || { open_credits: 0, in_progress_credits: 0, to_redeem_credits: 0, redeemed_credits: 0, budget: 0 };
-  const used = o.open_credits + o.in_progress_credits + o.to_redeem_credits + o.redeemed_credits;
-  const available = o.budget - used;
-  const tile = (label, value) => `<div class="field"><label>${esc(label)}</label><div style="font-size:20px;font-weight:600;">${esc(value)}</div></div>`;
-
-  box.innerHTML = `
-    <div class="panel">
-      <h2>Credits in circulation <span class="hint">— as they are now</span></h2>
-      <p class="hint">Every credit currently posted, in progress, awaiting review, or already published - useful for tuning rates and reputation tiers (Policy, below), and later for planning compensation runs.</p>
-      <div class="field-grid">
-        ${tile('Budget', o.budget)}
-        ${tile('Available', available)}
-        ${tile('Posted, not taken', o.open_credits)}
-        ${tile('In progress', o.in_progress_credits)}
-        ${tile('Approved, to redeem', o.to_redeem_credits)}
-        ${tile('Redeemed (published)', o.redeemed_credits)}
-      </div>
-      <p class="hint" style="margin-top:8px;">Topping up the budget stays an Owner/Admin action (Tasks &rarr; Budget).</p>
-      <h3>Top-up history</h3>
-      <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>Date</th><th>Amount</th><th>Note</th><th>Added by</th></tr></thead>
-        <tbody>${ledgerRows.length ? ledgerRows.map(r => `
-          <tr><td>${esc((r.created_at || '').slice(0, 10))}</td><td>${esc(r.amount)}</td><td>${esc(r.note) || '—'}</td><td>${esc(r.created_by_email) || '—'}</td></tr>
-        `).join('') : '<tr><td colspan="4" class="empty-msg">No top-ups recorded yet.</td></tr>'}</tbody>
-      </table></div>
-    </div>`;
-}
-
-// ---------- Compensation runs (migration 91, GOVERNANCE.md §6.4 / decision matrix row 15) ----------
-// "Reward proposes, Lead Reward + Owner approves" - here, Admin stands in for Owner (the schema
-// has no separate Owner identity), and proposer never equals approver, enforced in
-// decide_compensation_run() itself, not just by hiding the button.
-
-async function renderCompensationRuns(box) {
-  const runs = await withStatus(sb.from('compensation_runs').select('*').order('created_at', { ascending: false }));
-  const lineRows = runs.length
-    ? await withStatus(sb.from('compensation_lines').select('*').in('run_id', runs.map(r => r.id)))
-    : [];
-  const linesByRun = {};
-  for (const l of lineRows) (linesByRun[l.run_id] = linesByRun[l.run_id] || []).push(l);
-  const { data: { user } } = await sb.auth.getUser();
-
-  const runRowHtml = r => {
-    const lines = linesByRun[r.id] || [];
-    const totalCredits = lines.reduce((s, l) => s + l.credits_settled, 0);
-    const canDecide = r.status === 'pending' && isAdmin() && r.prepared_by_email !== user.email;
-    const canWithdraw = r.status === 'pending' && r.prepared_by_email === user.email;
-    return `<tr>
-      <td>${esc(r.period_from)} &rarr; ${esc(r.period_to)}</td>
-      <td>${lines.length} ${lines.length === 1 ? 'person' : 'people'}, ${esc(totalCredits)} credits</td>
-      <td>${esc(r.status)}</td>
-      <td>${esc(r.prepared_by_email)}</td>
-      <td>
-        <button class="btn secondary mydept-comp-details-btn" data-id="${esc(r.id)}" style="padding:2px 8px;">Details</button>
-        ${canDecide ? `<button class="btn mydept-comp-approve-btn" data-id="${esc(r.id)}" style="padding:2px 8px;">Approve</button>
-          <button class="btn danger mydept-comp-reject-btn" data-id="${esc(r.id)}" style="padding:2px 8px;">Reject</button>` : ''}
-        ${canWithdraw ? `<button class="btn secondary mydept-comp-withdraw-btn" data-id="${esc(r.id)}" style="padding:2px 8px;">Withdraw</button>` : ''}
-      </td>
-    </tr>
-    <tr class="mydept-comp-details-row" data-for="${esc(r.id)}" style="display:none;">
-      <td colspan="5">
-        ${r.note ? `<p class="hint">${esc(r.note)}</p>` : ''}
-        <table class="grid"><thead><tr><th>Person</th><th>Credits settled</th><th>Amount</th><th>Reference</th></tr></thead>
-        <tbody>${lines.map(l => `<tr><td>${esc(l.user_email)}</td><td>${esc(l.credits_settled)}</td><td>${esc(l.amount)} ${esc(l.currency)}</td><td>${esc(l.reference) || '—'}</td></tr>`).join('')}</tbody></table>
-        ${r.decided_by_email ? `<p class="hint" style="margin-top:6px;">${esc(r.status)} by ${esc(r.decided_by_email)} on ${esc((r.decided_at || '').slice(0, 10))}${r.decision_note ? ' — ' + esc(r.decision_note) : ''}</p>` : ''}
-      </td>
-    </tr>`;
-  };
-
-  box.innerHTML = `
-    <div class="panel">
-      <h2>Compensation runs</h2>
-      <p class="hint">Records that credits were converted to money - it never moves money itself, only the record that a payment happened. ${isRfMember() ? '<button class="btn" id="mydept-new-comp-run-btn" style="margin-left:8px;">New compensation run</button>' : ''}</p>
-      <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>Period</th><th>Lines</th><th>Status</th><th>Prepared by</th><th></th></tr></thead>
-        <tbody>${runs.length ? runs.map(runRowHtml).join('') : '<tr><td colspan="5" class="empty-msg">No compensation runs yet.</td></tr>'}</tbody>
-      </table></div>
-    </div>`;
-
-  box.querySelectorAll('.mydept-comp-details-btn').forEach(btn => btn.addEventListener('click', () => {
-    const row = box.querySelector(`.mydept-comp-details-row[data-for="${btn.dataset.id}"]`);
-    row.style.display = row.style.display === 'none' ? '' : 'none';
-  }));
-  box.querySelectorAll('.mydept-comp-approve-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if (!await confirmPopup('Approve this compensation run? This records that these credits have been paid.')) return;
-    const { error } = await sb.rpc('decide_compensation_run', { p_run_id: parseInt(btn.dataset.id, 10), p_outcome: 'approved' });
-    if (error) { alert(error.message); return; }
-    renderCompensationRuns(box);
-  }));
-  box.querySelectorAll('.mydept-comp-reject-btn').forEach(btn => btn.addEventListener('click', async () => {
-    const note = await promptPopup('Reason for rejecting this compensation run?');
-    if (!note || !note.trim()) return;
-    const { error } = await sb.rpc('decide_compensation_run', { p_run_id: parseInt(btn.dataset.id, 10), p_outcome: 'rejected', p_note: note.trim() });
-    if (error) { alert(error.message); return; }
-    renderCompensationRuns(box);
-  }));
-  box.querySelectorAll('.mydept-comp-withdraw-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if (!await confirmPopup('Withdraw this compensation run?')) return;
-    const { error } = await sb.rpc('decide_compensation_run', { p_run_id: parseInt(btn.dataset.id, 10), p_outcome: 'withdrawn' });
-    if (error) { alert(error.message); return; }
-    renderCompensationRuns(box);
-  }));
-  const newBtn = document.getElementById('mydept-new-comp-run-btn');
-  if (newBtn) newBtn.addEventListener('click', () => openNewCompensationRunPopup(box));
-}
-
-// propose_compensation_run() (migration 91) requires real RF membership - matches the decision
-// matrix's "Reward proposes" exactly, unlike deciding it (Admin, standing in for Owner). Admin
-// alone, without an RF row, still sees this whole view (My Department shows every department to
-// Admin) but can't propose from it - only decide.
-function isRfMember() {
-  return State.myDepartments.some(d => d.department_code === 'RF');
-}
-
-async function openNewCompensationRunPopup(box) {
-  const unsettled = await withStatus(sb.rpc('reward_unsettled_credits'));
-
-  const overlay = document.createElement('div');
-  overlay.id = 'new-comp-run-popup';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:2100;background:rgba(20,16,10,.55);display:flex;align-items:center;justify-content:center;overflow:auto;padding:24px 16px;';
-  overlay.innerHTML = '<div class="panel" style="max-width:640px;width:100%;margin:0;"></div>';
-  document.body.appendChild(overlay);
-  const panel = overlay.querySelector('.panel');
-  const close = () => overlay.remove();
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-
-  panel.innerHTML = `
-    <h2 style="margin-top:0;">New compensation run</h2>
-    <div class="field-grid">
-      <div class="field"><label>Period from</label><input id="comp-from" type="date"></div>
-      <div class="field"><label>Period to</label><input id="comp-to" type="date"></div>
-      <div class="field" style="grid-column:1/-1;"><label>Note <span class="hint">(optional)</span></label><input id="comp-note"></div>
-    </div>
-    <h3>Lines</h3>
-    <p class="hint">Only people with unsettled credits are listed. Check who is included in this run, and set the amount actually paid.</p>
-    <div class="grid-wrap"><table class="grid">
-      <thead><tr><th></th><th>Person</th><th>Unsettled</th><th>Credits to settle</th><th>Amount</th><th>Currency</th><th>Reference</th></tr></thead>
-      <tbody>${unsettled.length ? unsettled.map(u => `<tr>
-        <td><input type="checkbox" class="comp-line-check" data-uid="${esc(u.user_id)}"></td>
-        <td>${esc(u.full_name) || esc(u.email)}</td>
-        <td>${esc(u.unsettled)}</td>
-        <td><input type="number" class="comp-line-credits" data-uid="${esc(u.user_id)}" min="1" max="${esc(u.unsettled)}" value="${esc(u.unsettled)}" style="width:80px;"></td>
-        <td><input type="number" class="comp-line-amount" data-uid="${esc(u.user_id)}" min="0" step="0.01" style="width:100px;"></td>
-        <td><input type="text" class="comp-line-currency" data-uid="${esc(u.user_id)}" value="PKR" style="width:70px;"></td>
-        <td><input type="text" class="comp-line-reference" data-uid="${esc(u.user_id)}" style="width:120px;"></td>
-      </tr>`).join('') : '<tr><td colspan="7" class="empty-msg">Nobody has unsettled credits right now.</td></tr>'}</tbody>
-    </table></div>
-    <div class="btn-row" style="margin-top:12px;"><button class="btn" id="comp-submit">Create run</button><button class="btn secondary" id="comp-cancel">Cancel</button></div>`;
-
-  panel.querySelector('#comp-cancel').addEventListener('click', close);
-  panel.querySelector('#comp-submit').addEventListener('click', async () => {
-    const from = panel.querySelector('#comp-from').value;
-    const to = panel.querySelector('#comp-to').value;
-    if (!from || !to) { alert('Please set both dates for the period.'); return; }
-    const checked = [...panel.querySelectorAll('.comp-line-check:checked')];
-    if (!checked.length) { alert('Select at least one person.'); return; }
-    const lines = [];
-    for (const chk of checked) {
-      const uid = chk.dataset.uid;
-      const credits = parseInt(panel.querySelector(`.comp-line-credits[data-uid="${uid}"]`).value, 10);
-      const amount = parseFloat(panel.querySelector(`.comp-line-amount[data-uid="${uid}"]`).value);
-      const currency = panel.querySelector(`.comp-line-currency[data-uid="${uid}"]`).value.trim() || 'PKR';
-      const reference = panel.querySelector(`.comp-line-reference[data-uid="${uid}"]`).value.trim() || null;
-      if (!credits || credits <= 0) { alert('Credits to settle must be a positive number for every selected person.'); return; }
-      if (!amount || amount <= 0) { alert('Amount must be a positive number for every selected person.'); return; }
-      lines.push({ user_id: uid, credits_settled: credits, amount, currency, reference });
-    }
-    const { error } = await sb.rpc('propose_compensation_run', {
-      p_period_from: from, p_period_to: to, p_note: panel.querySelector('#comp-note').value.trim() || null, p_lines: lines,
-    });
-    if (error) { alert(error.message); return; }
-    close();
-    renderCompensationRuns(box);
-  });
-}
-
-// ---------- Anomaly report (migration 91, GOVERNANCE.md §2.4/§6.4) ----------
-
-async function renderRewardAnomalies(box) {
-  const [extraCreditTasks, operatorAnomalies] = await Promise.all([
-    withStatus(sb.rpc('reward_extra_credit_tasks')),
-    withStatus(sb.rpc('reward_operator_credit_anomalies')),
-  ]);
-  const flagged = operatorAnomalies.filter(o => o.flagged);
-
-  box.innerHTML = `
-    <div class="panel">
-      <h2>Anomaly report</h2>
-
-      <h3>Tasks with extra credits <span class="count-badge">${extraCreditTasks.length}</span></h3>
-      <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>Task</th><th>Category</th><th>Status</th><th>Base</th><th>Extra</th><th>Reason</th><th>Extra-credit approval</th><th>Proposed by</th></tr></thead>
-        <tbody>${extraCreditTasks.length ? extraCreditTasks.map(t => `<tr>
-          <td>${esc(t.title)}</td><td>${esc(t.category)}</td><td>${esc(t.status)}</td>
-          <td>${esc(t.base_credits ?? 0)}</td><td>${esc(t.extra_credits)}</td><td>${esc(t.extra_credits_note) || '—'}</td>
-          <td>${esc(t.extra_credits_status)}${t.extra_credits_approved_by_email ? ' — ' + esc(t.extra_credits_approved_by_email) : ''}</td>
-          <td>${esc(t.created_by_email) || '—'}</td>
-        </tr>`).join('') : '<tr><td colspan="8" class="empty-msg">No task has ever carried extra credits.</td></tr>'}</tbody>
-      </table></div>
-
-      <h3 style="margin-top:16px;">Operators with credits ahead of published work <span class="count-badge">${flagged.length}</span></h3>
-      <p class="hint">Flagged once approved-but-unpublished credits exceed both their published credits and the policy floor (My Department &rarr; Policy, "reward_anomaly_backlog_credits").</p>
-      <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>Person</th><th>Credits</th><th>Reputation</th><th>Approved, unpublished</th><th>Published</th><th>Published tasks</th></tr></thead>
-        <tbody>${flagged.length ? flagged.map(o => `<tr>
-          <td>${esc(o.full_name) || esc(o.email)}</td><td>${esc(o.credits)}</td><td>${esc(o.reputation)}</td>
-          <td>${esc(o.approved_not_published_credits)}</td><td>${esc(o.published_credits)}</td><td>${esc(o.published_task_count)}</td>
-        </tr>`).join('') : '<tr><td colspan="6" class="empty-msg">Nobody is flagged right now.</td></tr>'}</tbody>
-      </table></div>
-    </div>`;
-}
-
-// ---------- Tokens of appreciation (docs/TOKEN_POLICY.md, migration 127) ----------
-// Given by themselves when a proposal or a reading is published, by pages or minutes. Never money.
-// Their values are in Policy values below (token_per_page, token_per_minute, token_per_unit): while one is 0,
-// its entries wait, and they are valued as soon as the value is approved.
-const TOKEN_KINDS = { proposal: 'Proposal', reading: 'Reading aloud', report: 'Useful report', titles: 'Urdu titles reviewed' };
-const TOKEN_UNITS = { page: ['page', 'pages'], minute: ['minute', 'minutes'], unit: ['unit', 'units'] };
-
-async function renderRewardTokens(box) {
-  const [people, entries, milestones, texts] = await Promise.all([
-    withStatus(sb.rpc('reward_token_people')),
-    withStatus(sb.rpc('reward_token_entries', { p_limit: 100 })),
-    withStatus(sb.from('token_milestones').select('*').order('tokens')),
-    withStatus(sb.from('token_texts').select('*').order('key')),
-  ]);
-  const waiting = people.reduce((n, p) => n + Number(p.waiting || 0), 0);
-  const size = e => `${e.units} ${TOKEN_UNITS[e.unit][e.units === 1 ? 0 : 1]}${e.size_recorded ? '' : ' (size not recorded)'}`;
-  const tokensCell = e => e.annulled ? `<s>${esc(e.tokens ?? '—')}</s>` : (e.tokens == null ? '<span class="hint">waiting</span>' : esc(e.tokens));
-  const what = e => e.document_id ? `#${esc(e.document_id)} ${esc(e.title) || ''}` : esc(e.note) || '—';
-
-  box.innerHTML = `
-    <div class="panel">
-      <h2>Tokens of appreciation</h2>
-      <p class="hint">Given by themselves when a proposal or a reading is published, by its pages or minutes. Tokens are never money. How many tokens a page, a minute or a unit is worth is set in Policy values below; while a value is 0, the tokens wait${waiting ? ` (${waiting} entries waiting now)` : ''}, and they are counted as soon as the value is approved.</p>
-
-      <h3>Who gave <span class="count-badge">${people.length}</span></h3>
-      <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>Person</th><th>Tokens</th><th>Contributions</th><th>Waiting</th><th>Annulled</th><th>Last</th></tr></thead>
-        <tbody>${people.length ? people.map(p => `<tr>
-          <td>${esc(p.full_name) || esc(p.email)}</td><td>${esc(p.tokens)}</td><td>${esc(p.entries)}</td>
-          <td>${esc(p.waiting)}</td><td>${esc(p.annulled)}</td><td>${esc((p.last_at || '').slice(0, 10))}</td>
-        </tr>`).join('') : '<tr><td colspan="6" class="empty-msg">Nobody has received tokens yet.</td></tr>'}</tbody>
-      </table></div>
-
-      <h3 style="margin-top:16px;">Latest entries</h3>
-      <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>Date</th><th>Person</th><th>For</th><th>What</th><th>Size</th><th>Tokens</th><th></th></tr></thead>
-        <tbody>${entries.length ? entries.map(e => `<tr>
-          <td>${esc((e.created_at || '').slice(0, 10))}${e.past ? ' <span class="count-badge">before tokens</span>' : ''}</td>
-          <td>${esc(e.user_email) || '—'}</td><td>${esc(TOKEN_KINDS[e.kind] || e.kind)}</td>
-          <td style="white-space:normal;">${what(e)}</td><td>${esc(size(e))}</td><td>${tokensCell(e)}</td>
-          <td>${e.annulled ? `<span class="hint">Annulled: ${esc(e.annul_note)}</span>`
-            : `<button class="btn secondary tok-annul" style="padding:4px 10px;" data-id="${esc(e.id)}">Annul</button>`}</td>
-        </tr>`).join('') : '<tr><td colspan="7" class="empty-msg">No entries yet.</td></tr>'}</tbody>
-      </table></div>
-
-      <h3 style="margin-top:16px;">Milestones and the certificate</h3>
-      <p class="hint">A certificate of appreciation is issued by itself when someone's tokens reach a milestone. It waits until the sentence and the signer below are written. Each change is a proposal an Admin who is not you approves, and appears under Pending policy proposals below.</p>
-      <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>Tokens</th><th>Name of the milestone</th><th></th></tr></thead>
-        <tbody>${milestones.length ? milestones.map(m => `<tr>
-          <td>${esc(m.tokens)}</td><td style="white-space:normal;">${esc(m.label) || '—'}</td>
-          <td><button class="btn secondary tok-ms-change" style="padding:4px 10px;" data-tokens="${esc(m.tokens)}" data-label="${esc(m.label || '')}">Propose change</button>
-              <button class="btn secondary tok-ms-remove" style="padding:4px 10px;" data-tokens="${esc(m.tokens)}">Propose removal</button></td>
-        </tr>`).join('') : '<tr><td colspan="3" class="empty-msg">No milestone yet.</td></tr>'}</tbody>
-      </table></div>
-      <div class="btn-row"><button class="btn secondary" id="tok-ms-add">+ Propose a milestone</button></div>
-      <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>Text</th><th>Now</th><th></th></tr></thead>
-        <tbody>${texts.map(t => `<tr>
-          <td style="white-space:normal;">${esc(t.label)}</td>
-          <td style="white-space:normal;" dir="auto">${t.text ? esc(t.text) : '<span class="hint">not written yet</span>'}</td>
-          <td><button class="btn secondary tok-text-change" style="padding:4px 10px;" data-key="${esc(t.key)}">Propose change</button></td>
-        </tr>`).join('')}</tbody>
-      </table></div>
-      <div class="field-grid">
-        <div class="field"><label>Check a certificate's code</label><input id="tok-verify-code" autocomplete="off" placeholder="10 letters and numbers"></div>
-      </div>
-      <div class="btn-row"><button class="btn secondary" id="tok-verify">Check</button><span id="tok-verify-result" class="hint"></span></div>
-
-      <h3 style="margin-top:16px;">Public thanks for a month</h3>
-      <p class="hint">Only adults who agreed in My Space, with a name, and what they gave that month. No ranking. Copy it for Communication, who publishes it in the app and in Hayat.</p>
-      <div class="field-grid">
-        <div class="field"><label>Month</label><input id="tok-thanks-month" type="month"></div>
-      </div>
-      <div class="btn-row"><button class="btn secondary" id="tok-thanks-show">Show the list</button><button class="btn secondary" id="tok-thanks-copy" disabled>Copy</button></div>
-      <div id="tok-thanks-box"></div>
-
-      <h3 style="margin-top:16px;">A batch of Urdu title answers received</h3>
-      <p class="hint">One unit for each batch a reviewer sends. Someone else in Reward gives it for your own answers.</p>
-      <div class="field-grid">
-        <div class="field"><label>Reviewer's email</label><input id="tok-titles-email" type="email" autocomplete="off"></div>
-        <div class="field"><label>Which batch</label><input id="tok-titles-note" placeholder="for example: the file of 12 November, Titles filter"></div>
-      </div>
-      <div class="btn-row"><button class="btn" id="tok-titles-give">Give the tokens</button><span id="tok-titles-status" class="hint"></span></div>
-    </div>`;
-
-  const again = () => renderMyDepartmentView(document.getElementById('main'));
-  const proposeMilestone = (key, tokens, label) => openPolicyProposalModal({
-    title: key ? `Propose a change to the milestone of ${key} tokens` : 'Propose a new milestone',
-    targetTable: 'token_milestones', targetKey: key || '', action: 'upsert', owners: ['RF'],
-    fields: [{ name: 'tokens', label: 'Tokens needed', type: 'number', value: tokens }, { name: 'label', label: 'Name of the milestone (optional)', type: 'text', value: label }],
-    onSaved: again,
-  });
-  box.querySelector('#tok-ms-add').addEventListener('click', async () => {
-    const n = await promptPopup('How many tokens for the new milestone?');
-    if (n == null) return;
-    if (!/^[1-9][0-9]*$/.test(n.trim())) { alert('Please write a whole number above 0.'); return; }
-    proposeMilestone(n.trim(), n.trim(), '');
-  });
-  box.querySelectorAll('.tok-ms-change').forEach(b => b.addEventListener('click', () => proposeMilestone(b.dataset.tokens, b.dataset.tokens, b.dataset.label)));
-  box.querySelectorAll('.tok-ms-remove').forEach(b => b.addEventListener('click', () => openPolicyProposalModal({
-    title: `Propose removing the milestone of ${b.dataset.tokens} tokens`, targetTable: 'token_milestones', targetKey: b.dataset.tokens,
-    action: 'delete', owners: ['RF'], fields: null, onSaved: again,
-  })));
-  box.querySelectorAll('.tok-text-change').forEach(b => b.addEventListener('click', () => {
-    const t = texts.find(x => x.key === b.dataset.key);
-    openPolicyProposalModal({
-      title: `Propose a text — ${t.label}`, targetTable: 'token_texts', targetKey: t.key, action: 'upsert', owners: ['RF'],
-      fields: [{ name: 'text', label: 'Text', type: 'text', value: t.text }], onSaved: again,
-    });
-  }));
-  const monthInput = document.getElementById('tok-thanks-month');
-  const now = new Date();
-  monthInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  let thanksText = '';
-  box.querySelector('#tok-thanks-show').addEventListener('click', async () => {
-    const out = document.getElementById('tok-thanks-box');
-    if (!monthInput.value) return;
-    const rows = await withStatus(sb.rpc('reward_public_thanks', { p_month: monthInput.value + '-01' }));
-    const what = r => [[r.proposals, 'proposal', 'proposals'], [r.readings, 'reading aloud', 'readings aloud'], [r.reports, 'useful report', 'useful reports'], [r.titles, 'batch of Urdu titles', 'batches of Urdu titles']]
-      .filter(([n]) => Number(n) > 0).map(([n, one, many]) => `${n} ${Number(n) === 1 ? one : many}`).join(', ');
-    const lines = rows.map(r => `${r.full_name}: ${what(r)}`);
-    const monthName = new Date(monthInput.value + '-01T12:00:00').toLocaleString('en', { month: 'long', year: 'numeric' });
-    thanksText = lines.length ? `Thank you, ${monthName}\n${lines.join('\n')}` : '';
-    out.innerHTML = lines.length ? `<pre style="white-space:pre-wrap;" dir="auto">${esc(thanksText)}</pre>` : '<div class="empty-msg">Nobody to thank in public for this month.</div>';
-    document.getElementById('tok-thanks-copy').disabled = !lines.length;
-  });
-  box.querySelector('#tok-thanks-copy').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(thanksText); alert('Copied.'); } catch { alert('Copying is not allowed here: select the text and copy it.'); }
-  });
-  box.querySelector('#tok-verify').addEventListener('click', async () => {
-    const out = document.getElementById('tok-verify-result');
-    const code = document.getElementById('tok-verify-code').value.trim();
-    if (!code) return;
-    const { data, error } = await sb.rpc('verify_token_certificate', { p_code: code });
-    if (error) { out.textContent = error.message; return; }
-    const c = (data || [])[0];
-    out.textContent = c ? `Genuine: ${c.full_name}, ${c.milestone} tokens, ${(c.issued_at || '').slice(0, 10)}, signed by ${c.signer}.` : 'No certificate has this code.';
-  });
-
-  box.querySelectorAll('.tok-annul').forEach(b => b.addEventListener('click', async () => {
-    const note = await promptPopup('Why are these tokens annulled? (for example: a copy of a text already in the archive)');
-    if (note == null) return;
-    if (!note.trim()) { alert('Please say why.'); return; }
-    const { error } = await sb.rpc('token_annul', { p_event_id: Number(b.dataset.id), p_note: note.trim() });
-    if (error) { alert(error.message); return; }
-    await renderRewardTokens(box);
-  }));
-  document.getElementById('tok-titles-give').addEventListener('click', async () => {
-    const status = document.getElementById('tok-titles-status');
-    const email = document.getElementById('tok-titles-email').value.trim();
-    const note = document.getElementById('tok-titles-note').value.trim();
-    if (!email || !note) { status.textContent = 'Please give the email and say which batch.'; return; }
-    const { error } = await sb.rpc('token_give_for_titles', { p_email: email, p_note: note });
-    if (error) { status.textContent = error.message; return; }
-    await renderRewardTokens(box);
-  });
-}
-
-async function renderRoster(code) {
-  const box = document.getElementById('mydept-roster-box');
-  const canManage = isAdmin() || isDeptLead(code);
-  const memberRows = await withStatus(sb.from('department_members').select('user_id,is_lead').eq('department_code', code));
-  // Names come from department_roster() (migration 107), which any member of the department can
-  // call; user_profiles itself is readable only by Coordinator+Admin, so a plain Operator used to see
-  // "(no name)" and the lead's raw id. Emails still come from user_profiles and are simply absent for
-  // people who may not read them.
-  const [rosterRows, profileRows] = memberRows.length ? await Promise.all([
-    // If migration 107 has not been run yet the call fails; the panel then just shows what it did before.
-    withStatus(sb.rpc('department_roster', { p_dept: code })).catch(() => []),
-    withStatus(sb.from('user_profiles').select('user_id,email,full_name').in('user_id', memberRows.map(r => r.user_id))),
-  ]) : [[], []];
-  const profileByUid = {};
-  for (const p of profileRows) profileByUid[p.user_id] = p;
-  for (const r of rosterRows) profileByUid[r.user_id] = { ...profileByUid[r.user_id], user_id: r.user_id, full_name: r.full_name || profileByUid[r.user_id]?.full_name };
-  const lead = memberRows.find(r => r.is_lead);
-  // Logins are for Coordinators and Admins: for the others the column would hold only their own.
-  const anyEmail = profileRows.length > 1 || isAdmin();
-  const leadName = lead ? (profileByUid[lead.user_id]?.full_name || profileByUid[lead.user_id]?.email || '(name not set)') : '(none yet)';
-
-  box.innerHTML = `
-    <div class="panel">
-      <h2>Team <span class="count-badge">${memberRows.length}</span></h2>
-      <p class="hint">Lead: <strong>${esc(leadName)}</strong>${canManage ? ' <span class="hint">— appointing or replacing the lead is done from Options &rarr; Departments (Admin)</span>' : ''}</p>
-      <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>Name</th>${anyEmail ? '<th>Email</th>' : ''}${canManage ? '<th></th>' : ''}</tr></thead>
-        <tbody>${memberRows.map(r => {
-          const p = profileByUid[r.user_id] || {};
-          return `<tr>
-            <td>${esc(p.full_name) || '(no name)'}${r.is_lead ? ' <strong>(lead)</strong>' : ''}</td>
-            ${anyEmail ? `<td>${esc(p.email)}</td>` : ''}
-            ${canManage ? `<td>${!r.is_lead ? `<button class="btn danger mydept-remove-btn" data-uid="${esc(r.user_id)}" style="padding:2px 8px;">Remove</button>` : ''}</td>` : ''}
-          </tr>`;
-        }).join('') || '<tr><td colspan="3" class="hint">No members yet.</td></tr>'}</tbody>
-      </table></div>
-      ${canManage ? `<div class="field" style="margin-top:8px;">
-        <label>Add member <span class="hint">(search by name or email)</span></label>
-        <input id="mydept-search" placeholder="Type a name or email...">
-        <div id="mydept-search-results"></div>
-      </div>` : ''}
-    </div>`;
-
-  if (!canManage) return;
-
-  document.getElementById('mydept-search').addEventListener('input', async e => {
-    const q = e.target.value.trim();
-    const resultsBox = document.getElementById('mydept-search-results');
-    if (!q) { resultsBox.innerHTML = ''; return; }
-    const pattern = likeSafe(q);
-    const rows = await withStatus(sb.from('user_profiles').select('user_id,email,full_name').or(`full_name.ilike.${pattern},email.ilike.${pattern}`).limit(10));
-    resultsBox.innerHTML = rows.map(r => `<div class="hint" style="cursor:pointer;padding:2px 0;" data-add-uid="${esc(r.user_id)}">${esc(r.full_name) || esc(r.email)} &middot; ${esc(r.email)}</div>`).join('') || '<div class="hint">No match.</div>';
-    resultsBox.querySelectorAll('[data-add-uid]').forEach(el => el.addEventListener('click', async () => {
-      const { data: { user } } = await sb.auth.getUser();
-      const { error } = await sb.from('department_members').insert({ department_code: code, user_id: el.dataset.addUid });
-      if (error && error.code !== '23505') { alert(error.message); return; } // 23505 = already a member, ignore
-      document.getElementById('mydept-search').value = '';
-      resultsBox.innerHTML = '';
-      renderRoster(code);
-    }));
-  });
-
-  box.querySelectorAll('.mydept-remove-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if (!await confirmPopup('Remove this member from the department?')) return;
-    const { error } = await sb.from('department_members').delete().eq('department_code', code).eq('user_id', btn.dataset.uid);
-    if (error) { alert(error.message); return; }
-    renderRoster(code);
-  }));
-}
-
-// ---------- Team channel (94_department_messages.sql, PROJECT_HANDOFF_v33.md) ----------
-// One flat, chronological message thread per department, visible only to that department's
-// members and Admin - distinct from Boards (public, moderated) and the admin<->user chat
-// (chat_messages: 1:1 ticketing). Any member can post; the department lead (or Admin) can pin;
-// the author can edit/delete their own message within a short window after posting. The
-// server-side window (the migration's trigger/RLS) is the real gate - this constant only decides
-// when the client stops offering the Edit/Delete links, so don't rely on it for anything else.
-const DEPT_MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
-
-function deptChatDateTime(iso) { return esc((iso || '').slice(0, 16).replace('T', ' ')); }
-
-async function renderDeptChannel(box, code) {
-  markDeptSeen(code);
-  const canPin = isDeptLead(code) || isAdmin();
-  const { data: { user } } = await sb.auth.getUser();
-
-  const rows = await withStatus(sb.from('department_messages').select('*').eq('department_code', code).order('created_at'));
-  const nameMap = await nameMapForIds(rows.map(r => r.user_id));
-
-  const imagePaths = rows.filter(r => r.image_path).map(r => r.image_path);
-  let signedUrlByPath = {};
-  if (imagePaths.length) {
-    const { data } = await sb.storage.from(DEPARTMENT_MEDIA_BUCKET).createSignedUrls(imagePaths, 3600);
-    (data || []).forEach(d => { if (d && d.signedUrl) signedUrlByPath[d.path] = d.signedUrl; });
-  }
-
-  // Each message renders exactly once as an interactive bubble (in the chronological thread) -
-  // a pinned message additionally gets a plain, non-interactive reminder in the pinned section
-  // above. Two interactive copies of the same message would mean two elements sharing the same
-  // data-edit-id/data-delete-id/data-pin-id, and querySelector (singular) in the click handlers
-  // below would always act on the first one regardless of which copy was actually clicked.
-  const bubble = r => {
-    const mine = r.user_id === user.id;
-    const withinEditWindow = (Date.now() - new Date(r.created_at).getTime()) < DEPT_MESSAGE_EDIT_WINDOW_MS;
-    const img = r.image_path && signedUrlByPath[r.image_path]
-      ? `<div style="margin-top:6px;"><img src="${esc(signedUrlByPath[r.image_path])}" style="max-width:100%;max-height:240px;border-radius:8px;"></div>` : '';
-    return `
-      <div class="chat-bubble ${mine ? 'from-me' : 'from-other'} ${r.pinned ? 'pinned' : ''}" data-msg-id="${r.id}">
-        <div class="chat-meta">${esc(nameMap[r.user_id] || '')} &middot; ${deptChatDateTime(r.created_at)}${r.edited_at ? ' &middot; edited' : ''}${r.pinned ? ' &middot; 📌 pinned' : ''}</div>
-        <div class="dept-msg-body" dir="auto" style="white-space:pre-wrap;">${esc(r.body)}</div>
-        ${img}
-        <div class="btn-row" style="margin-top:6px;">
-          ${mine && withinEditWindow ? `<span class="hint" style="cursor:pointer;text-decoration:underline;" data-edit-id="${r.id}">Edit</span>` : ''}
-          ${mine && withinEditWindow ? `<span class="hint" style="cursor:pointer;text-decoration:underline;" data-delete-id="${r.id}">Delete</span>` : ''}
-          ${canPin ? `<span class="hint" style="cursor:pointer;text-decoration:underline;" data-pin-id="${r.id}" data-pin-next="${!r.pinned}">${r.pinned ? 'Unpin' : 'Pin'}</span>` : ''}
-        </div>
-      </div>`;
-  };
-  const pinnedReminder = r => `
-    <div class="chat-bubble pinned from-other">
-      <div class="chat-meta">📌 ${esc(nameMap[r.user_id] || '')} &middot; ${deptChatDateTime(r.created_at)}</div>
-      <div dir="auto" style="white-space:pre-wrap;">${esc(r.body)}</div>
-    </div>`;
-
-  const pinned = rows.filter(r => r.pinned);
-
-  box.innerHTML = `
-    <div class="panel">
-      <h2>Team channel <span class="hint">— private to ${esc(deptLabel(code))}, not visible outside the department</span></h2>
-      ${pinned.length ? `<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px;">${pinned.map(pinnedReminder).join('')}</div>` : ''}
-      <div class="chat-thread" id="dept-chat-thread">${rows.length ? rows.map(bubble).join('') : '<div class="empty-msg">No messages yet - start the conversation below.</div>'}</div>
-      <div class="field"><textarea id="dept-msg-text" dir="auto" rows="2" placeholder="Message the ${esc(deptLabel(code))} team..."></textarea></div>
-      <div class="field"><label>Image <span class="hint">(optional)</span></label><input id="dept-msg-image" type="file" accept="image/jpeg,image/png,image/webp,image/gif"></div>
-      <div class="hint" id="dept-msg-error"></div>
-      <div class="btn-row"><button class="btn" id="dept-msg-send">Send</button></div>
-    </div>`;
-
-  const thread = document.getElementById('dept-chat-thread');
-  thread.scrollTop = thread.scrollHeight;
-
-  document.getElementById('dept-msg-send').addEventListener('click', async () => {
-    const errBox = document.getElementById('dept-msg-error');
-    errBox.textContent = '';
-    const body = document.getElementById('dept-msg-text').value.trim();
-    const file = document.getElementById('dept-msg-image').files[0];
-    if (!body && !file) { errBox.textContent = 'Write a message or attach an image.'; return; }
-    let image_path = null;
-    if (file) {
-      const path = `${code}/${Date.now()}-${file.name}`.replace(/[^a-zA-Z0-9._/-]/g, '_');
-      const { error } = await sb.storage.from(DEPARTMENT_MEDIA_BUCKET).upload(path, file, { upsert: true });
-      if (error) { errBox.textContent = 'Could not upload the image: ' + error.message; return; }
-      image_path = path;
-    }
-    await withStatus(sb.from('department_messages').insert({
-      department_code: code, user_id: user.id, body: body || null, image_path,
-    }), 'Sending...');
-    await renderDeptChannel(box, code);
-  });
-
-  box.querySelectorAll('[data-edit-id]').forEach(el => el.addEventListener('click', () => {
-    const id = el.dataset.editId;
-    const r = rows.find(x => String(x.id) === id);
-    const bubbleEl = box.querySelector(`[data-msg-id="${id}"]`);
-    bubbleEl.querySelector('.dept-msg-body').outerHTML = `
-      <textarea class="dept-msg-edit-input" dir="auto" rows="2" style="width:100%;">${esc(r.body || '')}</textarea>
-      <div class="btn-row" style="margin-top:4px;">
-        <button class="btn secondary" id="dept-edit-cancel" style="padding:3px 8px;">Cancel</button>
-        <button class="btn" id="dept-edit-save" style="padding:3px 8px;">Save</button>
-      </div>`;
-    bubbleEl.querySelector('#dept-edit-cancel').addEventListener('click', () => renderDeptChannel(box, code));
-    bubbleEl.querySelector('#dept-edit-save').addEventListener('click', async () => {
-      const next = bubbleEl.querySelector('.dept-msg-edit-input').value.trim();
-      if (!next && !r.image_path) { alert('A message cannot be empty.'); return; }
-      await withStatus(sb.from('department_messages').update({ body: next || null }).eq('id', id), 'Saving...');
-      await renderDeptChannel(box, code);
-    });
-  }));
-
-  box.querySelectorAll('[data-delete-id]').forEach(el => el.addEventListener('click', async () => {
-    if (!await confirmPopup('Delete this message? This cannot be undone.')) return;
-    await withStatus(sb.from('department_messages').delete().eq('id', el.dataset.deleteId), 'Deleting...');
-    await renderDeptChannel(box, code);
-  }));
-
-  box.querySelectorAll('[data-pin-id]').forEach(el => el.addEventListener('click', async () => {
-    const pinned_next = el.dataset.pinNext === 'true';
-    await withStatus(sb.from('department_messages').update({ pinned: pinned_next }).eq('id', el.dataset.pinId), 'Saving...');
-    await renderDeptChannel(box, code);
-  }));
 }
 
 // ---------- Live "new message" notifications, same pattern as chat.js's initChatNotifications
@@ -1330,7 +695,7 @@ async function renderOnboardingCardsManager(box) {
   box.innerHTML = `
     <div class="panel">
       <div class="btn-row" style="justify-content:space-between;align-items:center;">
-        <h2>Start Here cards <span class="hint">&mdash; what Users see instead of Help</span></h2>
+        <span class="hint">What Users see in Start Here.</span>
         <button class="btn" id="mydept-card-new">+ New card</button>
       </div>
       <div class="grid-wrap"><table class="grid">
@@ -1427,4 +792,137 @@ function openOnboardingCardPopup({ card = null, onSaved } = {}) {
     backdrop.remove();
     if (onSaved) onSaved();
   });
+}
+
+// ---------- Admin-only roll-up across every department (its own tab, see app.js) ----------
+
+export async function renderDepartmentsOverviewView(main) {
+  main.innerHTML = '<div class="panel"><h2>Project overview</h2><div class="empty-msg">Loading...</div></div>';
+  const depts = State.optionListsByName.department || [];
+  const [statusRows, priorityRows, suggestionResults] = await Promise.all([
+    withStatus(sb.from('department_status').select('*')),
+    withStatus(sb.from('department_priorities').select('department_code,title,due_date,done').eq('done', false).order('sort_order')),
+    // Phase 2 (migration 99): one RPC call per department, in parallel - no set-returning
+    // "every department at once" function exists, and this list is short (a handful of rows).
+    Promise.all(depts.map(([code]) => withStatus(sb.rpc('department_pulse_suggested_status', { p_code: code })).then(rows => [code, rows[0] || null]))),
+  ]);
+  const statusByCode = {};
+  for (const s of statusRows) statusByCode[s.department_code] = s;
+  const openPriorityCount = {};
+  for (const p of priorityRows) openPriorityCount[p.department_code] = (openPriorityCount[p.department_code] || 0) + 1;
+  const suggestionByCode = Object.fromEntries(suggestionResults);
+
+  const card = ([code, label]) => {
+    const status = statusByCode[code] || { status: 'on_track', note: null, updated_at: null };
+    const meta = STATUS_META[status.status] || STATUS_META.on_track;
+    const suggestion = suggestionByCode[code];
+    return `
+      <div class="panel" style="border-left:4px solid ${meta.color};cursor:pointer;" data-open-dept="${esc(code)}">
+        <div class="btn-row" style="justify-content:space-between;align-items:center;">
+          <h3 style="margin:0;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${meta.color};margin-right:6px;"></span>${esc(label)}</h3>
+          <span class="hint">${esc(meta.label)}</span>
+        </div>
+        ${status.note ? `<p style="margin:6px 0 0;font-size:13px;">${esc(status.note)}</p>` : '<p class="hint" style="margin:6px 0 0;">No status set yet.</p>'}
+        <p class="hint" style="margin:6px 0 0;">${openPriorityCount[code] || 0} open ${openPriorityCount[code] === 1 ? 'priority' : 'priorities'}${status.updated_at ? ` &middot; updated ${esc((status.updated_at || '').slice(0, 10))}` : ''}</p>
+        ${suggestion ? `<p class="hint" style="margin:4px 0 0;">Data suggests: ${esc(STATUS_META[suggestion.suggested]?.label || suggestion.suggested)}</p>` : ''}
+      </div>`;
+  };
+
+  main.innerHTML = `
+    <div class="panel">
+      <div class="btn-row" style="justify-content:space-between;align-items:center;">
+        <h2 style="margin:0;">Project overview <span class="hint">— every department at a glance, click one to open it</span></h2>
+        <button class="btn danger" id="dept-overview-reset">Reset all statuses</button>
+      </div>
+    </div>
+    <div class="field-grid wide">${depts.map(card).join('') || '<p class="hint">No departments configured yet.</p>'}</div>
+    <div id="dept-overview-users-box"></div>`;
+
+  main.querySelectorAll('[data-open-dept]').forEach(el => el.addEventListener('click', () => {
+    go(el.dataset.openDept);
+  }));
+
+  // Admin-only escape hatch (owner's request 2026-09-20): bulk-clear every department's manual
+  // status/note back to the table default (on_track, no note) - e.g. after a trial run of Phase
+  // 2, or to stop a stale color misleading members. Does not touch priorities, only status.
+  document.getElementById('dept-overview-reset').addEventListener('click', async () => {
+    if (!await confirmPopup('Reset every department\'s status to "On track" with no note? This cannot be undone.')) return;
+    const rows = depts.map(([code]) => ({
+      department_code: code, status: 'on_track', note: null, updated_at: new Date().toISOString(),
+    }));
+    await withStatus(sb.from('department_status').upsert(rows), 'Resetting...');
+    renderDepartmentsOverviewView(main);
+  });
+
+  await renderUsersStatsPanel(document.getElementById('dept-overview-users-box'));
+}
+
+// ---------- Users & activity panel (migration 100, owner's request 2026-09-20) ----------
+// Headcount/demographics come straight from user_roles/user_profiles - Admin already reads both
+// tables directly client-side (same access admin.js's Users view relies on), no RPC needed.
+// Formation Paths enrollment counts are the one gap: formation_enrollments' only select policy is
+// "your own row" (74_formation_enrollments.sql), so those come from admin_project_stats().
+// Login/access tracking was asked about but isn't included - Supabase's own sign-in timestamps
+// aren't exposed anywhere in this app today, and whether/how to surface them is a separate,
+// privacy-sensitive decision, not folded silently into this panel.
+async function renderUsersStatsPanel(box) {
+  if (!box) return;
+  box.innerHTML = '<div class="panel"><h2>Users</h2><div class="empty-msg">Loading...</div></div>';
+  const [roleRows, profileRows, statsRows, bracketRows] = await Promise.all([
+    withStatus(sb.from('user_roles').select('role,standing,created_at')),
+    withStatus(sb.from('user_profiles').select('gender')),
+    withStatus(sb.rpc('admin_project_stats')),
+    withStatus(sb.rpc('people_age_brackets')),
+  ]);
+  const fromDate = bracketRows.filter(r => r.from_date).length;
+  const stats = statsRows[0] || { total_active_enrollments: 0, distinct_enrolled_users: 0, enrollments_by_path: [] };
+
+  const countBy = (rows, key) => {
+    const m = {};
+    for (const r of rows) { const v = r[key] || 'not_set'; m[v] = (m[v] || 0) + 1; }
+    return m;
+  };
+  const byRole = countBy(roleRows, 'role');
+  const byStanding = countBy(roleRows, 'standing');
+  const byGender = countBy(profileRows, 'gender');
+  const byAgeBracket = countBy(bracketRows, 'age_bracket');
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+  const newLast30 = roleRows.filter(r => (r.created_at || '') >= thirtyDaysAgo).length;
+
+  const tile = (label, value) => `<div class="field"><label>${esc(label)}</label><div style="font-size:20px;font-weight:600;">${esc(value)}</div></div>`;
+  const ROLE_LABELS = { user: 'Users', operator: 'Operators', coordinator: 'Coordinators', admin: 'Admins' };
+  const GENDER_LABELS = { M: 'Male', F: 'Female', not_set: 'Not set' };
+  const ageBracketOptions = State.optionListsByName.age_bracket || [];
+  const ageBracketLabel = code => code === 'not_set' ? 'Not set' : (labelOf(ageBracketOptions, code) || code);
+  // Fixed-width count column (not justify-content:space-between, which stretched the number
+  // to the far edge of the whole .field-grid cell instead of sitting next to its own label -
+  // found from the owner's screenshot 2026-09-20).
+  const breakdownList = (m, labelFn) => Object.entries(m).sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `<div style="display:flex;gap:8px;padding:2px 0;"><span class="hint" style="min-width:24px;text-align:right;">${esc(v)}</span><span>${esc(labelFn(k))}</span></div>`).join('');
+
+  box.innerHTML = `
+    <div class="panel">
+      <h2>Users <span class="hint">— headcount, demographics, Formation Paths enrollment</span></h2>
+      <div class="field-grid">
+        ${tile('Total accounts', roleRows.length)}
+        ${Object.entries(ROLE_LABELS).map(([code, label]) => tile(label, byRole[code] || 0)).join('')}
+        ${tile('New in last 30 days', newLast30)}
+      </div>
+      <div class="field-grid" style="margin-top:10px;">
+        <div class="field"><label>Standing</label>${breakdownList(byStanding, k => k === 'not_set' ? 'Not set' : k)}</div>
+        <div class="field"><label>Gender</label>${breakdownList(byGender, k => GENDER_LABELS[k] || k)}</div>
+        <div class="field" style="grid-column:span 2;"><label>Age bracket</label>${breakdownList(byAgeBracket, ageBracketLabel)}<div class="hint">${fromDate} of ${bracketRows.length} from a date of birth; the others as declared, or not set.</div></div>
+      </div>
+      <h3 style="margin:16px 0 4px;">Formation Paths enrollment</h3>
+      <div class="field-grid">
+        ${tile('Active enrollments', stats.total_active_enrollments)}
+        ${tile('Distinct enrolled users', stats.distinct_enrolled_users)}
+      </div>
+      ${(stats.enrollments_by_path || []).length ? `
+        <div class="grid-wrap" style="margin-top:8px;"><table class="grid">
+          <thead><tr><th>Path</th><th>Enrolled</th></tr></thead>
+          <tbody>${stats.enrollments_by_path.map(p => `<tr><td>${esc(p.title)}</td><td>${esc(p.enrolled)}</td></tr>`).join('')}</tbody>
+        </table></div>` : '<p class="hint" style="margin-top:8px;">No active enrollments yet.</p>'}
+      <p class="hint" style="margin-top:10px;">Login/access history isn't tracked yet - ask if this would be useful and it can be added as its own piece (it touches privacy considerations worth a separate decision).</p>
+    </div>`;
 }
