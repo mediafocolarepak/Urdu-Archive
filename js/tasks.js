@@ -7,8 +7,8 @@
 // un'operazione tecnica). RLS impedisce di toccare un task preso da qualcun altro (vedi
 // 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel vincolo, non lo sostituiscono.
 
-import { helpLinkHtml, popupShell, showGoodPracticesModal, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup, nameMapForIds, authorNames, errorText, archiveFileEnding, asArchiveFile, ARCHIVE_FILE_MAX } from './core.js?v=20261125200106';
-import { documentSources, fileSource, documentPane, openDocument, wireSplit } from './desk.js?v=20261125200106';
+import { helpLinkHtml, popupShell, showGoodPracticesModal, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup, nameMapForIds, authorNames, errorText, archiveFileEnding, asArchiveFile, ARCHIVE_FILE_MAX } from './core.js?v=20261125223139';
+import { documentSources, fileSource, documentPane, openDocument, wireSplit } from './desk.js?v=20261125223139';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -1041,6 +1041,7 @@ async function renderBudgetView(body) {
     withStatus(sb.from('budget_ledger').select('*').order('created_at', { ascending: false })),
     withStatus(sb.from('tasks').select('credits,status').in('status', BUDGET_COMMITTED_STATUSES)),
   ]);
+  const addedBy = await authorNames(ledgerRows, 'created_by', 'created_by_email');
   const budget = ledgerRows.reduce((sum, r) => sum + r.amount, 0);
   const sumFor = statuses => taskRows.filter(t => statuses.includes(t.status)).reduce((sum, t) => sum + (t.credits || 0), 0);
   const openCredits = sumFor(['open']);
@@ -1067,7 +1068,7 @@ async function renderBudgetView(body) {
     <div class="grid-wrap"><table class="grid">
       <thead><tr><th>Date</th><th>Amount</th><th>Note</th><th>Added by</th></tr></thead>
       <tbody>${ledgerRows.length ? ledgerRows.map(r => `
-        <tr><td>${esc((r.created_at || '').slice(0, 10))}</td><td>${esc(r.amount)}</td><td>${esc(r.note) || '—'}</td><td>${esc(r.created_by_email) || '—'}</td></tr>
+        <tr><td>${esc((r.created_at || '').slice(0, 10))}</td><td>${esc(r.amount)}</td><td>${esc(r.note) || '—'}</td><td>${esc(addedBy(r)) || '—'}</td></tr>
       `).join('') : '<tr><td colspan="4" class="empty-msg">No top-ups recorded yet.</td></tr>'}</tbody>
     </table></div>`;
 

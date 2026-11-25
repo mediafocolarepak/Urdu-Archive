@@ -1,15 +1,13 @@
-// Policy revision framework (GOVERNANCE.md §2.8/§6.6, migration 86): task_category_rates,
-// task_reputation_tiers and policy_values are read-only everywhere in the app except through
-// this module's propose/decide flow - propose_policy_change()/decide_policy_change() are the
-// real gate (RLS on the three tables no longer allows direct writes at all), this module is
-// only the UI for reaching them. Used from people.js (the "Policy" section, same audience as
-// People: any department lead or Admin) and from admin.js (per-row "Propose..." buttons that
-// replace the old direct-edit inputs on the reputation-tiers/policy-values/task-category panels).
+// The rules with a number (GOVERNANCE.md §2.8/§6.6, migration 86): task_category_rates, task_reputation_tiers and policy_values
+// change only through a proposal that an Admin decides - propose_policy_change()/decide_policy_change() are the real gate, this
+// module is only their screen. Since phase 4 (2026-11-25) each rule is a plain sentence, and people are shown by name. Used by
+// My Department (tab Rules, and "To decide" in Today), by Reward's certificates and by Options (admin.js).
 
-import { authorNames, sb, State, esc, withStatus, canProposePolicyChange, canApprovePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261125200106';
+import { sb, State, esc, withStatus, canProposePolicyChange, canApprovePolicyChange, popupShell, errorText, labelOf } from './core.js?v=20261125223139';
+import { deptLabel, namesByIds, itemHtml, wireItems, decideButtons, agoText, dayText, outcomeHtml } from './deptui.js?v=20261125223139';
 
-// Who may propose a change to each policy_values key (GOVERNANCE.md §2.8 "who owns which
-// policy table"). task_category_rates and task_reputation_tiers are Reward's alone.
+// Who may propose a change to each policy_values key (GOVERNANCE.md §2.8). task_category_rates and task_reputation_tiers are
+// Reward's alone.
 const POLICY_VALUE_OWNERS = {
   extra_credit_pct_threshold: ['RF'],
   extra_credit_abs_threshold: ['RF'],
@@ -29,287 +27,211 @@ export function ownersFor(targetTable, targetKey) {
   return ['RF'];
 }
 
-// A department can see a policy table it doesn't own, without being able to propose changes to
-// it - HR needs Reward's reputation tiers as context for judging who's "at risk" (owner's request
-// 2026-09-20), but the tiers stay Reward's alone to propose (GOVERNANCE.md). visibleFor() governs
-// whether the panel is shown at all in a department-scoped My Department page; ownersFor() alone
-// still governs the "Propose change" button (see tiersPanel below).
-const POLICY_VISIBLE_EXTRA = {
-  task_reputation_tiers: ['HR'],
-};
-function visibleFor(targetTable, targetKey) {
-  return [...new Set([...ownersFor(targetTable, targetKey), ...(POLICY_VISIBLE_EXTRA[targetTable] || [])])];
-}
+// HR reads Reward's reputation tiers, to judge who is "at risk" (owner's request 2026-09-20), without proposing changes.
+const SEES_TIERS = ['RF', 'HR'];
 
-function deptLabel(code) {
-  const depts = State.optionListsByName.department || [];
-  const hit = depts.find(([c]) => c === code);
-  return hit ? hit[1] : code;
-}
+// The sentences (Owner's decision, 2026-11-25). Each number changes on its own: one button for each.
+const num = v => `<b class="rule-n">${esc(v)}</b>`;
+const RULES = [
+  { keys: ['task_max_in_progress'], say: v => `A person can have ${num(v[0])} ${v[0] === 1 ? 'task' : 'tasks'} in progress.`, short: ['Tasks in progress for each person'] },
+  { keys: ['task_near_due_days'], say: v => `A task is &ldquo;due soon&rdquo; ${num(v[0])} ${v[0] === 1 ? 'day' : 'days'} before its date.`, short: ['Days before the date when a task is "due soon"'] },
+  { keys: ['extra_credit_pct_threshold', 'extra_credit_abs_threshold'], say: v => `The Coordination lead must approve extra credits over ${num(v[0] + '%')} of the base, or over ${num(v[1])}.`,
+    short: ['Extra credits to approve: over this % of the base', 'Extra credits to approve: over this number'], buttons: v => [`Change ${v[0]}%`, `Change ${v[1]}`] },
+  { keys: ['risk_reputation_below'], say: v => `A person is &ldquo;at risk&rdquo; with reputation under ${num(v[0])}.`, short: ['A person is "at risk" with reputation under this number'] },
+  { keys: ['risk_negative_events', 'risk_window_days'], say: v => `A person is &ldquo;at risk&rdquo; with ${num(v[0])} negative ${v[0] === 1 ? 'event' : 'events'} in ${num(v[1])} days.`,
+    short: ['A person is "at risk" with this number of negative events', 'Days in which the negative events are counted'], buttons: v => [`Change ${v[0]}`, `Change ${v[1]} days`] },
+  { keys: ['board_misuse_reputation_delta'], say: v => `Misuse of a board takes away ${num(v[0])} points of reputation.`, short: ['Points of reputation that misuse of a board takes away'], minus: true },
+  { keys: ['reward_anomaly_backlog_credits'], say: v => `Reward looks at a person with more than ${num(v[0])} credits approved and not published.`, short: ['Credits approved and not published that Reward looks at'] },
+  { keys: ['token_per_page', 'token_per_minute', 'token_per_unit'], say: v => `A page gives ${num(v[0])} ${v[0] === 1 ? 'token' : 'tokens'}, a minute ${num(v[1])}, a report or a batch of titles ${num(v[2])}. (0 = not decided yet)`,
+    short: ['Tokens for a page', 'Tokens for a minute', 'Tokens for a report or a batch of titles'], buttons: () => ['Change a page', 'Change a minute', 'Change a report or batch'] },
+];
+const ruleOf = key => RULES.find(r => r.keys.includes(key));
+const shown = (key, value) => (ruleOf(key)?.minus ? Math.abs(Number(value)) : value);
+function ruleShort(key, label) { const r = ruleOf(key); return r ? r.short[r.keys.indexOf(key)] : label || key; }
+const TIER_FIELDS = [['tier_name', 'Name'], ['min_base_credits', 'Credits, from'], ['max_base_credits', 'Credits, up to (empty = no limit)'], ['ok_delta', 'OK'], ['ok_but_delta', 'OK, but...'], ['fail_delta', 'Fail'], ['sort_order', 'Order in the list']];
+const categoryLabel = code => labelOf(State.optionListsByName.task_category || [], code) || code;
 
-// Generic "propose a policy change" modal. `fields` is either an array of
-// {name, label, type: 'text'|'number', value, placeholder?} rendered as inputs whose values
-// become field_changes (for action = 'upsert'), or null (action = 'delete' - only the reason is
-// asked). `owners` is the list of department codes allowed to propose this change; if more than
-// one, a select lets the proposer pick which department they propose as.
+// A proposal of a change. `fields`: [{ name, label, type: 'text'|'number', value, minus }] become field_changes (action 'upsert'),
+// or null (action 'delete': only the reason). `owners`: the departments that may propose it; with more than one, the person
+// chooses for which one they propose.
 export function openPolicyProposalModal({ title, targetTable, targetKey, action, owners, fields, onSaved }) {
   const proposable = owners.filter(d => canProposePolicyChange(d));
-  if (!proposable.length) { alert('You are not a lead of the department that owns this policy.'); return; }
-
-  const backdrop = document.createElement('div');
-  backdrop.className = 'overlay-backdrop';
-  backdrop.innerHTML = `
-    <div class="panel overlay-panel">
-      <h2>${esc(title)}</h2>
-      <p class="hint">This becomes operative only after an Admin who is not you approves it. It stays visible in the pending queue and, either way, in this department's policy history.</p>
-      ${proposable.length > 1 ? `<div class="field"><label>Propose as</label>
-        <select id="polprop-department">${proposable.map(d => `<option value="${esc(d)}">${esc(deptLabel(d))}</option>`).join('')}</select>
-      </div>` : `<input type="hidden" id="polprop-department" value="${esc(proposable[0])}">`}
-      ${action === 'delete'
-        ? '<p class="hint">This proposes removing this row entirely.</p>'
-        : (fields || []).map(f => `<div class="field"><label>${esc(f.label)}</label>
-            <input id="polprop-field-${esc(f.name)}" type="${f.type === 'number' ? 'number' : 'text'}" value="${f.value == null ? '' : esc(f.value)}" placeholder="${esc(f.placeholder || '')}"></div>`).join('')}
-      <div class="field"><label>Reason <span class="hint">(required)</span></label>
-        <textarea id="polprop-reason" rows="3" placeholder="Why this change?"></textarea></div>
-      <div id="polprop-error" class="hint" style="color:var(--danger);"></div>
-      <div class="btn-row" style="justify-content:flex-end;">
-        <button class="btn secondary" id="polprop-cancel">Cancel</button>
-        <button class="btn" id="polprop-save">Submit proposal</button>
-      </div>
+  if (!proposable.length) { alert('Only the lead of the department of this rule can propose a change.'); return; }
+  const { panel, close } = popupShell('rule-proposal', { label: title, section: 'mydepartment' });
+  panel.innerHTML = `
+    <h2 style="margin-top:0;">${esc(title)}</h2>
+    <p class="hint">An Admin decides. Until then nothing changes.</p>
+    ${proposable.length > 1 ? `<div class="field"><label>Propose for
+      <select id="polprop-department">${proposable.map(d => `<option value="${esc(d)}" ${d === State.myDeptSelected ? 'selected' : ''}>${esc(deptLabel(d))}</option>`).join('')}</select></label>
+    </div>` : `<input type="hidden" id="polprop-department" value="${esc(proposable[0])}">`}
+    ${action === 'delete' ? '<p>This removes it.</p>'
+      : (fields || []).map(f => `<div class="field"><label>${esc(f.label)}
+          <input id="polprop-field-${esc(f.name)}" type="${f.type === 'number' ? 'number' : 'text'}" ${f.type === 'number' ? 'step="any"' : 'dir="auto"'} value="${f.value == null ? '' : esc(f.minus ? Math.abs(Number(f.value)) : f.value)}"></label></div>`).join('')}
+    <div class="field"><label>Why? <span class="hint">(needed)</span>
+      <textarea id="polprop-reason" rows="3" dir="auto"></textarea></label></div>
+    <div id="polprop-error" class="hint dep-error" role="alert"></div>
+    <div class="btn-row" style="justify-content:flex-end;">
+      <button type="button" class="btn secondary" id="polprop-cancel">Cancel</button>
+      <button type="button" class="btn" id="polprop-save">Propose</button>
     </div>`;
-  document.body.appendChild(backdrop);
-  document.getElementById('polprop-cancel').addEventListener('click', () => backdrop.remove());
-  document.getElementById('polprop-save').addEventListener('click', async () => {
-    const department = document.getElementById('polprop-department').value;
-    const reason = document.getElementById('polprop-reason').value.trim();
-    const errBox = document.getElementById('polprop-error');
+  const $ = id => panel.querySelector('#' + id);
+  $('polprop-cancel').addEventListener('click', close);
+  $('polprop-save').addEventListener('click', async () => {
+    const reason = $('polprop-reason').value.trim(), errBox = $('polprop-error');
     errBox.textContent = '';
-    if (!reason) { errBox.textContent = 'A reason is required.'; return; }
     const field_changes = {};
     if (action !== 'delete') {
       for (const f of (fields || [])) {
-        const raw = document.getElementById(`polprop-field-${f.name}`).value.trim();
-        if (f.type === 'number') {
-          field_changes[f.name] = raw === '' ? null : Number(raw);
-        } else {
-          field_changes[f.name] = raw === '' ? null : raw;
-        }
+        const raw = $(`polprop-field-${f.name}`).value.trim();
+        field_changes[f.name] = raw === '' ? null : f.type === 'number' ? (f.minus ? -Math.abs(Number(raw)) : Number(raw)) : raw;
       }
     }
+    if ((fields || []).length === 1 && fields[0].type === 'number' && field_changes[fields[0].name] == null) { errBox.textContent = 'Please write a number.'; return; }
+    if (!reason) { errBox.textContent = 'Please write why.'; return; }
+    $('polprop-save').disabled = true;
     const { error } = await sb.rpc('propose_policy_change', {
-      p_department: department, p_target_table: targetTable, p_target_key: targetKey,
+      p_department: $('polprop-department').value, p_target_table: targetTable, p_target_key: targetKey,
       p_action: action, p_field_changes: field_changes, p_reason: reason,
     });
-    if (error) { errBox.textContent = error.message; return; }
-    backdrop.remove();
+    $('polprop-save').disabled = false;
+    if (error) { errBox.textContent = errorText(error); return; }
+    close();
     if (onSaved) await onSaved();
   });
 }
 
-// ---------- The "Policy" section: read-only current values, pending queue, history ----------
+// ---------- What a proposal says, in words ----------
 
-export async function renderPolicySection(container, { departmentFilter } = {}) {
-  container.innerHTML = '<div class="hint">Loading...</div>';
-  const [rates, tiers, values, proposalsRaw] = await Promise.all([
+// now: the numbers in force { values, rates, tiers, texts }, to say "from"; past proposals do not have it.
+function changeHtml(p, now) {
+  const f = p.field_changes || {}, b = v => `<b>${esc(v == null ? 'nothing' : v)}</b>`;
+  const fromTo = (from, to) => (now && from !== undefined ? `From ${b(from)} to ${b(to)}` : `To ${b(to)}`);
+  if (p.target_table === 'policy_values') {
+    const cur = now?.values[p.target_key];
+    return `${fromTo(cur ? shown(p.target_key, cur.value) : undefined, shown(p.target_key, f.value))}: ${esc(ruleShort(p.target_key, cur?.label))}`;
+  }
+  if (p.target_table === 'task_category_rates') {
+    if (p.action === 'delete') return `Remove the credits of ${esc(categoryLabel(p.target_key))}`;
+    return `${fromTo(now?.rates[p.target_key]?.credits_per_page, f.credits_per_page)}: credits for a page of ${esc(categoryLabel(p.target_key))}`;
+  }
+  if (p.target_table === 'task_reputation_tiers') {
+    if (p.action === 'delete') return `Remove the size &ldquo;${esc(p.target_key)}&rdquo;`;
+    const cur = now?.tiers[p.target_key];
+    const changed = TIER_FIELDS.filter(([k]) => k in f && (!cur || String(cur[k] ?? '') !== String(f[k] ?? '')));
+    return `${esc(p.target_key)}: ${changed.map(([k, l]) => `${esc(l.replace(/ \(.*/, ''))} ${cur ? `from ${b(cur[k])} to ` : ''}${b(f[k])}`).join(', ') || 'no change'}`;
+  }
+  if (p.target_table === 'token_milestones') {
+    if (p.action === 'delete') return `Remove the milestone of ${b(p.target_key)} tokens`;
+    return `Milestone of ${b(f.tokens ?? p.target_key)} tokens${f.label ? `: &ldquo;${esc(f.label)}&rdquo;` : ''}`;
+  }
+  if (p.target_table === 'token_texts') return `${esc(now?.texts[p.target_key]?.label || 'A text of the certificate')}: <span dir="auto">&ldquo;${esc(f.text)}&rdquo;</span>`;
+  return esc(`${p.target_key}: ${Object.entries(f).map(([k, v]) => `${k} ${v}`).join(', ')}`);
+}
+
+async function loadRules() {
+  const [rates, tiers, values, texts, proposals] = await Promise.all([
     withStatus(sb.from('task_category_rates').select('*').order('category')),
     withStatus(sb.from('task_reputation_tiers').select('*').order('sort_order')),
     withStatus(sb.from('policy_values').select('*').order('key')),
+    sb.from('token_texts').select('key,label').then(r => r.data || [], () => []),
     withStatus(sb.from('policy_proposals').select('*').order('proposed_at', { ascending: false })),
   ]);
-  const proposals = departmentFilter ? proposalsRaw.filter(p => p.department_code === departmentFilter) : proposalsRaw;
-  const pending = proposals.filter(p => p.status === 'pending');
-  const history = proposals.filter(p => p.status !== 'pending');
+  const by = (rows, key) => Object.fromEntries(rows.map(r => [r[key], r]));
+  return { rates, tiers, values, proposals, now: { rates: by(rates, 'category'), tiers: by(tiers, 'tier_name'), values: by(values, 'key'), texts: by(texts, 'key') } };
+}
+
+async function refreshPolicyValues() {
+  // The numbers the app read when it started (core.js): the new one counts at once.
+  const { data } = await sb.from('policy_values').select('key,value');
+  if (!data) return;
+  State.policyValues = Object.fromEntries(data.map(p => [p.key, p.value]));
+}
+
+async function proposalItems(pending, now) {
   const { data: { user } } = await sb.auth.getUser();
-  const myEmail = user.email;
-  const ratedBy = await authorNames(rates, 'updated_by', 'updated_by_email');
-  const depts = State.optionListsByName.department || [];
-  const canProposeAny = owners => owners.some(d => canProposePolicyChange(d));
-  // In a department-scoped view (My Department), a table/row is shown only if this department
-  // is one of its owners - otherwise it isn't this department's business, keep the view short.
-  const owns = owners => !departmentFilter || owners.includes(departmentFilter);
-
-  const ratesPanel = owns(ownersFor('task_category_rates')) ? `
-    <div class="panel">
-      <h2>Task category rates <span class="hint">— credits per page, owned by Reward</span></h2>
-      <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>Category</th><th>Credits/page</th><th>Last updated by</th><th></th></tr></thead>
-        <tbody>${rates.map(r => `<tr>
-          <td>${esc(r.category)}</td><td>${esc(r.credits_per_page)}</td><td>${esc(ratedBy(r))}</td>
-          <td>${canProposeAny(ownersFor('task_category_rates'))
-            ? `<button class="btn secondary pp-propose-rate" style="padding:4px 10px;" data-category="${esc(r.category)}" data-rate="${esc(r.credits_per_page)}">Propose change</button>`
-            : `<span class="hint">Owned by ${ownersFor('task_category_rates').map(deptLabel).join(' / ')}</span>`}</td>
-        </tr>`).join('')}</tbody>
-      </table></div>
-    </div>` : '';
-  const tiersPanel = owns(visibleFor('task_reputation_tiers')) ? `
-    <div class="panel">
-      <h2>Task reputation tiers <span class="hint">— owned by Reward</span></h2>
-      <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>Tier</th><th>Min</th><th>Max</th><th>OK</th><th>OK, but...</th><th>Fail</th><th>Sort</th><th></th></tr></thead>
-        <tbody>${tiers.map(t => `<tr>
-          <td>${esc(t.tier_name)}</td><td>${esc(t.min_base_credits)}</td><td>${t.max_base_credits ?? '(none)'}</td>
-          <td>${esc(t.ok_delta)}</td><td>${esc(t.ok_but_delta)}</td><td>${esc(t.fail_delta)}</td><td>${esc(t.sort_order)}</td>
-          <td>${canProposeAny(ownersFor('task_reputation_tiers'))
-            ? `<button class="btn secondary pp-propose-tier" style="padding:4px 10px;" data-tier='${esc(JSON.stringify(t))}'>Propose change</button>`
-            : `<span class="hint">Owned by ${ownersFor('task_reputation_tiers').map(deptLabel).join(' / ')}</span>`}</td>
-        </tr>`).join('')}</tbody>
-      </table></div>
-    </div>` : '';
-  const valueRows = values.filter(v => owns(ownersFor('policy_values', v.key)));
-  const valuesPanel = valueRows.length ? `
-    <div class="panel">
-      <h2>Policy values <span class="hint">— thresholds, each owned by its department</span></h2>
-      <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>Key</th><th>Meaning</th><th>Value</th><th></th></tr></thead>
-        <tbody>${valueRows.map(v => `<tr>
-          <td><code>${esc(v.key)}</code></td><td style="white-space:normal;">${esc(v.label)}</td><td>${esc(v.value)}</td>
-          <td>${canProposeAny(ownersFor('policy_values', v.key))
-            ? `<button class="btn secondary pp-propose-value" style="padding:4px 10px;" data-key="${esc(v.key)}" data-value="${esc(v.value)}">Propose change</button>`
-            : `<span class="hint">Owned by ${ownersFor('policy_values', v.key).map(deptLabel).join(' / ')}</span>`}</td>
-        </tr>`).join('')}</tbody>
-      </table></div>` : '';
-  const historyPanel = departmentFilter ? `
-    <div class="panel">
-      <h2>Policy history <span class="hint">— every proposal for this department, kept forever</span></h2>
-      <div id="policy-history-box"></div>
-    </div>` : `
-    <div class="panel">
-      <h2>Policy history <span class="hint">— every proposal, per department, kept forever</span></h2>
-      <div class="field" style="max-width:280px;"><label>Department</label>
-        <select id="policy-history-dept"><option value="">All</option>${depts.map(([c, l]) => `<option value="${esc(c)}">${esc(l)}</option>`).join('')}</select>
-      </div>
-      <div id="policy-history-box"></div>
-    </div>`;
-
-  container.innerHTML = `
-    ${ratesPanel}${tiersPanel}${valuesPanel}
-    ${!ratesPanel && !tiersPanel && !valuesPanel ? '<div class="panel"><p class="empty-msg">This department does not own any policy table yet.</p></div>' : ''}
-    <div class="panel">
-      <h2>Pending policy proposals</h2>
-      <div id="policy-pending-box"></div>
-    </div>
-    ${historyPanel}`;
-
-  container.querySelectorAll('.pp-propose-rate').forEach(btn => btn.addEventListener('click', () => {
-    openPolicyProposalModal({
-      title: `Propose a rate change — ${btn.dataset.category}`,
-      targetTable: 'task_category_rates', targetKey: btn.dataset.category, action: 'upsert',
-      owners: ownersFor('task_category_rates'),
-      fields: [{ name: 'credits_per_page', label: 'Credits per page', type: 'number', value: btn.dataset.rate }],
-      onSaved: () => renderPolicySection(container, { departmentFilter }),
-    });
+  const name = await namesByIds(pending.map(p => p.proposed_by));
+  return pending.map(p => ({
+    tone: 'violet', title: 'A rule', text: changeHtml(p, now), quote: p.reason, can: canApprovePolicyChange(),
+    by: `Proposed by ${name(p.proposed_by)}, ${agoText(p.proposed_at)}${canApprovePolicyChange() ? '' : '. An Admin decides.'}`,
+    buttons: decideButtons({
+      mine: p.proposed_by === user.id, can: canApprovePolicyChange(), question: 'Approve this change? It counts from now.',
+      call: (outcome, note) => sb.rpc('decide_policy_change', { p_id: p.id, p_outcome: outcome, ...(note ? { p_note: note } : {}) }),
+      approved: refreshPolicyValues,
+    }),
   }));
-  container.querySelectorAll('.pp-propose-tier').forEach(btn => btn.addEventListener('click', () => {
-    const t = JSON.parse(btn.dataset.tier);
-    openPolicyProposalModal({
-      title: `Propose a reputation tier change — ${t.tier_name}`,
-      targetTable: 'task_reputation_tiers', targetKey: t.tier_name, action: 'upsert',
-      owners: ownersFor('task_reputation_tiers'),
-      fields: [
-        { name: 'tier_name', label: 'Tier name', type: 'text', value: t.tier_name },
-        { name: 'min_base_credits', label: 'Min base credits', type: 'number', value: t.min_base_credits },
-        { name: 'max_base_credits', label: 'Max base credits (empty = none)', type: 'number', value: t.max_base_credits },
-        { name: 'ok_delta', label: 'OK delta', type: 'number', value: t.ok_delta },
-        { name: 'ok_but_delta', label: 'OK, but... delta', type: 'number', value: t.ok_but_delta },
-        { name: 'fail_delta', label: 'Fail delta', type: 'number', value: t.fail_delta },
-        { name: 'sort_order', label: 'Sort order', type: 'number', value: t.sort_order },
-      ],
-      onSaved: () => renderPolicySection(container, { departmentFilter }),
-    });
-  }));
-  container.querySelectorAll('.pp-propose-value').forEach(btn => btn.addEventListener('click', () => {
-    openPolicyProposalModal({
-      title: `Propose a value change — ${btn.dataset.key}`,
-      targetTable: 'policy_values', targetKey: btn.dataset.key, action: 'upsert',
-      owners: ownersFor('policy_values', btn.dataset.key),
-      fields: [{ name: 'value', label: 'Value', type: 'number', value: btn.dataset.value }],
-      onSaved: () => renderPolicySection(container, { departmentFilter }),
-    });
-  }));
-
-  renderPendingQueue(pending, myEmail, container, departmentFilter);
-  wireHistory(history, container, departmentFilter);
 }
 
-function fieldChangesSummary(p) {
-  if (p.action === 'delete') return '(remove row)';
-  return Object.entries(p.field_changes || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
+// For "Today": the proposals of this department that wait. can: this person decides them.
+export async function loadRuleItems(code) {
+  const { proposals, now } = await loadRules();
+  return proposalItems(proposals.filter(p => p.status === 'pending' && p.department_code === code).reverse(), now);
 }
 
-function renderPendingQueue(pending, myEmail, container, departmentFilter) {
-  const box = document.getElementById('policy-pending-box');
-  if (!box) return;
-  if (!pending.length) { box.innerHTML = '<div class="empty-msg">Nothing pending.</div>'; return; }
+// ---------- The tab "Rules" ----------
+
+export async function renderRules(box, code) {
+  const { rates, tiers, values, proposals, now } = await loadRules();
+  const again = () => renderRules(box, code);
+  const mine = proposals.filter(p => p.department_code === code);
+  const items = await proposalItems(mine.filter(p => p.status === 'pending').reverse(), now);
+  const past = mine.filter(p => p.status !== 'pending');
+  const name = await namesByIds(past.flatMap(p => [p.proposed_by, p.decided_by]));
+  const owned = key => ownersFor('policy_values', key);
+  const asked = new Set(proposals.filter(p => p.status === 'pending').map(p => p.target_table + ' ' + p.target_key));
+  const other = owners => `<span class="hint">${esc(owners.map(deptLabel).join(' or '))} decides this</span>`;
+
+  const known = RULES.filter(r => r.keys.every(k => now.values[k]) && r.keys.some(k => owned(k).includes(code)));
+  const rest = values.filter(v => !known.some(r => r.keys.includes(v.key)) && owned(v.key).includes(code));
+  const cards = [
+    ...known.map(r => {
+      const v = r.keys.map(k => shown(k, now.values[k].value));
+      const labels = r.buttons ? r.buttons(v) : ['Change'];
+      return { html: r.say(v), btns: r.keys.map((k, i) => ({ key: k, label: labels[i], can: owned(k).some(canProposePolicyChange) })), owners: owned(r.keys[0]) };
+    }),
+    ...rest.map(v => ({ html: `${esc(v.label)}: ${num(v.value)}.`, btns: [{ key: v.key, label: 'Change', can: owned(v.key).some(canProposePolicyChange) }], owners: owned(v.key) })),
+  ];
+  const canRf = canProposePolicyChange('RF');
+  const ruleRow = (text, side) => `<div class="rule"><div class="rule-text">${text}</div><div class="rule-side">${side}</div></div>`;
+  const waits = '<span class="hint">&#8987; A change is waiting</span>';
+
   box.innerHTML = `
-    <div class="grid-wrap"><table class="grid">
-      <thead><tr><th>Department</th><th>Table</th><th>Key</th><th>Change</th><th>Reason</th><th>Proposed by</th><th>Date</th><th></th></tr></thead>
-      <tbody>${pending.map(p => `<tr data-id="${p.id}">
-        <td>${esc(deptLabel(p.department_code))}</td>
-        <td>${esc(p.target_table)}</td>
-        <td>${esc(p.target_key)}</td>
-        <td style="white-space:normal;">${esc(fieldChangesSummary(p))}</td>
-        <td style="white-space:normal;">${esc(p.reason)}</td>
-        <td>${esc(p.proposed_by_email)}</td>
-        <td>${esc((p.proposed_at || '').slice(0, 10))}</td>
-        <td>
-          ${p.proposed_by_email === myEmail && !canApprovePolicyChange()
-            ? '<button class="btn secondary pp-withdraw-btn" style="padding:4px 10px;">Withdraw</button>'
-            : (canApprovePolicyChange()
-              ? '<button class="btn pp-approve-btn" style="padding:4px 10px;">Approve</button><button class="btn danger pp-reject-btn" style="padding:4px 10px;">Reject</button>'
-              : '<span class="hint">Awaiting Admin</span>')}
-        </td>
-      </tr>`).join('')}</tbody>
-    </table></div>`;
+    ${items.length ? `<section><h3 class="dep-h">Waiting for an Admin <span class="dep-n">${items.length}</span></h3>${items.map(itemHtml).join('')}</section>` : ''}
+    ${cards.length ? `<section>${cards.map(c => ruleRow(c.html, c.btns.filter(b => b.can).map(b => (asked.has('policy_values ' + b.key) ? waits : `<button type="button" class="btn secondary" data-rule="${esc(b.key)}">${esc(b.label)}</button>`)).join('') || other(c.owners))).join('')}</section>` : ''}
+    ${code === 'RF' && rates.length ? `<section><h3 class="dep-h">Credits for a page</h3>${rates.map(r => ruleRow(`A page of ${esc(categoryLabel(r.category))} gives ${num(r.credits_per_page)} ${Number(r.credits_per_page) === 1 ? 'credit' : 'credits'}.`,
+      !canRf ? other(['RF']) : asked.has('task_category_rates ' + r.category) ? waits : `<button type="button" class="btn secondary" data-rate="${esc(r.category)}">Change</button>`)).join('')}</section>` : ''}
+    ${SEES_TIERS.includes(code) && tiers.length ? `<section><h3 class="dep-h">How each result changes the reputation</h3>${tiers.map((t, i) => ruleRow(
+      `<b>${esc(t.tier_name)}</b>, ${t.max_base_credits == null ? `from ${esc(t.min_base_credits)} credits` : `from ${esc(t.min_base_credits)} to ${esc(t.max_base_credits)} credits`}: <span class="rule-deltas"><span>OK ${num(signed(t.ok_delta))}</span> <span>OK, but... ${num(signed(t.ok_but_delta))}</span> <span>Fail ${num(signed(t.fail_delta))}</span></span>`,
+      !canRf ? other(['RF']) : asked.has('task_reputation_tiers ' + t.tier_name) ? waits : `<button type="button" class="btn secondary" data-tier="${i}">Change</button>`)).join('')}</section>` : ''}
+    ${!cards.length && !SEES_TIERS.includes(code) ? '<div class="panel empty-msg">This department has no rules with a number.</div>' : ''}
+    <details class="subpanel dep-past"><summary>Past decisions <span class="count-badge">${past.length}</span></summary>
+      <p class="hint">Each proposal, with its reason and its result. Kept forever.</p>
+      ${past.map(p => `<div class="dep-past-row"><div>${outcomeHtml(p.status)} <span class="hint">${esc(dayText(p.decided_at))}</span></div>
+        <div>${changeHtml(p, p.target_table === 'token_texts' ? { texts: now.texts, values: {}, rates: {}, tiers: {} } : null)}</div>
+        <div class="hint" dir="auto">&ldquo;${esc(p.reason)}&rdquo;</div>
+        <div class="hint">Proposed by ${esc(name(p.proposed_by))}${p.status === 'withdrawn' || !p.decided_by ? '' : `, decided by ${esc(name(p.decided_by))}`}</div>
+        ${p.decision_note ? `<div class="hint" dir="auto">Note: ${esc(p.decision_note)}</div>` : ''}</div>`).join('') || '<div class="empty-msg">Nothing has been decided yet.</div>'}
+    </details>`;
 
-  box.querySelectorAll('.pp-withdraw-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if (!await confirmPopup('Withdraw this proposal?')) return;
-    const { error } = await sb.rpc('decide_policy_change', { p_id: parseInt(btn.closest('tr').dataset.id, 10), p_outcome: 'withdrawn' });
-    if (error) { alert(error.message); return; }
-    renderPolicySection(container, { departmentFilter });
+  wireItems(box, items, again);
+  box.querySelectorAll('[data-rule]').forEach(b => b.addEventListener('click', () => {
+    const key = b.dataset.rule, v = now.values[key];
+    openPolicyProposalModal({
+      title: ruleShort(key, v.label), targetTable: 'policy_values', targetKey: key, action: 'upsert', owners: owned(key),
+      fields: [{ name: 'value', label: 'New number', type: 'number', value: v.value, minus: !!ruleOf(key)?.minus }], onSaved: again,
+    });
   }));
-  box.querySelectorAll('.pp-approve-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if (!await confirmPopup('Approve this policy change? It becomes live immediately.')) return;
-    const { error } = await sb.rpc('decide_policy_change', { p_id: parseInt(btn.closest('tr').dataset.id, 10), p_outcome: 'approved' });
-    if (error) { alert(error.message); return; }
-    // Refresh the cached policy_values (read at boot, see core.js showApp()) so badges/thresholds
-    // used elsewhere in the app reflect an approved change without a full page reload.
-    const { data: policyRows } = await sb.from('policy_values').select('key,value');
-    State.policyValues = {};
-    for (const p of (policyRows || [])) State.policyValues[p.key] = p.value;
-    renderPolicySection(container, { departmentFilter });
-  }));
-  box.querySelectorAll('.pp-reject-btn').forEach(btn => btn.addEventListener('click', async () => {
-    const note = await promptPopup('A note is required when rejecting - it will be visible to the proposer:');
-    if (note == null) return;
-    if (!note.trim()) { alert('A note is required when rejecting.'); return; }
-    const { error } = await sb.rpc('decide_policy_change', { p_id: parseInt(btn.closest('tr').dataset.id, 10), p_outcome: 'rejected', p_note: note.trim() });
-    if (error) { alert(error.message); return; }
-    renderPolicySection(container, { departmentFilter });
+  box.querySelectorAll('[data-rate]').forEach(b => b.addEventListener('click', () => openPolicyProposalModal({
+    title: `Credits for a page of ${categoryLabel(b.dataset.rate)}`, targetTable: 'task_category_rates', targetKey: b.dataset.rate, action: 'upsert',
+    owners: ownersFor('task_category_rates'),
+    fields: [{ name: 'credits_per_page', label: 'Credits for a page', type: 'number', value: now.rates[b.dataset.rate].credits_per_page }], onSaved: again,
+  })));
+  box.querySelectorAll('[data-tier]').forEach(b => b.addEventListener('click', () => {
+    const t = tiers[+b.dataset.tier];
+    openPolicyProposalModal({
+      title: `How each result changes the reputation: ${t.tier_name}`, targetTable: 'task_reputation_tiers', targetKey: t.tier_name, action: 'upsert',
+      owners: ownersFor('task_reputation_tiers'),
+      fields: TIER_FIELDS.map(([n, label]) => ({ name: n, label, type: n === 'tier_name' ? 'text' : 'number', value: t[n] })), onSaved: again,
+    });
   }));
 }
-
-function wireHistory(history, container, departmentFilter) {
-  const sel = document.getElementById('policy-history-dept'); // absent when departmentFilter is set - see historyPanel above
-  const box = document.getElementById('policy-history-box');
-  function render() {
-    const filtered = sel && sel.value ? history.filter(p => p.department_code === sel.value) : history;
-    if (!filtered.length) { box.innerHTML = '<div class="empty-msg">No decided proposals yet.</div>'; return; }
-    box.innerHTML = `
-      <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>Department</th><th>Table</th><th>Key</th><th>Change</th><th>Reason</th><th>Status</th><th>Decided by</th><th>Note</th><th>Date</th></tr></thead>
-        <tbody>${filtered.map(p => `<tr>
-          <td>${esc(deptLabel(p.department_code))}</td>
-          <td>${esc(p.target_table)}</td>
-          <td>${esc(p.target_key)}</td>
-          <td style="white-space:normal;">${esc(fieldChangesSummary(p))}</td>
-          <td style="white-space:normal;">${esc(p.reason)}</td>
-          <td>${esc(p.status)}</td>
-          <td>${esc(p.decided_by_email || '')}</td>
-          <td style="white-space:normal;">${esc(p.decision_note || '')}</td>
-          <td>${esc((p.decided_at || '').slice(0, 10))}</td>
-        </tr>`).join('')}</tbody>
-      </table></div>`;
-  }
-  if (sel) sel.addEventListener('change', render);
-  render();
-}
+const signed = n => (Number(n) > 0 ? '+' + n : Number(n) < 0 ? '−' + Math.abs(n) : String(n ?? 0));

@@ -1,5 +1,5 @@
-import { quiet, sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml, docCardHtml } from './core.js?v=20261125200106';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261125200106';
+import { quiet, sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml, docCardHtml } from './core.js?v=20261125223139';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261125223139';
 
 // The "From the boards" section (84_boards_moderation.sql) was removed on the Owner's request, 2026-11-18: the
 // Library shows only the archive; board posts are in the Boards tab.

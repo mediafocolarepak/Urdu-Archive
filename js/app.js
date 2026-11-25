@@ -1,30 +1,30 @@
-import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons, confirmPopup, showLoadFailed } from './core.js?v=20261125200106';
-import { renderDashboardView } from './dashboard.js?v=20261125200106';
-import { renderReportsView } from './reports.js?v=20261125200106';
-import { renderHayatView } from './hayatindex.js?v=20261125200106';
-import { renderMatchReviewView } from './matchreview.js?v=20261125200106';
-import { renderBulkImportView } from './bulkimport.js?v=20261125200106';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20261125200106';
-import { renderAdminMessagesView, initChatNotifications } from './chat.js?v=20261125200106';
-import { renderWorkView, loadWork } from './work.js?v=20261125200106';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20261125200106';
-import { renderHayatEditorView } from './hayateditor.js?v=20261125200106';
-import { renderInPageConverterView } from './inpageconverter.js?v=20261125200106';
-import { renderUserGuideView } from './userguide.js?v=20261125200106';
-import { renderJoinTeamView } from './collaboration.js?v=20261125200106';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20261125200106';
-import { renderMyProfileView } from './profile.js?v=20261125200106';
-import { renderMySpaceView } from './myspace.js?v=20261125200106';
-import { renderBoardsView } from './boards.js?v=20261125200106';
-import { renderFormationView } from './formation.js?v=20261125200106';
-import { renderBooksView } from './books.js?v=20261125200106';
-import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261125200106';
-import { renderOnboardingView } from './onboarding.js?v=20261125200106';
-import { renderLanding } from './landing.js?v=20261125200106';
-import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20261125200106';
-import { renderProposalsView, initProposalNotifications } from './proposals.js?v=20261125200106';
-import { renderReadingsView, initReadingNotifications } from './readings.js?v=20261125200106';
-import { registerServiceWorker, initInstallBanner } from './pwa-register.js?v=20261125200106';
+import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons, confirmPopup, showLoadFailed } from './core.js?v=20261125223139';
+import { renderDashboardView } from './dashboard.js?v=20261125223139';
+import { renderReportsView } from './reports.js?v=20261125223139';
+import { renderHayatView } from './hayatindex.js?v=20261125223139';
+import { renderMatchReviewView } from './matchreview.js?v=20261125223139';
+import { renderBulkImportView } from './bulkimport.js?v=20261125223139';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20261125223139';
+import { renderAdminMessagesView, initChatNotifications } from './chat.js?v=20261125223139';
+import { renderWorkView, loadWork } from './work.js?v=20261125223139';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20261125223139';
+import { renderHayatEditorView } from './hayateditor.js?v=20261125223139';
+import { renderInPageConverterView } from './inpageconverter.js?v=20261125223139';
+import { renderUserGuideView } from './userguide.js?v=20261125223139';
+import { renderJoinTeamView } from './collaboration.js?v=20261125223139';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20261125223139';
+import { renderMyProfileView } from './profile.js?v=20261125223139';
+import { renderMySpaceView } from './myspace.js?v=20261125223139';
+import { renderBoardsView } from './boards.js?v=20261125223139';
+import { renderFormationView } from './formation.js?v=20261125223139';
+import { renderBooksView } from './books.js?v=20261125223139';
+import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261125223139';
+import { renderOnboardingView } from './onboarding.js?v=20261125223139';
+import { renderLanding } from './landing.js?v=20261125223139';
+import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20261125223139';
+import { renderProposalsView, initProposalNotifications } from './proposals.js?v=20261125223139';
+import { renderReadingsView, initReadingNotifications } from './readings.js?v=20261125223139';
+import { registerServiceWorker, initInstallBanner } from './pwa-register.js?v=20261125223139';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -225,8 +225,8 @@ function canOpen(id) {
   return false;
 }
 
-// sub: a page inside a section, with its own address (#task/51, #review/51).
-const SUB = /^(task|review)\/\d+$/;
+// sub: a page inside a section, with its own address (#task/51, #review/51, #department/HR/people).
+const SUBS = { tasks: /^(task|review)\/\d+$/, mydepartment: /^department\/[\w-]+(\/[a-z]+(\/[\w-]+)?)?$/ };
 function renderTab(id, place, sub = '') {
   // Reporting something is one of the things to share (Owner's decision, 2026-11-25): one door for Users and Operators.
   if (id === 'chat' && !canReviewApplications()) { State.shareDoor = true; id = 'sharewithus'; place = 'home'; }
@@ -239,11 +239,11 @@ function renderTab(id, place, sub = '') {
     return;
   }
   State.place = placeFor(id, place);
-  State.sub = id === 'tasks' && SUB.test(sub) ? sub : '';
+  State.sub = SUBS[id] && SUBS[id].test(sub) ? sub : '';
   document.body.classList.toggle('place-work', State.place === 'work');
   document.body.classList.toggle('place-home', State.place !== 'work');
   document.body.classList.toggle('at-work', id === 'work');
-  document.body.classList.toggle('at-desk', !!State.sub);
+  document.body.classList.toggle('at-desk', id === 'tasks' && !!State.sub);
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
   const voice = voiceOf(id);
   document.querySelectorAll('.bn-btn').forEach(b => { b.classList.toggle('active', b.dataset.tab === voice); b.toggleAttribute('aria-current', b.dataset.tab === voice); });
@@ -314,17 +314,17 @@ boot(() => {
   // Users and Operators land on Home (Operators since 2026-11-25); everyone else on the Dashboard. An address with a section
   // (#tasks) opens it, if this person has it.
   initTopbar();
-  const askedSub = (location.hash.match(/^#((?:task|review)\/\d+)$/) || [])[1] || '';
-  const asked = askedSub ? 'tasks' : (location.hash.match(/^#([a-z]+)$/) || [])[1];
+  const hash = location.hash.slice(1), subOf = Object.keys(SUBS).find(k => SUBS[k].test(hash));
+  const asked = subOf || (hash.match(/^([a-z]+)$/) || [])[1];
   const first = ['user', 'operator'].includes(State.currentRole) ? 'onboarding' : 'dashboard';
   const start = asked && canOpen(asked) ? asked : first;
-  const startSub = start === 'tasks' ? askedSub : '';
+  const startSub = start === subOf ? hash : '';
   history.replaceState({ tab: start, place: placeFor(start, 'home'), sub: startSub }, '', '#' + (startSub || start));
   State.place = 'home';
   renderTab(start, 'home', startSub);
   initChatNotifications(() => renderTab('chat'));
   initTaskNotifications(() => renderTab('tasks', 'work'));
-  initDeptMessageNotifications(code => { State.myDeptSelected = code; renderTab('mydepartment'); });
+  initDeptMessageNotifications(code => renderTab('mydepartment', undefined, `department/${code}/team`));
   initShareNotifications(() => renderTab('sharewithus', isAnyDeptLead() ? 'work' : 'home'));
   initProposalNotifications(() => renderTab('proposals'));
   initReadingNotifications(() => renderTab('readings'));
