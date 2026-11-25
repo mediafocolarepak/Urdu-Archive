@@ -8,7 +8,7 @@
 // The recordings of the Work can be heard on the page. Reserved and hidden texts never appear: the database decides
 // what each person can read (row level security), and proposals and removed texts are left out here.
 
-import { sb, State, esc, withStatus, HIDDEN_DOC_STATUSES, mountAudioPlayer, URDU_SCRIPT } from './core.js?v=20261125122603';
+import { sb, State, esc, withStatus, HIDDEN_DOC_STATUSES, mountAudioPlayer, URDU_SCRIPT } from './core.js?v=20261125125719';
 
 // A book: code (for its bookmark), category, title, the cover's author line, what a page is called, a line under the
 // title. Optional: order 'title' (A to Z, with letters, for texts that seldom have a date; otherwise by date, with

@@ -661,7 +661,7 @@ export async function mountAudioPlayer(box, reading, autoplay) {
   const audio = box.querySelector('audio');
   if (reading.document_id) audio.addEventListener('play', () => { sb.rpc('count_audio_play', { p_document_id: reading.document_id }).then(() => {}, () => {}); }, { once: true });
   audio.addEventListener('error', () => {
-    box.insertAdjacentHTML('beforeend', '<div class="hint">This device could not play the recording. Please tell us with "Report a problem", and say which phone you use.</div>');
+    box.insertAdjacentHTML('beforeend', '<div class="hint">This device could not play the recording. Please tell us in "Share with us", and say which phone you use.</div>');
   });
   if (autoplay) audio.play().catch(() => { /* the browser wants a second tap on the player */ });
 }
@@ -1428,7 +1428,7 @@ export function errorText(e) {
   if (e && e.code === 'P0001') return message;
   if (e && (e.code === '42501' || /row-level security|permission denied/i.test(message))) return 'You do not have permission for this. If you think you should, please tell a Coordinator or an Admin.';
   if (/jwt|session|refresh token/i.test(message)) return 'Your sign-in has expired. Please sign out from My Profile and sign in again.';
-  return 'That did not work. Please try again. If it happens again, use "Report a problem".' + (message ? `\n\n(${message})` : '');
+  return 'That did not work. Please try again. If it happens again, tell us in "Share with us".' + (message ? `\n\n(${message})` : '');
 }
 // Every request that nobody handles ends here; one message at a time.
 let errorShown = false;
