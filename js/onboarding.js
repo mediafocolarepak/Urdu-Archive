@@ -5,32 +5,35 @@
 // Since 2026-11-23 (Owner's request) Home starts with the Word of Life of the month, as the landing page does, and with
 // "Continue" tiles: the last document opened on this device, and the formation path being read.
 
-import { sb, State, esc } from './core.js?v=20261125104645';
-import { openReadingView } from './docdetail.js?v=20261125104645';
-import { lastBookBookmark } from './books.js?v=20261125104645';
+import { sb, State, esc } from './core.js?v=20261125122603';
+import { openReadingView } from './docdetail.js?v=20261125122603';
+import { lastBookBookmark } from './books.js?v=20261125122603';
 
 // The Urdu names are the ones of the Urdu guides (Documentazione/guide-help/ur1.mjs, ur2.mjs, migration 119): Boards,
 // Formation Paths and Help have one there; the others are named in Latin letters there too, so they stand alone
 // until the Owner gives a word. Never invented (memory: Urdu wording is the Owner's).
+// Since 2026-11-25 Home is the same for Users and Operators, and silent; an Operator has one quiet tile more, My work, at the
+// end. My Profile and Help are no longer tiles: one is in the bar, the other always at the top.
 const HOME_TILES = [
   // The Library first (Owner's request, 2026-11-18). The Urdu guides call it "Library" in Latin letters too.
   ['dashboard', 'Library', ''],
   // Books (2026-11-24): the Link-ups and, later, other kinds of text read as a book. No Urdu name yet: the Owner's.
   ['books', 'Books', ''],
-  ['myspace', 'My Space', ''],
-  ['boards', 'Boards', 'بورڈز'],
   ['formation', 'Formation Paths', 'تربیتی راستے'],
+  ['boards', 'Boards', 'بورڈز'],
+  ['myspace', 'My Space', ''],
+  ['readings', 'Read aloud', ''],
   ['sharewithus', 'Share with us', ''],
   ['jointeam', 'Join the Team', ''],
-  ['profile', 'My Profile', ''],
 ];
-const HELP_UR = 'مدد';
 // From the Urdu guides (help "find-read"): the Word of Life of this month.
 const WORD_OF_MONTH_UR = 'اس مہینے کا کلامِ حیات';
 
 const NAV_PATHS = {
   dashboard: 'M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3zM4 17a3 3 0 0 1 3-3h12',
-  myspace: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0',
+  myspace: 'M6 3h12v18l-6-4-6 4z',
+  readings: 'M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zM6 11a6 6 0 0 0 12 0M12 17v4',
+  work: 'M4 8h16v11H4zM9 8V5h6v3M4 13h16',
   boards: 'M4 4h16v11H4zM8 20l4-5 4 5M8 8h8M8 11h5',
   formation: 'M12 6C10 4.5 7 4 4 4v15c3 0 6 .5 8 2 2-1.5 5-2 8-2V4c-3 0-6 .5-8 2zM12 6v15',
   sharewithus: 'M4 5h16v11H9l-5 4z',
@@ -109,11 +112,13 @@ export function renderOnboardingView(main) {
     <div class="start-home">
       <div id="home-top" class="start-tiles" style="margin-bottom:10px;"></div>
       <div class="start-tiles">
-        ${HOME_TILES.map(([tab, en, ur]) => homeTileHtml(`data-start-tab="${tab}"`, tab, en, ur)).join('')}
-        ${homeTileHtml('data-help-home', 'help', 'Help', HELP_UR)}
+        ${HOME_TILES.filter(([tab]) => tab !== 'jointeam' || State.currentRole === 'user').map(([tab, en, ur]) => homeTileHtml(`data-start-tab="${tab}"`, tab, en, ur)).join('')}
+        ${State.currentRole === 'operator' ? `<button type="button" class="home-tile home-work" data-start-tab="work">${navIcon('work')}<span class="home-word-text"><span class="home-tile-en">My work</span><span class="hint" id="home-work-note"></span></span>${CHEVRON}</button>` : ''}
       </div>
     </div>`;
-  main.querySelectorAll('[data-start-tab]').forEach(b => b.addEventListener('click', () => window.__renderTab(b.dataset.startTab)));
+  main.querySelectorAll('[data-start-tab]').forEach(b => b.addEventListener('click', () => window.__renderTab(b.dataset.startTab, b.dataset.startTab === 'work' ? 'work' : 'home')));
+  const note = main.querySelector('#home-work-note');
+  if (note && State.workCount !== undefined) note.textContent = State.workCount ? `${State.workCount} thing${State.workCount === 1 ? ' is' : 's are'} waiting` : 'Nothing is waiting';
   fillHomeTop(main);
 }
 

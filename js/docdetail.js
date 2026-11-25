@@ -2,7 +2,7 @@
 // <div id="doc-detail"> to render into). Only this module and core.js know about the
 // `documents` table's full field set.
 
-import {
+import { quiet,
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canDelete, isCoordinator, isAdmin, docTitlesHtml, URDU_SCRIPT, docDateLabel,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
@@ -10,7 +10,7 @@ import {
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, DRIVE_AUDIO_PREFIX, mountAudioPlayer, eraseMyAudioFiles,
   textDir, readerChoices, confirmPopup, promptPopup
-} from './core.js?v=20261125104645';
+} from './core.js?v=20261125122603';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved ✓' : '☆ Save'; }
 
@@ -197,6 +197,7 @@ function openDocTextPopup(doc, text) {
   });
   document.getElementById('doc-text-popup-report').addEventListener('click', async () => {
     State.selectedDocId = doc.document_id;
+    State.shareDocument = doc.document_id;
     State.chatMessagePrefill = await selectedOrClipboardText(textarea);
     backdrop.remove();
     window.__renderTab('chat');
@@ -259,7 +260,10 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
   const choices = readerChoices(doc, workSiblings, textIds, media);
   const versionOf = id => [doc, ...(workSiblings || [])].find(v => String(v.document_id) === String(id));
   // A version of a reserved document would have to be reserved too, and only Admin and Formation can add those.
-  const canAddRelated = canWrite() && !HIDDEN_DOC_STATUSES.includes(doc.workflow_status) && (doc.access_level !== 'reserved' || canManageReserved());
+  // In Home an Operator sees the card as a reader does, without the buttons of the work (core.js quiet()).
+  const atWork = !quiet();
+  const reader = State.currentRole === 'user' || quiet();
+  const canAddRelated = canWrite() && atWork && !HIDDEN_DOC_STATUSES.includes(doc.workflow_status) && (doc.access_level !== 'reserved' || canManageReserved());
   // The head of the card (Owner's request, 2026-11-23): the number, the English and the Urdu title, the author and the
   // date. A title missing on this record is taken from another version of the same Work.
   const all = [doc, ...(workSiblings || []).filter(s => String(s.document_id) !== String(doc.document_id))];
@@ -274,8 +278,8 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
         <div class="btn-row" style="margin:0;">
           ${canEdit ? '<button class="btn secondary" id="doc-open-editor">Edit</button>' : ''}
           <button class="btn fav-btn${State.myFavorites.has(doc.document_id) ? ' fav-on' : ''}" id="doc-fav" aria-pressed="${State.myFavorites.has(doc.document_id)}">${favLabel(doc.document_id)}</button>
-          ${State.myBoards.size > 0 && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-board">+ Board</button>' : ''}
-          ${(State.isFormatore || canReviewApplications()) && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-path">+ Path</button>' : ''}
+          ${State.myBoards.size > 0 && atWork && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-board">+ Board</button>' : ''}
+          ${(State.isFormatore || canReviewApplications()) && atWork && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-path">+ Path</button>' : ''}
         </div>
       </div>
       ${doc.access_level === 'reserved' ? '<span class="count-badge">Reserved</span>' : ''}
@@ -288,14 +292,14 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     ${readerChoicesHtml(choices, media)}
     ${media.some(m => m.media_type === 'AUD' && String(m.source_document_id) === String(doc.document_id) && m.source_text_at && text?.updated_at > m.source_text_at) ? '<div class="hint">The text has been corrected since it was read aloud, so the two may differ.</div>' : ''}
     <div class="btn-row" style="margin:0 0 8px;">
-      ${text && canWrite() ? '<button class="btn secondary" id="doc-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Open editable text</button>' : ''}
-      ${originalText && canWrite() ? '<button class="btn secondary" id="doc-original-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Original text (Italian)</button>' : ''}
+      ${text && canWrite() && atWork ? '<button class="btn secondary" id="doc-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Open editable text</button>' : ''}
+      ${originalText && canWrite() && atWork ? '<button class="btn secondary" id="doc-original-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Original text (Italian)</button>' : ''}
       <span id="doc-read-aloud" style="display:contents;"></span>
       ${canAddRelated ? '<button class="btn secondary" id="doc-add-related" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">+ Add a related version</button>' : ''}
       ${canEdit && text && !text.reviewed && doc.source !== 'STE' ? '<button class="btn secondary" id="doc-mark-checked" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;" title="Once checked, the text can be read aloud">Mark the text as checked</button>' : ''}
-      ${canWrite() ? '<button class="btn secondary" id="doc-translate" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Translate</button>' : ''}
+      ${canWrite() && atWork ? '<button class="btn secondary" id="doc-translate" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Translate</button>' : ''}
       ${isAdmin() && ownReading ? '<button class="btn secondary" id="doc-reader-name" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Correct the name</button><button class="btn danger" id="doc-erase-reading" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Erase the recording</button>' : ''}
-      <button class="btn secondary" id="doc-report-problem" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Report a problem</button>
+      <button class="btn secondary" id="doc-report-problem" style="flex:0 0 auto;white-space:normal;font-size:15px;padding:6px 12px;min-height:40px;">${reader ? 'Something to say about this text?' : 'Report a problem'}</button>
     </div>
     ${canEdit ? `
     <div class="field doc-wide-only" style="font-size:13px;line-height:1.7;">${renderDocSummary(doc)}</div>
@@ -413,6 +417,7 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
   }
   document.getElementById('doc-report-problem').addEventListener('click', () => {
     State.selectedDocId = doc.document_id;
+    State.shareDocument = doc.document_id;
     State.chatMessagePrefill = null;
     window.__renderTab('chat');
   });
@@ -430,10 +435,10 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     btn.classList.toggle('fav-on', State.myFavorites.has(doc.document_id));
     btn.setAttribute('aria-pressed', String(State.myFavorites.has(doc.document_id)));
   });
-  if (State.myBoards.size > 0 && isDocPostable(doc)) {
+  if (State.myBoards.size > 0 && atWork && isDocPostable(doc)) {
     document.getElementById('doc-add-board').addEventListener('click', () => openBoardPostPopup({ doc, onSaved: () => {} }));
   }
-  if ((State.isFormatore || canReviewApplications()) && isDocPostable(doc)) {
+  if ((State.isFormatore || canReviewApplications()) && atWork && isDocPostable(doc)) {
     document.getElementById('doc-add-path').addEventListener('click', () => openFormationPostPopup({ doc, onSaved: () => {} }));
   }
   if (canEdit) {

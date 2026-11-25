@@ -5,7 +5,7 @@
 // reviewed. Deliberately does not import from collaboration.js (project convention: modules
 // only import from core.js), so the skill-chip rendering is duplicated here in small form.
 
-import { sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml, dateOfBirthFieldsHtml, readDateOfBirth, displayLogin, PHONE_LOGIN_DOMAIN, TEXT_SIZES, COLOUR_CHOICES, displayPrefs, saveDisplayPrefs } from './core.js?v=20261125104645';
+import { sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml, dateOfBirthFieldsHtml, readDateOfBirth, displayLogin, PHONE_LOGIN_DOMAIN, TEXT_SIZES, COLOUR_CHOICES, displayPrefs, saveDisplayPrefs } from './core.js?v=20261125122603';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -47,16 +47,15 @@ export async function renderMyProfileView(main) {
       <div class="profile-who">
         <div class="profile-name" dir="auto">${esc(profile.full_name) || '—'}</div>
         <div class="profile-login">${esc(displayLogin(user.email))}</div>
-        <button class="btn big-btn" id="profile-signout">Sign out</button>
       </div>
-      ${role === 'user' ? '' : `<div class="field-grid wide" style="margin-bottom:16px;">
+      <details class="subpanel profile-section" open><summary>Personal details</summary><div id="profile-demographics"></div></details>
+      ${role === 'user' ? '' : `<div class="field-grid wide" style="margin:16px 0;">
         <div class="field"><label>Role</label><div style="font-size:16px;padding:4px 0;">${esc(ROLE_LABEL[role] || role)}</div></div>
         <div class="field"><label>Qualifications</label><div style="font-size:16px;padding:4px 0;">${myQualLabels.map(esc).join(', ') || '—'}</div></div>
         ${reservedAccess ? '<div class="field"><label>Reserved documents</label><div style="font-size:16px;padding:4px 0;">You can read them</div></div>' : ''}
       </div>`}
-      <div class="subpanel" id="profile-display"></div>
       <div id="profile-thanks"></div>
-      <details class="subpanel profile-section"><summary>Personal details</summary><div id="profile-demographics"></div></details>
+      <div class="subpanel" id="profile-display"></div>
       ${role === 'operator' ? '<details class="subpanel profile-section"><summary>Experience and availability</summary><div id="profile-editable"></div></details>' : ''}
       <details class="subpanel profile-section"><summary>Change my password</summary>
         <div class="field-grid wide">
@@ -70,6 +69,7 @@ export async function renderMyProfileView(main) {
         <summary>My activity in the archive</summary>
         <div id="profile-activity-body" style="margin-top:8px;"><div class="hint">Loading...</div></div>
       </details>
+      <div class="btn-row" style="margin-top:16px;"><button class="btn big-btn" id="profile-signout" style="flex:1;">Sign out</button></div>
     </div>`;
 
   // Sign out is also in the top bar, which on a phone is easy to miss (owner's report 2026-10-27);
@@ -98,7 +98,6 @@ async function renderDemographics(box, profile, dateOfBirth, main) {
   const code = dateOfBirth ? await withStatus(sb.rpc('age_bracket_of', { p_dob: dateOfBirth })) : profile.age_bracket;
   const groupLabel = code ? labelOf(ageBracketList, code) || code : '';
   box.innerHTML = `
-    <h3>Personal details</h3>
     <p class="hint">Only you, the HR lead and Admins can see your date of birth. A few people on the team see only your age group, for statistics and to prepare formation.</p>
     <div class="field-grid wide">
       <div class="field"><label>Date of birth</label>${dateOfBirthFieldsHtml('pf-dob', dateOfBirth)}${groupLabel ? `<div class="hint">Your age group: ${esc(groupLabel)}${dateOfBirth ? '' : ' (as you declared it)'}</div>` : ''}<div id="pf-dob-error" class="dob-error"></div></div>

@@ -3,11 +3,11 @@
 // review. A recording stays on the phone (IndexedDB) until the server has confirmed it, so a phone call
 // or a closed page doesn't lose it. The database is the real gate: this module collects and shows.
 
-import {
+import { quiet,
   sb, State, esc, withStatus, labelOf, isAdmin, isCoordinator, isDeptMember, AUDIO_BUCKET, AUDIO_FORMATS,
   audioFileProblem, audioDurationOf, mountAudioPlayer, eraseMyAudioFiles,
   helpLinkHtml, confirmPopup, promptPopup
-} from './core.js?v=20261125104645';
+} from './core.js?v=20261125122603';
 
 // AAC in MP4 first, the likeliest to play on every phone; plain 'audio/mp4' can hold Opus, as in Chrome.
 const RECORD_FORMATS = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
@@ -93,8 +93,10 @@ export async function renderReadingsView(main) {
     await openReading(main, target);
     return;
   }
-  const canListen = await withStatus(sb.rpc('can_review_readings'));
-  const canSeeReaders = isAdmin() || isCoordinator() || isDeptMember('HR') || isDeptMember('COORD');
+  // Giving one's voice is in Home; listening and approving is work (core.js quiet()).
+  const canListen = !quiet() && await withStatus(sb.rpc('can_review_readings'));
+  const canSeeReaders = !quiet() && (isAdmin() || isCoordinator() || isDeptMember('HR') || isDeptMember('COORD'));
+  if (State.readingsTab) { currentTab = State.readingsTab; State.readingsTab = null; }
   const tabs = [['mine', 'My readings']];
   if (canListen) tabs.push(['listen', 'To listen']);
   if (canSeeReaders) tabs.push(['readers', 'Readers']);
@@ -664,7 +666,7 @@ export async function initReadingNotifications(navigate) {
   if (c.to_listen) parts.push(`${c.to_listen} waiting to be heard`);
   if (c.to_rerecord) parts.push(`${c.to_rerecord} of yours to record again`);
   const toast = document.createElement('div');
-  toast.className = 'toast-notification';
+  toast.className = 'toast-notification work-toast';
   toast.style.bottom = '150px';
   toast.innerHTML = `
     <div class="toast-title">Read aloud</div>

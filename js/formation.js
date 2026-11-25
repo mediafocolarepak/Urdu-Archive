@@ -10,9 +10,9 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, nameMapForIds, confirmPopup } from './core.js?v=20261125104645';
+import { sb, State, esc, withStatus, canReviewApplications, quiet, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForEmails, nameMapForIds, confirmPopup } from './core.js?v=20261125122603';
 // The reader (a path read like a book) shows the same document card as the Library, as dashboard.js and matchreview.js do.
-import { renderDocDetail } from './docdetail.js?v=20261125104645';
+import { renderDocDetail } from './docdetail.js?v=20261125122603';
 
 // Thumbnails (migration 93, owner's request to make the catalog "look like Coursera") - a public
 // bucket, same shape as board post images (BOARD_MEDIA_BUCKET in core.js), but not shared outside
@@ -123,14 +123,16 @@ export async function renderFormationView(main) {
 async function renderCatalog(main) {
   const { data: { user } } = await sb.auth.getUser();
   const paths = await withStatus(sb.from('formation_paths').select('*').order('created_at', { ascending: false }));
-  const mine = State.isFormatore ? paths.filter(p => p.owner_id === user.id) : [];
+  // Preparing paths is work: from My work. In Home a formatore who is an Operator follows them like everyone (core.js quiet()).
+  const prepares = State.isFormatore && !quiet();
+  const mine = prepares ? paths.filter(p => p.owner_id === user.id) : [];
   const published = paths.filter(p => p.status === 'published' && !mine.some(m => m.id === p.id));
   const audienceList = State.optionListsByName.formation_audience || [];
 
   main.innerHTML = `
     <div class="panel">
       <h2>Formation Paths</h2>
-      ${State.isFormatore ? `
+      ${prepares ? `
         <h3>My Paths</h3>
         <div class="btn-row" style="margin-bottom:10px;"><button class="btn" id="fp-new">+ New path</button></div>
         <div id="fp-mine" class="field-grid wide">${mine.length ? mine.map(p => renderPathCard(p, audienceList, true)).join('') : '<div class="empty-msg">You haven’t created any path yet.</div>'}</div>
@@ -149,7 +151,7 @@ async function renderCatalog(main) {
     renderFormationView(main);
   }));
 
-  if (State.isFormatore) {
+  if (prepares) {
     document.getElementById('fp-new').addEventListener('click', () => openPathPopup({
       onSaved: () => renderFormationView(main),
     }));
@@ -369,7 +371,7 @@ async function renderPathDetail(main, pathId) {
   // server-side); only the owner or the Formation lead may add/remove co-authors themselves.
   const editorRows = await withStatus(sb.from('formation_path_editors').select('user_id,added_by_email,created_at').eq('path_id', pathId));
   const isCoAuthor = editorRows.some(e => e.user_id === user.id);
-  const canManageCoAuthors = path.owner_id === user.id || isDeptLead('FORM') || isAdmin();
+  const canManageCoAuthors = !quiet() && (path.owner_id === user.id || isDeptLead('FORM') || isAdmin());
   const editorNames = await nameMapForIds(editorRows.map(e => e.user_id));
   const editorProfileByUid = Object.fromEntries(Object.entries(editorNames).map(([uid, name]) => [uid, { full_name: name }]));
   let formMemberOptions = [];
@@ -383,7 +385,7 @@ async function renderPathDetail(main, pathId) {
   }
 
   const audienceList = State.optionListsByName.formation_audience || [];
-  const canEdit = path.owner_id === user.id || isCoAuthor || canReviewApplications();
+  const canEdit = !quiet() && (path.owner_id === user.id || isCoAuthor || canReviewApplications());
   const canSeeEnrollees = canEdit;  // owner or Coordinator/Admin - formation_enrollees() checks this itself too
 
   const partNumbers = numberParts(modules);
@@ -419,7 +421,7 @@ async function renderPathDetail(main, pathId) {
   // via canEdit, matching formation_chat_messages' RLS (owner always qualifies for their channel).
   const canSeeStudentsChat = path.status === 'published' && (isEnrolled || canEdit);
   // Formatori notes: works even in draft, deliberately - see 75_formation_chat.sql.
-  const canSeeFormatoriChat = State.isFormatore || canReviewApplications();
+  const canSeeFormatoriChat = (State.isFormatore && !quiet()) || canReviewApplications();
 
   // Quiz/attestato (Fase D): riservati, non "sempre pubblici" come i post - vedi
   // 76_formation_quizzes.sql. canTakeQuiz ricalca canSeeStudentsChat (iscritto o proprietario),
