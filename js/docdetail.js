@@ -6,11 +6,11 @@ import { quiet,
   sb, State, esc, today, labelOf, optionsHtml, canWrite, canCatalogue, asArchiveFile, canDelete, isCoordinator, isAdmin, docTitlesHtml, URDU_SCRIPT, docDateLabel,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
-  readPdfPageCount, readPdfPageCountFromBlob, nameMapForEmails, openBoardPostPopup, isDocPostable,
+  readPdfPageCount, readPdfPageCountFromBlob, nameMapForEmails, nameMapForIds, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, DRIVE_AUDIO_PREFIX, mountAudioPlayer, eraseMyAudioFiles,
   textDir, readerChoices, confirmPopup, promptPopup
-} from './core.js?v=20261125165400';
+} from './core.js?v=20261125200106';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved ✓' : '☆ Save'; }
 
@@ -18,7 +18,7 @@ function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved ✓'
 // same constant in tasks.js (project convention: modules only import from core.js, never each
 // other) - mirrors 37_task_qualifications_categories.sql. Keep all three in sync.
 const CATEGORY_REQUIRES_QUALIFICATION = { IT_UR: 'TRANSLATOR', EN_UR: 'TRANSLATOR', REVISION: 'REVISOR' };
-const TASK_STATUS_LABEL = { open: 'Open', claimed: 'Claimed', submitted: 'Submitted', approved: 'Approved', rejected: 'Rejected', published: 'Published' };
+const TASK_STATUS_LABEL = { open: 'Open', claimed: 'In progress', submitted: 'Submitted', approved: 'Approved', rejected: 'Rejected', published: 'Published' };
 
 // Builds the "riassunto" text block that replaces the old grid of disabled input fields -
 // one line per group of related info, empty groups dropped entirely so the block stays short.
@@ -480,11 +480,11 @@ async function refreshDocTasksList(doc) {
   if (!box) return;
   const rows = await withStatus(sb.from('tasks').select('*').eq('document_id', doc.document_id).order('created_at', { ascending: false }));
   if (!rows.length) { box.innerHTML = '<div class="hint">No tasks yet for this document.</div>'; return; }
-  const nameMap = await nameMapForEmails(rows.map(t => t.claimed_by_email));
-  const names = rows.map(t => nameMap[t.claimed_by_email] || null);
+  const nameMap = await nameMapForIds(rows.map(t => t.claimed_by));
+  const names = rows.map(t => nameMap[t.claimed_by] || null);
   box.innerHTML = `
     <div class="grid-wrap"><table class="grid">
-      <thead><tr><th>ID</th><th>Status</th><th>Claimed by</th><th>Due date</th><th>Credits</th></tr></thead>
+      <thead><tr><th>ID</th><th>Status</th><th>Taken by</th><th>Due date</th><th>Credits</th></tr></thead>
       <tbody>${rows.map((t, i) => `<tr>
         <td>#${esc(t.id)}</td>
         <td>${esc(TASK_STATUS_LABEL[t.status] || t.status)}</td>
@@ -603,7 +603,7 @@ async function openCreateTaskPopup(doc, onCreated) {
       credits: baseCredits + extraCredits,
       created_by_email: user.email,
       status: assigneeId ? 'claimed' : 'open',
-      claimed_by: assigneeId, claimed_by_email: assigneeEmail,
+      claimed_by: assigneeId,
       claimed_at: assigneeId ? new Date().toISOString() : null,
       due_date: dueDate,
     }), 'Creating task...');

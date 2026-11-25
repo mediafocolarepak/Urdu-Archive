@@ -7,10 +7,10 @@ import { authorNames,
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
   nameMapForIds, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved,
   helpLinkHtml, confirmPopup, promptPopup, showLoadFailed
-} from './core.js?v=20261125165400';
-import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261125165400';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261125165400';
-import { renderApplicationsView } from './collaboration.js?v=20261125165400';
+} from './core.js?v=20261125200106';
+import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261125200106';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261125200106';
+import { renderApplicationsView } from './collaboration.js?v=20261125200106';
 
 // Each department's page opens its own guide from the "?" beside the title.
 const DEPT_GUIDES = { HR: 'dept-hr', COORD: 'dept-coordination', FORM: 'dept-formation', RF: 'dept-reward', COMM: 'dept-communication', ARCHIVE: 'dept-archive' };
@@ -606,7 +606,7 @@ async function renderCoordinationOverview(box) {
 
   const TABS = [
     { id: 'open', label: 'Open', rows: open, showAssignee: false, showDue: false },
-    { id: 'claimed', label: 'Claimed', rows: claimed, showAssignee: true, showDue: true },
+    { id: 'claimed', label: 'In progress', rows: claimed, showAssignee: true, showDue: true },
     { id: 'submitted', label: 'Awaiting review', rows: submitted, showAssignee: true, showDue: true },
     { id: 'approved', label: 'Awaiting publish', rows: approved, showAssignee: true, showDue: true },
     { id: 'overdue', label: 'Overdue', rows: overdue, showAssignee: true, showDue: true },
@@ -684,12 +684,12 @@ async function renderRewardCredits(box) {
   box.innerHTML = `
     <div class="panel">
       <h2>Credits in circulation <span class="hint">— as they are now</span></h2>
-      <p class="hint">Every credit currently posted, claimed, awaiting review, or already published - useful for tuning rates and reputation tiers (Policy, below), and later for planning compensation runs.</p>
+      <p class="hint">Every credit currently posted, in progress, awaiting review, or already published - useful for tuning rates and reputation tiers (Policy, below), and later for planning compensation runs.</p>
       <div class="field-grid">
         ${tile('Budget', o.budget)}
         ${tile('Available', available)}
-        ${tile('Posted, not claimed', o.open_credits)}
-        ${tile('Claimed, in progress', o.in_progress_credits)}
+        ${tile('Posted, not taken', o.open_credits)}
+        ${tile('In progress', o.in_progress_credits)}
         ${tile('Approved, to redeem', o.to_redeem_credits)}
         ${tile('Redeemed (published)', o.redeemed_credits)}
       </div>

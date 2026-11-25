@@ -96,7 +96,7 @@ export function loadLibrary(name, failed = 'Could not load a part of the app. Pl
   return libraryLoading[name];
 }
 // pdf.js does its work in a second file, which a page cannot check by itself: it is read with its fingerprint first.
-async function loadPdfJs() {
+export async function loadPdfJs() {
   const pdfjs = await loadLibrary('pdf');
   if (!pdfjs.GlobalWorkerOptions.workerSrc) {
     const worker = await fetch(PDF_WORKER[0], { integrity: PDF_WORKER[1], mode: 'cors', credentials: 'omit' });
@@ -111,6 +111,9 @@ export function printWhenReady(w) {
   const go = () => w.setTimeout(() => w.print(), 150);
   if (w.document.readyState === 'complete') go(); else w.addEventListener('load', go, { once: true });
 }
+
+// The bytes of a PDF of the archive on Drive, for the document beside the work (desk.js). Null if it is not there.
+export function fetchDriveFile(fileName) { return fetchGDriveFileBlob(GDRIVE_FOLDER_ID, fileName); }
 
 // Counts the pages of a PDF Blob/File with pdf.js. Returns null (never throws) on any failure
 // - callers should fall back to letting the person type the page count in by hand. Shared by
@@ -330,6 +333,7 @@ export const State = {
   deptEditorSelected: null,  // department_code currently shown in Options -> Departments
   myDeptSelected: null,  // department_code currently shown in My Department (mydepartment.js)
   myDeptCoordTab: 'open',  // sub-tab shown in My Department's Coordination task-flow panel
+  sub: '',             // a page inside a section: 'task/51', 'review/51' (app.js renderTab)
   mineTab: 'active',  // sub-tab shown in Tasks -> My Tasks (active/submitted/closed)
   docCollections: [],  // { document_id, collection_code, page_number } for the open document
   optionListsByName: {},  // option_lists rows grouped by list_name, as [code,label] pairs - generic lookup used by SessionCache/combobox
@@ -729,7 +733,7 @@ export function canApprovePolicyChange() { return isAdmin(); }
 
 const LOG_TABLE_LABELS = {
   documents: 'Document', document_texts: 'Text', document_original_texts: 'Original text',
-  document_collections: 'Collection', hayat_indice: 'Hayat index', process_history: 'Process step', works: 'Work', tasks: 'Task',
+  document_collections: 'Collection', hayat_indice: 'Hayat index', policy_values: 'Rule', process_history: 'Process step', works: 'Work', tasks: 'Task',
   user_roles: 'Role', user_qualifications: 'Qualification', department_members: 'Department',
 };
 const LOG_ACTION_LABELS = { insert: 'added', update: 'changed', delete: 'removed' };
@@ -765,17 +769,17 @@ export function logEntriesHtml(rows, showActor) {
 // ---------- Standing widget (credits + reputation, shown in the topbar for Operator+) ----------
 
 const GOOD_PRACTICES = [
-  'Claim a task only if you realistically expect to finish it by the due date you set.',
-  'Can\'t make it after all? Use "Give up this task" early and honestly - it\'s not penalized, unlike letting it sit overdue.',
-  'Only submit a task for review when you\'re confident it\'s actually ready.',
-  'As a Revisor, judge the work in front of you, not who you think might have done it.',
-  'Keep review notes specific and constructive - the operator will read them.',
+  'Take a task only if you think you can finish it by the date you choose.',
+  'You cannot finish it? Use "Return this task" early. It costs nothing. Leaving it late does.',
+  'Send a task for review only when it is ready.',
+  'As a Revisor, look at the work, not at who may have done it.',
+  'Write review notes that help. The person will read them.',
 ];
 const AVOID_LIST = [
-  'Claiming several tasks "just in case" and letting most of them go overdue.',
-  'Submitting incomplete or rushed work just to hit a deadline.',
-  'Trying to guess or ask around about who did a task you\'re reviewing.',
-  'Disrespectful or inappropriate behavior toward teammates - the System can reclaim a task for this, with a reputation penalty.',
+  'Taking tasks "just in case" and leaving them late.',
+  'Sending work that is not finished, only to be on time.',
+  'Asking who did a task you are reviewing.',
+  'Being rude to others. A Coordinator can take a task back for this, and your reputation goes down.',
 ];
 
 function repClass(rep) { return rep >= 70 ? 'rep-good' : rep >= 40 ? 'rep-ok' : 'rep-low'; }

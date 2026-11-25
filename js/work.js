@@ -2,7 +2,7 @@
 // spiritual home, the same for everyone and silent; here are the things to do, what waits for others, the tools, the credits
 // and the notices of the team. The sections that serve both places appear in both, each with its own dress (core.js quiet()).
 
-import { sb, State, esc, today, isDeptLead, isAnyDeptLead, standingHtml, showGoodPracticesModal, openTranslatePopup } from './core.js?v=20261125165400';
+import { sb, State, esc, today, isDeptLead, isAnyDeptLead, standingHtml, showGoodPracticesModal, openTranslatePopup } from './core.js?v=20261125200106';
 
 const quietly = promise => Promise.resolve(promise).then(r => (r && !r.error ? r.data : null), () => null);
 
@@ -31,7 +31,7 @@ export async function loadWork() {
     const late = d !== null && d < 0, soon = d !== null && d >= 0 && d <= (State.policyValues.task_near_due_days ?? 3);
     todo.push({ rank: late ? 0 : soon ? 2 : 3, tone: late ? 'red' : soon ? 'amber' : 'blue', sign: late ? '&#9888;' : soon ? '&#9200;' : '&#9998;',
       state: late ? `Overdue by ${n(-d, 'day', 'days')}` : d === 0 ? 'Due today' : soon ? `Due in ${n(d, 'day', 'days')}` : d === null ? 'In progress' : `In progress, due in ${n(d, 'day', 'days')}`,
-      title: t.title, note: 'Task', action: 'Continue', open: goTasks('mine') });
+      title: t.title, note: 'Task', action: 'Continue', open: () => window.__renderTab('tasks', 'work', 'task/' + t.id) });
   }
   for (const s of (submissions || []).filter(x => x.status === 'to_correct')) {
     todo.push({ rank: 1, tone: 'red', sign: '&#8617;', state: 'To correct', title: s.title || 'Your proposal', note: s.decision_note || 'Your proposal', action: 'Correct',

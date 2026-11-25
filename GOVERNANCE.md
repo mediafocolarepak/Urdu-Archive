@@ -1,7 +1,9 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.25 (2026-11-07) — decisions taken by the Owner; all of phases 1 through 3 are built and
+**Status: v1.26 (2026-11-25) — decisions taken by the Owner; all of phases 1 through 3 are built and
 merged (migrations 80–115). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.26:** the task desk (§5.12, migration 176): at most 3 tasks in progress, a note needed with OK, but... and Fail.
 
 **What changed in v1.25:** tokens of appreciation, third part (§5.21, migration 129): useful reports, openings of a text, public thanks.
 
@@ -847,6 +849,12 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
   document then moves to `pending_publish`. A task reviewed by the person who did it stays
   recognisable (`reviewed_by = claimed_by`), so Reward reports can leave test credits out.
 - **A Word of Life** extracted from the Hayat index takes its own month (`data_pdv`), not the issue's.
+- **The task desk (migration 176, Owner's decisions of 2026-11-25):** one person has at most 3 tasks in progress
+  (`policy_values`, `task_max_in_progress`). Coordinators and Admin change the number in Tasks → Team overview
+  (`set_task_limit()`, from 1 to 20, recorded in the log); it is the one value of Options with this direct way. The limit counts when
+  a person takes a task, not when a Coordinator gives one. A review with **OK, but...** or **Fail** needs a note. Tasks and their history
+  keep names and accounts, no longer email addresses. The document stands beside the work for Operators, Revisors,
+  Coordinators and Admin; each task has its own address (`#task/51`, `#review/51`), and opening it gives no right the person lacks.
 
 
 ### 5.13 Access levels (migration 111)
