@@ -1,4 +1,4 @@
-import { authorNames, sb, State, esc, labelOf, optionsHtml, withStatus, withStatusCount, isDeptMember, isAdmin, reportTable, nameMapForEmails } from './core.js?v=20261125145432';
+import { authorNames, sb, State, esc, labelOf, optionsHtml, withStatus, withStatusCount, isDeptMember, isAdmin, reportTable, nameMapForEmails } from './core.js?v=20261125162405';
 
 const APPLICATION_STATUS_LABEL = {
   pending: 'Pending', recommended: 'Recommended to Admin', approved: 'Approved', rejected: 'Rejected',

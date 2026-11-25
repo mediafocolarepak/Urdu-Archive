@@ -10,9 +10,9 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, quiet, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForIds, confirmPopup } from './core.js?v=20261125145432';
+import { sb, State, esc, withStatus, canReviewApplications, quiet, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForIds, confirmPopup } from './core.js?v=20261125162405';
 // The reader (a path read like a book) shows the same document card as the Library, as dashboard.js and matchreview.js do.
-import { renderDocDetail } from './docdetail.js?v=20261125145432';
+import { renderDocDetail } from './docdetail.js?v=20261125162405';
 
 // Thumbnails (migration 93, owner's request to make the catalog "look like Coursera") - a public
 // bucket, same shape as board post images (BOARD_MEDIA_BUCKET in core.js), but not shared outside
@@ -32,7 +32,7 @@ function pictureFieldHtml(prefix, current, hint) {
   return `<div class="field"><label>Picture <span class="hint">(${hint})</span></label>
     ${current ? `<img src="${esc(thumbnailUrl(current))}" alt="" class="fp-picture-preview">
       <label class="hint" style="display:block;margin:4px 0;"><input type="checkbox" id="${prefix}-pic-remove"> Remove this picture</label>` : ''}
-    <input id="${prefix}-pic" type="file" accept="image/*"></div>`;
+    <input id="${prefix}-pic" type="file" accept="image/jpeg,image/png,image/webp,image/gif"></div>`;
 }
 // What the picture field asks to save: undefined = leave as it is, null = remove, a path = the new picture.
 async function pictureFieldValue(prefix) {
@@ -227,7 +227,7 @@ function openPathPopup({ path = null, onSaved } = {}) {
           <div class="btn-row" style="margin-top:4px;"><button type="button" class="btn secondary" id="fpp-copy-prompt" style="padding:4px 10px;">Copy</button>
             <span class="hint">Paste this into an AI image tool (Midjourney, ChatGPT/DALL-E, Copilot...), then upload the image it gives you below.</span></div>
         </div>
-        <input id="fpp-thumbnail" type="file" accept="image/*">
+        <input id="fpp-thumbnail" type="file" accept="image/jpeg,image/png,image/webp,image/gif">
       </div>
       <div class="field"><label>Session type</label><select id="fpp-session">
         <option value="regular" ${!path || path.session_type === 'regular' ? 'selected' : ''}>Regular (October-May)</option>

@@ -3,14 +3,14 @@
 // `documents` table's full field set.
 
 import { quiet,
-  sb, State, esc, today, labelOf, optionsHtml, canWrite, canCatalogue, canDelete, isCoordinator, isAdmin, docTitlesHtml, URDU_SCRIPT, docDateLabel,
+  sb, State, esc, today, labelOf, optionsHtml, canWrite, canCatalogue, asArchiveFile, canDelete, isCoordinator, isAdmin, docTitlesHtml, URDU_SCRIPT, docDateLabel,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, nameMapForEmails, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, DRIVE_AUDIO_PREFIX, mountAudioPlayer, eraseMyAudioFiles,
   textDir, readerChoices, confirmPopup, promptPopup
-} from './core.js?v=20261125145432';
+} from './core.js?v=20261125162405';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved ✓' : '☆ Save'; }
 
@@ -1040,7 +1040,7 @@ async function renderFullEditForm(box, id, doc, siblings, docCollections, ctx) {
       } else {
         readPagesStatus.textContent = 'Could not read the page count from the uploaded file automatically - enter it by hand if needed.';
       }
-      await withStatus(sb.storage.from(BUCKET).upload(finalName, fileInput.files[0], { upsert: true }), 'Uploading file...');
+      await withStatus(sb.storage.from(BUCKET).upload(finalName, asArchiveFile(fileInput.files[0]), { upsert: true }), 'Uploading file...');
       storagePath = finalName;
       vals.file_name = finalName;
     } else if (!doc.file_name && !['VID', 'AUD'].includes(vals.media_type)) {

@@ -7,6 +7,12 @@ export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 export const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 export const BUCKET = 'archive-files';
 export const AUDIO_BUCKET = 'reading-audio';
+// The files of the archive (174_files.sql allows only these, up to 50 MB). The kind is said by the ending, because a computer
+// may not know InPage or Word files; supabase-js sends the kind of the file itself, so the file gets it.
+const ARCHIVE_FILE_KINDS = { inp: 'application/octet-stream', pdf: 'application/pdf', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+export const ARCHIVE_FILE_MAX = 50 * 1024 * 1024;
+export function archiveFileEnding(file) { const e = (file.name.split('.').pop() || '').toLowerCase(); return ARCHIVE_FILE_KINDS[e] ? e : null; }
+export function asArchiveFile(file) { const e = archiveFileEnding(file); return e ? file.slice(0, file.size, ARCHIVE_FILE_KINDS[e]) : file; }
 
 // Debug escape hatch: lets a DevTools console diagnose issues against the real, already-
 // authenticated session without creating a second Supabase client (which collides with this
@@ -1616,7 +1622,7 @@ export function openBoardPostPopup({ doc = null, boardCode = null, post = null, 
       <div class="field"><label>Title</label><input id="bp-title" value="${esc(post ? post.title : (doc ? doc.en_title || '' : ''))}"></div>
       <div class="field"><label>Text</label><textarea id="bp-body" dir="auto" rows="8">${esc(post ? post.body : '')}</textarea></div>
       <div class="field"><label>Link <span class="hint">(optional)</span></label><input id="bp-link" placeholder="https://..." value="${esc(post ? post.link_url : '')}"></div>
-      <div class="field"><label>Image <span class="hint">(optional${post && post.image_path ? ' - choose a file to replace the current one' : ''})</span></label><input id="bp-image" type="file" accept="image/*"></div>
+      <div class="field"><label>Image <span class="hint">(optional${post && post.image_path ? ' - choose a file to replace the current one' : ''})</span></label><input id="bp-image" type="file" accept="image/jpeg,image/png,image/webp,image/gif"></div>
       <div class="hint" id="bp-error"></div>
       <div class="btn-row" style="justify-content:flex-end;">
         <button class="btn secondary" id="bp-cancel">Cancel</button>

@@ -11,7 +11,7 @@
 //   qual:<CODE>                     holds that qualification
 //   board_editor                    looks after at least one board
 
-import { authorNames, sb, State, esc, isAdmin, withStatus } from './core.js?v=20261125145432';
+import { authorNames, sb, State, esc, isAdmin, withStatus } from './core.js?v=20261125162405';
 
 const SECTIONS = [
   ['use', { en: 'Use the archive', it: 'Usare l\'archivio', ur: 'آرکائیو کا استعمال' }],

@@ -7,7 +7,7 @@
 // un'operazione tecnica). RLS impedisce di toccare un task preso da qualcun altro (vedi
 // 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel vincolo, non lo sostituiscono.
 
-import { helpLinkHtml, popupShell, showGoodPracticesModal, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup, errorText } from './core.js?v=20261125145432';
+import { helpLinkHtml, popupShell, showGoodPracticesModal, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup, errorText, archiveFileEnding, asArchiveFile, ARCHIVE_FILE_MAX } from './core.js?v=20261125162405';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -470,9 +470,11 @@ async function uploadCorrectedFile(task, file) {
   const origRows = await withStatus(sb.from('documents').select('*').eq('document_id', task.document_id));
   const orig = origRows[0];
   if (!orig) { alert('Original document not found.'); return; }
-  const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
+  const ext = archiveFileEnding(file);
+  if (!ext) { alert('Please choose an InPage, Word or PDF file (.inp, .doc, .docx, .pdf).'); return; }
+  if (file.size > ARCHIVE_FILE_MAX) { alert('This file is larger than 50 MB.'); return; }
   const draftPath = `draft-${task.document_id}-${task.id}-${Date.now()}.${ext}`;
-  await withStatus(sb.storage.from(BUCKET).upload(draftPath, file), 'Uploading corrected file...');
+  await withStatus(sb.storage.from(BUCKET).upload(draftPath, asArchiveFile(file)), 'Uploading corrected file...');
 
   // save_task_draft (170) makes the draft, or gives it the new file, and checks that the task is one's own. Until 170 has
   // been run it is not there: the old direct change.
@@ -832,7 +834,7 @@ async function refreshFinalizeQueue() {
       if (!file) return;
       const baseName = computeFileName({ document_id: id, title: d.title });
       const finalName = await uniqueFileName(baseName, id);
-      await withStatus(sb.storage.from(BUCKET).upload(finalName, file, { upsert: true }), 'Uploading PDF...');
+      await withStatus(sb.storage.from(BUCKET).upload(finalName, asArchiveFile(file), { upsert: true }), 'Uploading PDF...');
       await withStatus(sb.from('documents').update({ storage_path: finalName, file_name: finalName }).eq('document_id', id), 'Saving...');
       await renderTasksView(document.getElementById('main'));
     });
