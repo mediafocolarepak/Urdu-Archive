@@ -1,5 +1,5 @@
-import { authorNames, dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261125163746';
-import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261125163746';
+import { passwordProblem, authorNames, dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261125165400';
+import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261125165400';
 
 // ---------- Users ----------
 
@@ -104,11 +104,12 @@ export async function renderUsersView(main) {
   // A temporary password for someone who forgot theirs: those who signed up with a mobile number have no email to get
   // a reset link (Edge Function "phone-account", Admins only). The Admin tells the person, who can change it in My Profile.
   main.querySelectorAll('.set-password-btn').forEach(btn => btn.addEventListener('click', async () => {
-    const suggested = String(Math.floor(10000000 + Math.random() * 90000000));
-    const pw = await promptPopup(`New temporary password for ${btn.dataset.login} (at least 6 characters).
+    const suggested = Array.from(crypto.getRandomValues(new Uint8Array(10)), n => 'abcdefghjkmnpqrstuvwxyz23456789'[n % 31]).join('');
+    const pw = await promptPopup(`New temporary password for ${btn.dataset.login} (at least 8 characters).
 Tell it to the person: they can change it in My Profile.`, suggested);
     if (pw == null) return;
-    if (pw.trim().length < 6) { alert('At least 6 characters.'); return; }
+    const weak = passwordProblem(pw.trim());
+    if (weak) { alert(weak); return; }
     const { error } = await withStatus(sb.functions.invoke(PHONE_ACCOUNT_FUNCTION, { body: { action: 'set_password', user_id: btn.dataset.uid, password: pw.trim() } }), 'Saving...').then(() => ({ error: null }), e => ({ error: e }));
     if (error) { alert(`Not saved: ${error.message || error}`); return; }
     alert(`Done. The new password of ${btn.dataset.login} is: ${pw.trim()}`);

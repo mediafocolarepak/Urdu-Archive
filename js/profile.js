@@ -5,7 +5,7 @@
 // reviewed. Deliberately does not import from collaboration.js (project convention: modules
 // only import from core.js), so the skill-chip rendering is duplicated here in small form.
 
-import { sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml, dateOfBirthFieldsHtml, readDateOfBirth, displayLogin, PHONE_LOGIN_DOMAIN, TEXT_SIZES, COLOUR_CHOICES, displayPrefs, saveDisplayPrefs } from './core.js?v=20261125163746';
+import { confirmPopup, passwordProblem, sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml, dateOfBirthFieldsHtml, readDateOfBirth, displayLogin, PHONE_LOGIN_DOMAIN, TEXT_SIZES, COLOUR_CHOICES, displayPrefs, saveDisplayPrefs } from './core.js?v=20261125165400';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -68,6 +68,11 @@ export async function renderMyProfileView(main) {
         <div class="btn-row"><button class="btn" id="pw-save-btn">Update Password</button></div>
         <div id="pw-status" class="hint"></div>
       </details>
+      ${['admin', 'coordinator'].includes(role) && sb.auth.mfa ? '<details class="subpanel profile-section" id="profile-second"><summary>Second step at sign-in</summary><div id="profile-second-body" style="margin-top:8px;"></div></details>' : ''}
+      <details class="subpanel profile-section"><summary>Sign out from all devices</summary>
+        <p>If you lost a phone, or left DUA open on a device that is not yours. You will sign in again on this one too.</p>
+        <div class="btn-row"><button class="btn secondary" id="profile-signout-all">Sign out from all devices</button></div>
+      </details>
       <details class="subpanel profile-section" id="profile-activity">
         <summary>My activity in the archive</summary>
         <div id="profile-activity-body" style="margin-top:8px;"><div class="hint">Loading...</div></div>
@@ -84,6 +89,15 @@ export async function renderMyProfileView(main) {
     renderEditable(document.getElementById('profile-editable'), profile, skillList, storedSkills, otherSkills, user.id, main);
   }
   wireChangePassword();
+  document.getElementById('profile-signout-all').addEventListener('click', async () => {
+    if (!await confirmPopup('Sign out from DUA on every device, this one included?')) return;
+    const { error } = await sb.auth.signOut({ scope: 'global' });
+    if (error) { alert('That did not work. Please check the connection and try again.'); return; }
+    history.replaceState(null, '', location.pathname);
+    location.reload();
+  });
+  const second = document.getElementById('profile-second');
+  second?.addEventListener('toggle', () => { if (second.open) renderSecondStep(document.getElementById('profile-second-body')); });
   const activityBox = document.getElementById('profile-activity');
   activityBox.addEventListener('toggle', async () => {
     if (!activityBox.open) return;
@@ -119,13 +133,56 @@ async function renderDemographics(box, profile, dateOfBirth, main) {
   });
 }
 
+// The second step at sign-in (175_sign_in.sql): a code of an authenticator app, for Admins and Coordinators. Chosen by each.
+async function renderSecondStep(box) {
+  const { data, error } = await sb.auth.mfa.listFactors();
+  if (error) { box.innerHTML = '<p class="hint">This could not be read. Please try again.</p>'; return; }
+  const on = data.totp[0];
+  if (on) {
+    box.innerHTML = `<p>&#10003; On. After the password, DUA asks for the code of your authenticator app.</p>
+      <div class="btn-row"><button class="btn secondary" id="second-off">Turn off</button></div>`;
+    document.getElementById('second-off').addEventListener('click', async () => {
+      if (!await confirmPopup('Turn off the second step? Your account will be protected by the password only.')) return;
+      const { error: e } = await sb.auth.mfa.unenroll({ factorId: on.id });
+      if (e) { alert('That did not work. Sign out, sign in again with the code, and try once more.'); return; }
+      await sb.auth.refreshSession();
+      renderSecondStep(box);
+    });
+    return;
+  }
+  box.innerHTML = `<p>After the password, DUA also asks for a code that only your phone shows. You need an authenticator app, for example Google Authenticator or Microsoft Authenticator.</p>
+    <div class="btn-row"><button class="btn" id="second-on">Turn on</button></div><div id="second-setup"></div>`;
+  document.getElementById('second-on').addEventListener('click', async () => {
+    // A set-up begun and not finished leaves a half factor: it goes before a new one.
+    for (const f of (data.all || []).filter(x => x.status !== 'verified')) await sb.auth.mfa.unenroll({ factorId: f.id });
+    const { data: f, error: e } = await sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'DUA ' + new Date().toISOString().slice(0, 16), issuer: 'DUA' });
+    if (e) { alert('That did not work: ' + e.message); return; }
+    document.getElementById('second-setup').innerHTML = `
+      <ol><li>In the authenticator app, add an account and frame this square.</li><li>Write below the 6 digits it shows.</li></ol>
+      <img alt="Square to frame with the authenticator app" width="200" height="200" style="background:#fff;padding:8px;border-radius:8px;">
+      <p class="hint">On this same phone? Add the account by hand with this key: <code style="overflow-wrap:anywhere;">${esc(f.totp.secret)}</code></p>
+      <div class="field" style="max-width:220px;"><label for="second-first">Code</label><input id="second-first" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7"></div>
+      <div id="second-first-error" class="dob-error" role="alert"></div>
+      <div class="btn-row"><button class="btn" id="second-confirm">Confirm</button></div>`;
+    document.querySelector('#second-setup img').src = f.totp.qr_code;
+    document.getElementById('second-confirm').addEventListener('click', async () => {
+      const code = document.getElementById('second-first').value.replace(/\D/g, '');
+      const { error: e2 } = await sb.auth.mfa.challengeAndVerify({ factorId: f.id, code });
+      if (e2) { document.getElementById('second-first-error').textContent = 'This code is not right, or it has expired. Try the one shown now.'; return; }
+      alert('The second step is on. From the next sign-in, DUA asks for the code after the password.');
+      renderSecondStep(box);
+    });
+  });
+}
+
 function wireChangePassword() {
   document.getElementById('pw-save-btn').addEventListener('click', async () => {
     const status = document.getElementById('pw-status');
     const pw = document.getElementById('pw-new').value;
     const pw2 = document.getElementById('pw-confirm').value;
     status.style.color = 'var(--danger)'; status.textContent = '';
-    if (pw.length < 6) { status.textContent = 'Password must be at least 6 characters.'; return; }
+    const weak = passwordProblem(pw);
+    if (weak) { status.textContent = weak; return; }
     if (pw !== pw2) { status.textContent = 'Passwords do not match.'; return; }
     const { error } = await sb.auth.updateUser({ password: pw });
     if (error) { status.textContent = error.message; return; }
