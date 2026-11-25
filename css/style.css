@@ -11,6 +11,7 @@
   --shadow: 0 1px 3px rgba(43,38,32,0.12);
   --c-start: #955600; --c-library: #3B6B38; --c-myspace: #38489A; --c-share: #7A3868; --c-formation: #1D6A70; --sec-ink: #ffffff;
   --c-boards: #9A3B2F; --c-readings: #6B4FA0; --c-report: #7A5F12; --c-profile: #4A5A6A; --c-books: #1F4E79;
+  --c-work: #A3195B; --c-dept: #0B6E99; --st-red: #A13A2E; --st-amber: #8A5A00; --st-blue: #2457A6; --st-violet: #6B4FA0; --st-green: #2F6B3A; --st-grey: #5E5A54;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -26,6 +27,7 @@
     --shadow: 0 1px 3px rgba(0,0,0,0.4);
     --c-start: #E9AB3C; --c-library: #8FC487; --c-myspace: #A3B2F2; --c-share: #DA9DCB; --c-formation: #7ECBCB; --sec-ink: #1a150d;
     --c-boards: #F0A091; --c-readings: #C4B0F0; --c-report: #E0C56A; --c-profile: #AEBBC8; --c-books: #9EC5EE;
+  --c-work: #F29BC0; --c-dept: #7CC4E8; --st-red: #F0958A; --st-amber: #E5B45A; --st-blue: #8FB8F5; --st-violet: #C4B0F0; --st-green: #8FC487; --st-grey: #B8AE9E;
   }
 }
 :root[data-theme="dark"] {
@@ -34,6 +36,7 @@
   --danger: #e07a68; --shadow: 0 1px 3px rgba(0,0,0,0.4);
   --c-start: #E9AB3C; --c-library: #8FC487; --c-myspace: #A3B2F2; --c-share: #DA9DCB; --c-formation: #7ECBCB; --sec-ink: #1a150d;
   --c-boards: #F0A091; --c-readings: #C4B0F0; --c-report: #E0C56A; --c-profile: #AEBBC8; --c-books: #9EC5EE;
+  --c-work: #F29BC0; --c-dept: #7CC4E8; --st-red: #F0958A; --st-amber: #E5B45A; --st-blue: #8FB8F5; --st-violet: #C4B0F0; --st-green: #8FC487; --st-grey: #B8AE9E;
 }
 :root[data-theme="light"] {
   --bg: #f4f1ea; --panel: #ffffff; --ink: #2b2620; --ink-soft: #6b6255;
@@ -41,6 +44,7 @@
   --danger: #a13a2e; --shadow: 0 1px 3px rgba(43,38,32,0.12);
   --c-start: #955600; --c-library: #3B6B38; --c-myspace: #38489A; --c-share: #7A3868; --c-formation: #1D6A70; --sec-ink: #ffffff;
   --c-boards: #9A3B2F; --c-readings: #6B4FA0; --c-report: #7A5F12; --c-profile: #4A5A6A; --c-books: #1F4E79;
+  --c-work: #A3195B; --c-dept: #0B6E99; --st-red: #A13A2E; --st-amber: #8A5A00; --st-blue: #2457A6; --st-violet: #6B4FA0; --st-green: #2F6B3A; --st-grey: #5E5A54;
 }
 /* Noto Nastaliq Urdu (Google Fonts, OFL) - self-hosted rather than loaded from fonts.gstatic.com
    so the service worker (sw.js) can precache it like every other same-origin asset and it still
@@ -90,10 +94,10 @@ body {
   background: transparent;
   border: 1px solid transparent;
   color: var(--ink-soft);
-  padding: 7px 14px;
+  padding: 7px 10px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 13.5px;
+  font-size: 14.5px;
 }
 .tab-btn:hover { background: var(--accent-soft); color: var(--ink); }
 .tab-btn.active { background: var(--sec, var(--accent)); color: var(--sec-ink, var(--accent-ink)); font-weight: 600; }
@@ -127,9 +131,9 @@ body {
 #good-practices-btn { padding: 4px 10px; }
 
 .good-practices-list { margin: 4px 0 14px; padding-left: 20px; }
-.good-practices-list li { margin-bottom: 8px; font-size: 13.5px; line-height: 1.5; }
+.good-practices-list li { margin-bottom: 8px; font-size: 16px; line-height: 1.5; }
 .avoid-list { margin: 4px 0 0; padding-left: 20px; }
-.avoid-list li { margin-bottom: 8px; font-size: 13.5px; line-height: 1.5; color: var(--danger); }
+.avoid-list li { margin-bottom: 8px; font-size: 16px; line-height: 1.5; color: var(--danger); }
 
 #main { flex: 1; overflow: auto; padding: 16px; }
 
@@ -156,7 +160,7 @@ body {
   font-weight: 600;
 }
 /* Inside a table a button stays the size of its row. */
-table .btn { min-height: 0; }
+table .btn { min-height: 36px; padding: 6px 12px !important; font-size: 15px; }
 .btn:hover { filter: brightness(1.08); }
 .btn.secondary { background: var(--accent-soft); color: var(--ink); }
 .btn.danger { background: var(--danger); color: #fff; }
@@ -195,7 +199,7 @@ label { font-size: 15px; font-weight: 600; color: var(--ink); display: block; ma
 .skill-chip.skill-chip-other { flex-basis: 100%; }
 .skill-chip.skill-chip-other input[type="text"] { width: auto; flex: 1; min-width: 160px; margin: 0; }
 
-table.grid { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.grid { width: 100%; border-collapse: collapse; font-size: 15px; }
 table.grid th, table.grid td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
 table.grid th { position: sticky; top: 0; background: var(--panel); color: var(--ink-soft); cursor: pointer; user-select: none; font-weight: 600; }
 table.grid th:hover { color: var(--accent); }
@@ -310,8 +314,9 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
 
 /* ---------- Boards ---------- */
 .board-pill {
+  min-height: 40px;
   background: transparent; border: 1px solid var(--line); color: var(--ink-soft);
-  padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: 13px;
+  padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: 15px;
 }
 .board-pill:hover { background: var(--accent-soft); color: var(--ink); }
 .board-pill.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; border-color: var(--accent); }
@@ -325,7 +330,7 @@ table.grid tbody tr.selected { background: var(--accent-soft); font-weight: 600;
 .searchbar { display: flex; gap: 8px; margin-bottom: 10px; }
 
 
-.hint { font-size: 14px; color: var(--ink-soft); margin-top: 4px; }
+.hint { font-size: 15px; color: var(--ink-soft); margin-top: 4px; }
 .count-badge { background: var(--accent-soft); color: var(--ink); border-radius: 12px; padding: 2px 9px; font-size: 13px; margin-left: 6px; }
 
 .report-view { background: #fff; color: #1a1a1a; padding: 20px; border-radius: 6px; }
@@ -439,7 +444,7 @@ td.sibling-title.doc-title-ur { font-size: 1.05em; line-height: 2; }
   .fp-reader-nav .btn { min-width: 0; }
   .fp-btn-label { display: none; }
 }
-.overlay-message { white-space: pre-wrap; font-size: 13.5px; line-height: 1.6; margin: 8px 0 4px; }
+.overlay-message { white-space: pre-wrap; font-size: 16px; line-height: 1.6; margin: 8px 0 4px; }
 /* An announcement's language buttons beside its heading, and its Urdu text in Nastaliq (migration 131). */
 .splash-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .splash-head h2 { margin: 0; }
@@ -448,11 +453,11 @@ td.sibling-title.doc-title-ur { font-size: 1.05em; line-height: 2; }
 /* ---------- Chat / messages ---------- */
 .chat-thread { display: flex; flex-direction: column; gap: 10px; max-height: 55vh; overflow: auto; margin-bottom: 14px; }
 .chat-bubble { max-width: 78%; padding: 8px 12px; border-radius: 10px; font-size: 15px; line-height: 1.5; }
-.chat-bubble .chat-meta { font-size: 11px; color: var(--ink-soft); margin-bottom: 3px; }
+.chat-bubble .chat-meta { font-size: 14px; color: var(--ink-soft); margin-bottom: 3px; }
 .chat-bubble.from-user, .chat-bubble.from-me { align-self: flex-end; background: var(--accent); color: var(--accent-ink); }
 .chat-bubble.from-user .chat-meta, .chat-bubble.from-me .chat-meta { color: var(--accent-ink); opacity: .8; }
 .chat-bubble.from-admin, .chat-bubble.from-other { align-self: flex-start; background: var(--accent-soft); color: var(--ink); }
-.chat-tag { display: inline-block; background: var(--accent-soft); color: var(--ink); border-radius: 10px; padding: 1px 8px; font-size: 10.5px; margin-right: 6px; text-transform: uppercase; letter-spacing: .02em; }
+.chat-tag { display: inline-block; background: var(--accent-soft); color: var(--ink); border-radius: 10px; padding: 2px 9px; font-size: 13px; margin-right: 6px; text-transform: uppercase; letter-spacing: .02em; }
 .chat-bubble.from-user .chat-tag, .chat-bubble.from-me .chat-tag { background: rgba(255,255,255,0.25); color: var(--accent-ink); }
 .chat-bubble.pinned { border: 1px solid var(--accent); }
 .dismissed-row { opacity: .55; }
@@ -851,3 +856,85 @@ details.profile-section > div > h3:first-child, details.profile-section .btn-row
 .book-verse { margin: 18px auto 6px; max-width: 40em; padding: 16px 20px; border: 2px solid #d9b45a; border-radius: 12px; background: var(--accent-soft); font-size: 24px; line-height: 2; text-align: center; font-weight: 600; }
 .book-verse[lang="ur"] { font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-weight: 400; font-size: 25px; line-height: 2.2; }
 .book-verse cite { display: block; margin-top: 4px; font-style: normal; font-size: 17px; color: var(--ink-soft); }
+
+/* ---------- Operators, phase 1 (2026-11-25): the work sections look like the readers' ---------- */
+/* Their colour and icon: My work (tasks, proposals) and Department (its tools too). */
+.tab-btn[data-tab="mydepartment"], .bn-btn[data-tab="mydepartment"], #main[data-section="mydepartment"] { --sec: var(--c-dept); }
+#main[data-section="mydepartment"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%2011a3%203%200%201%200%200-6%203%203%200%200%200%200%206zM3%2020a6%206%200%200%201%2012%200M17%2011a3%203%200%201%200%200-6M17%2014a6%206%200%200%201%204%206%22%2F%3E%3C%2Fsvg%3E"); }
+.tab-btn[data-tab="inpageconverter"], .bn-btn[data-tab="inpageconverter"], #main[data-section="inpageconverter"] { --sec: var(--c-dept); }
+#main[data-section="inpageconverter"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%207h13l-3-3M20%2017H7l3%203%22%2F%3E%3C%2Fsvg%3E"); }
+.tab-btn[data-tab="hayat"], .bn-btn[data-tab="hayat"], #main[data-section="hayat"] { --sec: var(--c-dept); }
+#main[data-section="hayat"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%205h16v14H4zM4%2010h16M10%2010v9%22%2F%3E%3C%2Fsvg%3E"); }
+.tab-btn[data-tab="hayateditor"], .bn-btn[data-tab="hayateditor"], #main[data-section="hayateditor"] { --sec: var(--c-dept); }
+#main[data-section="hayateditor"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%205h16v14H4zM4%2010h16M10%2010v9%22%2F%3E%3C%2Fsvg%3E"); }
+.tab-btn[data-tab="matchreview"], .bn-btn[data-tab="matchreview"], #main[data-section="matchreview"] { --sec: var(--c-dept); }
+#main[data-section="matchreview"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%205h16v14H4zM4%2010h16M10%2010v9%22%2F%3E%3C%2Fsvg%3E"); }
+.tab-btn[data-tab="workconsolidation"], .bn-btn[data-tab="workconsolidation"], #main[data-section="workconsolidation"] { --sec: var(--c-dept); }
+#main[data-section="workconsolidation"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%205h16v14H4zM4%2010h16M10%2010v9%22%2F%3E%3C%2Fsvg%3E"); }
+.tab-btn[data-tab="bulkimport"], .bn-btn[data-tab="bulkimport"], #main[data-section="bulkimport"] { --sec: var(--c-dept); }
+#main[data-section="bulkimport"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%205h16v14H4zM4%2010h16M10%2010v9%22%2F%3E%3C%2Fsvg%3E"); }
+.tab-btn[data-tab="deptoverview"], .bn-btn[data-tab="deptoverview"], #main[data-section="deptoverview"] { --sec: var(--c-dept); }
+#main[data-section="deptoverview"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%204h7v7H4zM13%204h7v4h-7zM13%2010h7v10h-7zM4%2013h7v7H4z%22%2F%3E%3C%2Fsvg%3E"); }
+.tab-btn[data-tab="tasks"], .bn-btn[data-tab="tasks"], #main[data-section="tasks"] { --sec: var(--c-work); }
+#main[data-section="tasks"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%206h3M4%2012h3M4%2018h3M10%206h10M10%2012h10M10%2018h10%22%2F%3E%3C%2Fsvg%3E"); }
+.tab-btn[data-tab="proposals"], .bn-btn[data-tab="proposals"], #main[data-section="proposals"] { --sec: var(--c-work); }
+#main[data-section="proposals"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%204v16M4%2012h16%22%2F%3E%3C%2Fsvg%3E"); }
+.tab-btn[data-tab="reports"], .bn-btn[data-tab="reports"], #main[data-section="reports"] { --sec: var(--c-profile); }
+#main[data-section="reports"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%205h16v14H4zM4%2010h16M10%2010v9%22%2F%3E%3C%2Fsvg%3E"); }
+.tab-btn[data-tab="users"], .bn-btn[data-tab="users"], #main[data-section="users"] { --sec: var(--c-profile); }
+#main[data-section="users"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%2011a3%203%200%201%200%200-6%203%203%200%200%200%200%206zM3%2020a6%206%200%200%201%2012%200M17%2011a3%203%200%201%200%200-6M17%2014a6%206%200%200%201%204%206%22%2F%3E%3C%2Fsvg%3E"); }
+.tab-btn[data-tab="options"], .bn-btn[data-tab="options"], #main[data-section="options"] { --sec: var(--c-profile); }
+#main[data-section="options"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%2015a3%203%200%201%200%200-6%203%203%200%200%200%200%206zM12%203v3M12%2018v3M3%2012h3M18%2012h3M5.6%205.6l2.2%202.2M16.2%2016.2l2.2%202.2M18.4%205.6l-2.2%202.2M7.8%2016.2l-2.2%202.2%22%2F%3E%3C%2Fsvg%3E"); }
+.tab-btn[data-tab="announcements"], .bn-btn[data-tab="announcements"], #main[data-section="announcements"] { --sec: var(--c-report); }
+#main[data-section="announcements"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%204h7v7H4zM13%204h7v4h-7zM13%2010h7v10h-7zM4%2013h7v7H4z%22%2F%3E%3C%2Fsvg%3E"); }
+/* A tick box is as large as a tick box, not as its line. */
+input[type="checkbox"]:not(.switch), input[type="radio"] { width: 20px; height: 20px; flex: none; accent-color: var(--accent); vertical-align: middle; }
+/* The team's top bar: the app's name, the credits beside it, the sections below. Email and Sign out are in My Profile. */
+.team-topbar #topbar { padding: 6px 12px; row-gap: 2px; }
+.team-topbar #topbar h1 { order: 1; }
+.team-topbar #status-bar { order: 2; }
+@media (min-width: 901px) { .team-topbar #tabs { order: 3; flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 1px; } }
+.team-topbar .tab-btn { padding: 7px 7px; font-size: 14px; }
+.standing-btn { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 2px 10px; background: transparent; border: 1px solid var(--line); border-radius: 18px; color: var(--ink); font: inherit; font-size: 14px; cursor: pointer; }
+.standing-btn:hover, .standing-btn:focus-visible { border-color: var(--accent); }
+#standing-widget .rep-val { font-size: 14px; }
+@media (max-width: 900px) { .standing-btn .rep-label { display: none; } }
+/* What state a thing is in: always a sign and a word, never only a colour. */
+.st { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 700; color: var(--st, var(--st-grey)); }
+.st-red { --st: var(--st-red); } .st-amber { --st: var(--st-amber); } .st-blue { --st: var(--st-blue); }
+.st-violet { --st: var(--st-violet); } .st-green { --st: var(--st-green); } .st-grey { --st: var(--st-grey); }
+/* Tasks: cards, on every screen. */
+.task-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr)); gap: 12px; }
+.task-card { display: flex; flex-direction: column; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-left: 6px solid var(--sec, var(--accent)); border-radius: 12px; box-shadow: var(--shadow); padding: 14px; min-width: 0; }
+.task-card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 15px; color: var(--ink-soft); }
+.task-card-title { font-size: 18px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.task-card-text { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin: 0; line-height: 1.5; }
+.task-card-facts { font-size: 15px; color: var(--ink-soft); margin-top: auto; }
+.task-card-facts b { color: var(--st-green); }
+.task-card .btn-row { margin: 6px 0 0; }
+.store-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 220px)); gap: 8px 12px; align-items: end; }
+.store-filters .field { margin: 0; }
+.store-filters .btn, .store-filters input, .store-filters select { width: 100% !important; min-height: 44px; }
+@media (max-width: 700px) { .store-filters { grid-template-columns: 1fr 1fr; } .store-filters .field:first-child { grid-column: 1 / -1; } }
+.task-kind { font-weight: 700; color: var(--sec, var(--accent)); }
+.task-item { border-left: 6px solid var(--st, var(--line)); }
+.task-item p { max-width: 75ch; }
+.quick-dates { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+.quick-dates .btn[aria-pressed="true"] { background: var(--sec, var(--accent)); color: var(--sec-ink, var(--accent-ink)); }
+#main[data-section="tasks"], .popup-back[data-section="tasks"] { --sec: var(--c-work); }
+#main[data-section="tasks"] .btn:not(.secondary):not(.danger), #main[data-section="proposals"] .btn:not(.secondary):not(.danger), .popup-back[data-section="tasks"] .btn:not(.secondary):not(.danger) { background: var(--c-work); color: var(--sec-ink); }
+#main[data-section="mydepartment"] .btn:not(.secondary):not(.danger) { background: var(--c-dept); color: var(--sec-ink); }
+.popup-back { position: fixed; inset: 0; z-index: 2100; background: rgba(20,16,10,.55); display: flex; align-items: flex-start; justify-content: center; overflow: auto; padding: 24px 16px; }
+.popup-back > .panel { width: 100%; margin: auto; border-top: 5px solid var(--sec, var(--accent)); zoom: var(--text-zoom, 1); }
+/* The sections of "More": their colour and icon, like their page. */
+.bn-sheet { max-height: 80vh; overflow-y: auto; }
+.bn-sheet-item { display: flex; align-items: center; gap: 12px; font-size: 17px; border-left: 6px solid var(--sec, var(--accent)); background: var(--panel); border-top: 1px solid var(--line); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); color: var(--ink); }
+.btn.secondary.bn-sheet-item { background: var(--panel); }
+.bn-sheet-item svg { color: var(--sec, var(--accent)); flex: none; }
+/* On a computer a document's card stays in sight, with its own scroll, while the list moves (it used to open at the top,
+   out of sight, when the document chosen was far down). --main-h: app.js. */
+@media (min-width: 901px) {
+  .split.split-wide-left > .dash-detail-col { position: sticky; top: 0; max-height: calc((var(--main-h, 80vh) - 24px) / var(--text-zoom, 1)); overflow-y: auto; }
+}
+.load-failed { border-left: 6px solid var(--st-red); }
+.draft-note { color: var(--st-amber); font-weight: 600; }

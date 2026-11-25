@@ -6,7 +6,7 @@
 // People: any department lead or Admin) and from admin.js (per-row "Propose..." buttons that
 // replace the old direct-edit inputs on the reputation-tiers/policy-values/task-category panels).
 
-import { sb, State, esc, withStatus, canProposePolicyChange, canApprovePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261125101955';
+import { sb, State, esc, withStatus, canProposePolicyChange, canApprovePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261125104645';
 
 // Who may propose a change to each policy_values key (GOVERNANCE.md §2.8 "who owns which
 // policy table"). task_category_rates and task_reputation_tiers are Reward's alone.
@@ -60,7 +60,7 @@ export function openPolicyProposalModal({ title, targetTable, targetKey, action,
   backdrop.innerHTML = `
     <div class="panel overlay-panel">
       <h2>${esc(title)}</h2>
-      <p class="hint">This becomes operative only after an Admin who is not you approves it (GOVERNANCE.md §2.8). It stays visible in the pending queue and, either way, in this department's policy history.</p>
+      <p class="hint">This becomes operative only after an Admin who is not you approves it. It stays visible in the pending queue and, either way, in this department's policy history.</p>
       ${proposable.length > 1 ? `<div class="field"><label>Propose as</label>
         <select id="polprop-department">${proposable.map(d => `<option value="${esc(d)}">${esc(deptLabel(d))}</option>`).join('')}</select>
       </div>` : `<input type="hidden" id="polprop-department" value="${esc(proposable[0])}">`}
@@ -128,7 +128,7 @@ export async function renderPolicySection(container, { departmentFilter } = {}) 
 
   const ratesPanel = owns(ownersFor('task_category_rates')) ? `
     <div class="panel">
-      <h2>Task category rates <span class="hint">— credits per page, owned by Reward (GOVERNANCE.md §2.4)</span></h2>
+      <h2>Task category rates <span class="hint">— credits per page, owned by Reward</span></h2>
       <div class="grid-wrap"><table class="grid">
         <thead><tr><th>Category</th><th>Credits/page</th><th>Last updated by</th><th></th></tr></thead>
         <tbody>${rates.map(r => `<tr>
@@ -156,7 +156,7 @@ export async function renderPolicySection(container, { departmentFilter } = {}) 
   const valueRows = values.filter(v => owns(ownersFor('policy_values', v.key)));
   const valuesPanel = valueRows.length ? `
     <div class="panel">
-      <h2>Policy values <span class="hint">— thresholds, ownership varies by key (GOVERNANCE.md §2.8)</span></h2>
+      <h2>Policy values <span class="hint">— thresholds, each owned by its department</span></h2>
       <div class="grid-wrap"><table class="grid">
         <thead><tr><th>Key</th><th>Meaning</th><th>Value</th><th></th></tr></thead>
         <tbody>${valueRows.map(v => `<tr>

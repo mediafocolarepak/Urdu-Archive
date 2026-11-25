@@ -7,7 +7,7 @@
 // un'operazione tecnica). RLS impedisce di toccare un task preso da qualcun altro (vedi
 // 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel vincolo, non lo sostituiscono.
 
-import { helpLinkHtml, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup } from './core.js?v=20261125101955';
+import { helpLinkHtml, popupShell, showGoodPracticesModal, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup } from './core.js?v=20261125104645';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -29,6 +29,27 @@ const CATEGORY_REQUIRES_QUALIFICATION = { IT_UR: 'TRANSLATOR', EN_UR: 'TRANSLATO
 // session notes: the team is volunteers, a silent auto-ban would be the wrong tone here).
 const LOW_REPUTATION_THRESHOLD = 20;
 
+const NEAR_DUE_DAYS = 3;
+function daysTo(due) { return Math.round((new Date(due + 'T00:00') - new Date(today() + 'T00:00')) / 86400000); }
+function stateHtml(t) {
+  const st = (cls, sign, text) => `<span class="st st-${cls}"><span aria-hidden="true">${sign}</span> ${esc(text)}</span>`;
+  const days = n => `${n} day${n === 1 ? '' : 's'}`;
+  if (t.status === 'claimed' && t.due_date) {
+    const d = daysTo(t.due_date);
+    if (d < 0) return st('red', '&#9888;', `Overdue by ${days(-d)}`);
+    if (d === 0) return st('amber', '&#9200;', 'Due today');
+    if (d <= (State.policyValues?.task_near_due_days ?? NEAR_DUE_DAYS)) return st('amber', '&#9200;', `Due in ${days(d)}`);
+    return st('blue', '&#9998;', `In progress, due in ${days(d)}`);
+  }
+  if (t.status === 'claimed') return st('blue', '&#9998;', 'In progress');
+  if (t.status === 'submitted') return st('violet', '&#8987;', 'Waiting for review');
+  if (t.status === 'approved') return st('green', '&#10003;', 'Approved');
+  if (t.status === 'published') return st('green', '&#10003;', t.review_verdict === 'ok_but' ? 'Approved, with a remark' : 'Approved and closed');
+  if (t.status === 'rejected') return st('red', '&#10005;', 'Not accepted');
+  return st('grey', '', STATUS_LABELS[t.status] || t.status);
+}
+const stateClass = t => ({ red: 'st-red', amber: 'st-amber', blue: 'st-blue', violet: 'st-violet', green: 'st-green', grey: 'st-grey' })[(stateHtml(t).match(/st-(\w+)/) || [])[1]] || '';
+
 const STATUS_LABELS = { claimed: 'Claimed', submitted: 'Waiting for review', approved: 'Approved', rejected: 'Rejected', published: 'Published' };
 
 async function fetchOperators() {
@@ -47,6 +68,10 @@ function docLine(t) {
   if (t.document_pages != null) parts.push(`${esc(t.document_pages)} pages`);
   if (t.credits != null) parts.push(`${esc(t.credits)} credits`);
   return parts.length ? `<p class="hint">${parts.join(' · ')}</p>` : '';
+}
+
+function taskFacts(t) {
+  return [t.credits != null ? `<b>${esc(t.credits)} credits</b>` : '', t.document_pages != null ? `${esc(t.document_pages)} page${t.document_pages === 1 ? '' : 's'}` : '', t.document_id ? `Document #${esc(t.document_id)}` : ''].filter(Boolean).join(' &middot; ');
 }
 
 // ---------- Entry point + inner tab bar ----------
@@ -77,11 +102,15 @@ export async function renderTasksView(main) {
   if (!tabs.some(t => t.id === currentView)) currentView = 'store';
 
   main.innerHTML = `
-    <div class="btn-row" style="margin-bottom:16px;">
-      ${tabs.map(t => `<button class="btn ${t.id === currentView ? '' : 'secondary'} tasks-nav-btn" data-view="${t.id}">${t.label}</button>`).join('')}
-      ${helpLinkHtml('tasks')}
+    <div class="panel">
+      <h2>Tasks ${helpLinkHtml('tasks')}</h2>
+      <div class="btn-row" style="margin-bottom:0;">
+        ${tabs.map(t => `<button class="btn ${t.id === currentView ? '' : 'secondary'} tasks-nav-btn" data-view="${t.id}" aria-pressed="${t.id === currentView}">${t.label}</button>`).join('')}
+        ${State.currentRole === 'operator' ? '<button class="btn secondary" id="tasks-good-practices">Good practices</button>' : ''}
+      </div>
     </div>
     <div id="tasks-body"></div>`;
+  document.getElementById('tasks-good-practices')?.addEventListener('click', showGoodPracticesModal);
   main.querySelectorAll('.tasks-nav-btn').forEach(b => b.addEventListener('click', () => {
     currentView = b.dataset.view;
     renderTasksView(main);
@@ -104,16 +133,13 @@ async function renderStoreView(body, manage, admin) {
   let sortDesc = true;
 
   body.innerHTML = `
-    <div class="field-grid" style="align-items:flex-end;">
+    <div class="store-filters">
       <div class="field"><label>Category</label><select id="store-category">${optionsHtml(State.optionListsByName.task_category || [], '', true)}</select></div>
       <div class="field"><label>Min credits</label><input id="store-mincredits" type="number" min="0" style="width:110px;"></div>
       <div class="field"><label>Order</label><button class="btn secondary" id="store-sort-btn">Newest first</button></div>
       ${manage ? '<div class="field"><label>&nbsp;</label><button class="btn" id="store-new-task-btn">+ New task</button></div>' : ''}
     </div>
-    <div class="grid-wrap" style="margin-top:12px;"><table class="grid">
-      <thead><tr><th>ID</th><th>Posted</th><th>Category</th><th>Credits</th><th>Title</th><th colspan="${admin ? 2 : 1}"></th></tr></thead>
-      <tbody id="store-rows"></tbody>
-    </table></div>`;
+    <div class="task-cards" id="store-rows" style="margin-top:12px;"></div>`;
 
   function applyAndRender() {
     const cat = document.getElementById('store-category').value;
@@ -122,26 +148,24 @@ async function renderStoreView(body, manage, admin) {
       .filter(t => (!cat || t.category === cat) && (t.credits || 0) >= minCredits)
       .sort((a, b) => sortDesc ? new Date(b.created_at) - new Date(a.created_at) : new Date(a.created_at) - new Date(b.created_at));
     const tbody = document.getElementById('store-rows');
-    if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">No open tasks match this filter.</td></tr>'; return; }
+    if (!filtered.length) { tbody.innerHTML = `<div class="empty-msg">${rows.length ? 'No open tasks match this filter.' : 'No open tasks right now.'}</div>`; return; }
     tbody.innerHTML = filtered.map(t => `
-      <tr data-id="${t.id}">
-        <td>#${esc(t.id)}</td>
-        <td>${relativeDate(t.created_at)}</td>
-        <td>${esc(labelOf(State.optionListsByName.task_category || [], t.category)) || '—'}</td>
-        <td>${t.credits != null ? esc(t.credits) : '—'}</td>
-        <td>${esc(t.title)}${t.document_id ? ` <span class="hint">Doc #${esc(t.document_id)}</span>` : ''}</td>
-        <td><button class="btn secondary store-claim-btn" style="padding:4px 12px;">Claim</button></td>
-        ${admin ? '<td><button class="btn danger store-withdraw-btn" style="padding:4px 12px;">Withdraw</button></td>' : ''}
-      </tr>`).join('');
+      <div class="task-card" data-id="${t.id}">
+        <div class="task-card-top"><span class="task-kind">${esc(labelOf(State.optionListsByName.task_category || [], t.category)) || 'Task'}</span><span>#${esc(t.id)} &middot; ${relativeDate(t.created_at)}</span></div>
+        <div class="task-card-title" dir="auto">${esc(t.title)}</div>
+        ${t.description ? `<p class="task-card-text" dir="auto">${esc(t.description)}</p>` : ''}
+        <div class="task-card-facts">${taskFacts(t)}</div>
+        <div class="btn-row"><button class="btn store-claim-btn">Claim</button>${admin ? '<button class="btn danger store-withdraw-btn">Withdraw</button>' : ''}</div>
+      </div>`).join('');
     tbody.querySelectorAll('.store-claim-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        const id = btn.closest('tr').dataset.id;
+        const id = btn.closest('.task-card').dataset.id;
         openClaimPopup(filtered.find(x => String(x.id) === id));
       });
     });
     tbody.querySelectorAll('.store-withdraw-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const id = btn.closest('tr').dataset.id;
+        const id = btn.closest('.task-card').dataset.id;
         const t = filtered.find(x => String(x.id) === id);
         if (!await confirmPopup(`Withdraw "${t.title}" from the Store? It moves to Withdrawn Tasks, where it can be re-enabled later.`)) return;
         await withStatus(sb.from('tasks').update({ status: 'withdrawn' }).eq('id', id), 'Withdrawing...');
@@ -180,25 +204,40 @@ async function taskStep(fn, args, oldWay, busyText) {
 }
 
 function openClaimPopup(t) {
-  document.getElementById('claim-task-popup')?.remove();
-  const overlay = document.createElement('div');
-  overlay.id = 'claim-task-popup';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:2100;background:rgba(20,16,10,.55);display:flex;align-items:center;justify-content:center;overflow:auto;padding:24px 16px;';
-  overlay.innerHTML = '<div class="panel" style="max-width:420px;width:100%;margin:0;"></div>';
-  document.body.appendChild(overlay);
-  const panel = overlay.querySelector('.panel');
-  const close = () => overlay.remove();
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  const { panel, close } = popupShell('claim-task-popup', { width: 560, label: 'Claim task', section: 'tasks' });
+  const plus = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
   panel.innerHTML = `
     <h2 style="margin-top:0;">Claim task <span class="hint">#${esc(t.id)}</span></h2>
-    <p>${esc(t.title)}</p>
-    ${docLine(t)}
-    <div class="field"><label>Your target due date</label><input id="claim-due" type="date" min="${today()}"></div>
+    <div class="task-card-title" dir="auto">${esc(t.title)}</div>
+    <div class="task-card-facts" style="margin:4px 0 8px;">${esc(labelOf(State.optionListsByName.task_category || [], t.category))}${t.category ? ' &middot; ' : ''}${taskFacts(t)}</div>
+    <p style="white-space:pre-wrap;margin:0 0 12px;" dir="auto">${t.description ? esc(t.description) : '<span class="hint">No description was written for this task.</span>'}</p>
+    ${t.document_id ? '<div class="btn-row" style="margin-top:0;"><button class="btn secondary" id="claim-doc">Look at the document</button></div>' : ''}
+    <div class="field">
+      <label for="claim-due">When can you finish it?</label>
+      <div class="quick-dates" role="group" aria-label="When can you finish it?">
+        <button type="button" class="btn secondary" data-days="7" aria-pressed="false">1 week</button>
+        <button type="button" class="btn secondary" data-days="14" aria-pressed="false">2 weeks</button>
+        <button type="button" class="btn secondary" data-days="30" aria-pressed="false">1 month</button>
+      </div>
+      <input id="claim-due" type="date" min="${today()}" style="max-width:240px;">
+      <div class="hint">The date stays fixed. If you cannot make it, give the task up in time: it does not affect your standing.</div>
+    </div>
     <div class="btn-row"><button class="btn" id="claim-confirm">Claim</button><button class="btn secondary" id="claim-cancel">Cancel</button></div>`;
+  const dueInput = panel.querySelector('#claim-due');
+  const marks = () => panel.querySelectorAll('[data-days]').forEach(b => b.setAttribute('aria-pressed', String(dueInput.value === plus(+b.dataset.days))));
+  panel.querySelectorAll('[data-days]').forEach(b => b.addEventListener('click', () => { dueInput.value = plus(+b.dataset.days); marks(); }));
+  dueInput.addEventListener('input', marks);
+  panel.querySelector('#claim-doc')?.addEventListener('click', () => {
+    close();
+    State.selectedDocId = t.document_id;
+    State.dashOpenDetail = true;
+    window.__renderTab('dashboard');
+  });
   panel.querySelector('#claim-cancel').addEventListener('click', close);
   panel.querySelector('#claim-confirm').addEventListener('click', async () => {
     const due = panel.querySelector('#claim-due').value;
-    if (!due) { alert('Please set a target due date before claiming.'); return; }
+    if (!due) { alert('Please choose the date by which you can finish.'); return; }
+    if (due < today()) { alert('Please choose a date from today on.'); return; }
     const { data: { user } } = await sb.auth.getUser();
     await taskStep('claim_task', { p_task_id: t.id, p_due_date: due }, () => sb.from('tasks').update({
       status: 'claimed', claimed_by: user.id, claimed_by_email: user.email,
@@ -216,14 +255,7 @@ function openNewTaskPopup(operators) {
   const prefill = State.taskPrefill;
   State.taskPrefill = null;
 
-  const overlay = document.createElement('div');
-  overlay.id = 'new-task-popup';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:2100;background:rgba(20,16,10,.55);display:flex;align-items:center;justify-content:center;overflow:auto;padding:24px 16px;';
-  overlay.innerHTML = '<div class="panel" style="max-width:560px;width:100%;margin:0;"></div>';
-  document.body.appendChild(overlay);
-  const panel = overlay.querySelector('.panel');
-  const close = () => overlay.remove();
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  const { panel, close } = popupShell('new-task-popup', { width: 680, label: 'New task', section: 'tasks' });
 
   panel.innerHTML = `
     <h2 style="margin-top:0;">New task</h2>
@@ -394,7 +426,7 @@ async function toggleLedger(user) {
       <div class="field-grid">
         <div class="field"><label>Earned</label><div style="font-size:20px;font-weight:600;">${esc(earned)}</div></div>
         <div class="field"><label>In progress <span class="hint">(if approved)</span></label><div style="font-size:20px;font-weight:600;">${esc(inProgress)}</div></div>
-        <div class="field"><label>Redeemed <span class="hint">(published)</span></label><div style="font-size:20px;font-weight:600;">${esc(redeemedTotal)}</div></div>
+        <div class="field"><label>Of tasks closed <span class="hint">(not a payment)</span></label><div style="font-size:20px;font-weight:600;">${esc(redeemedTotal)}</div></div>
       </div>
     </div>`;
 }
@@ -479,12 +511,12 @@ function renderMineActiveList(rows, candidateByTaskId) {
     const hasCandidate = !!candidateByTaskId[t.id];
     const needsFile = t.document_id;
     return `
-    <div class="panel" data-id="${t.id}" style="margin-bottom:12px;position:relative;${isOverdue(t) ? 'border-color:var(--danger);' : ''}">
-      ${taskIdBadge(t)}
-      <b>${esc(t.title)}</b> ${isOverdue(t) ? '<span class="chat-tag" style="color:var(--danger);">Overdue</span>' : ''}
+    <div class="panel task-item ${stateClass(t)}" data-id="${t.id}" style="margin-bottom:12px;">
+      <div class="task-card-top">${stateHtml(t)}<span>#${esc(t.id)}</span></div>
+      <div class="task-card-title" dir="auto">${esc(t.title)}</div>
       ${docLine(t)}
-      ${t.description ? `<p>${esc(t.description)}</p>` : ''}
-      <p class="hint">Due ${formatDate(t.due_date)} <span class="hint">(fixed when you claimed it)</span></p>
+      ${t.description ? `<p style="white-space:pre-wrap;" dir="auto">${esc(t.description)}</p>` : ''}
+      <p class="hint">Due ${formatDate(t.due_date)} (fixed when you claimed it)</p>
       ${needsFile ? `
         <div class="btn-row">
           <button class="btn secondary task-mine-download">Download original file</button>
@@ -529,10 +561,11 @@ function renderMineSubmittedList(rows) {
   const box = document.getElementById('mine-submitted-list');
   if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing waiting for review.</div>'; return; }
   box.innerHTML = rows.map(t => `
-    <div class="panel" style="margin-bottom:12px;position:relative;">
-      ${taskIdBadge(t)}
-      <b>${esc(t.title)}</b>
+    <div class="panel task-item st-violet" style="margin-bottom:12px;">
+      <div class="task-card-top">${stateHtml(t)}<span>#${esc(t.id)}</span></div>
+      <div class="task-card-title" dir="auto">${esc(t.title)}</div>
       ${docLine(t)}
+      ${t.submitted_at ? `<p class="hint">Sent ${relativeDate(t.submitted_at)}</p>` : ''}
       <p class="hint">A Revisor will look at this next - no action needed from you for now.</p>
     </div>`).join('');
 }
@@ -540,12 +573,19 @@ function renderMineSubmittedList(rows) {
 function renderMineClosedList(rows) {
   const box = document.getElementById('mine-closed-list');
   if (!rows.length) { box.innerHTML = '<div class="empty-msg">Nothing closed yet.</div>'; return; }
-  box.innerHTML = rows.slice(0, 30).map(t => `
-    <div class="panel" style="margin-bottom:12px;position:relative;opacity:.8;">
-      ${taskIdBadge(t)}
-      <div class="chat-meta">${esc(t.title)} · ${esc(STATUS_LABELS[t.status] || t.status)}${t.review_verdict ? ` (${esc(t.review_verdict)})` : ''}</div>
-      ${t.review_notes ? `<p class="hint">${esc(t.review_notes)}</p>` : ''}
-    </div>`).join('');
+  const PAGE = 30;
+  let shown = PAGE;
+  const draw = () => {
+    box.innerHTML = rows.slice(0, shown).map(t => `
+    <div class="panel task-item ${stateClass(t)}" style="margin-bottom:12px;">
+      <div class="task-card-top">${stateHtml(t)}<span>#${esc(t.id)}</span></div>
+      <div class="task-card-title" dir="auto">${esc(t.title)}</div>
+      ${docLine(t)}
+      ${t.review_notes ? `<p style="white-space:pre-wrap;margin:6px 0 0;" dir="auto"><b>The Revisor's note:</b> ${esc(t.review_notes)}</p>` : ''}
+    </div>`).join('') + (rows.length > shown ? `<div class="btn-row"><button class="btn secondary" id="mine-closed-more">Show more (${rows.length - shown})</button></div>` : '');
+    document.getElementById('mine-closed-more')?.addEventListener('click', () => { shown += PAGE; draw(); });
+  };
+  draw();
 }
 
 // ---------- Team overview: Coordinator/Admin, everyone else's tasks (active + history) ----------

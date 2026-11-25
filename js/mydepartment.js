@@ -6,11 +6,11 @@
 import {
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, likeSafe, labelOf,
   nameMapForEmails, nameMapForIds, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved,
-  helpLinkHtml, confirmPopup, promptPopup
-} from './core.js?v=20261125101955';
-import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261125101955';
-import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261125101955';
-import { renderApplicationsView } from './collaboration.js?v=20261125101955';
+  helpLinkHtml, confirmPopup, promptPopup, showLoadFailed
+} from './core.js?v=20261125104645';
+import { renderPolicySection, openPolicyProposalModal } from './policy.js?v=20261125104645';
+import { renderPeopleSection, renderPendingDecisions } from './people.js?v=20261125104645';
+import { renderApplicationsView } from './collaboration.js?v=20261125104645';
 
 // Each department's page opens its own guide from the "?" beside the title.
 const DEPT_GUIDES = { HR: 'dept-hr', COORD: 'dept-coordination', FORM: 'dept-formation', RF: 'dept-reward', COMM: 'dept-communication', ARCHIVE: 'dept-archive' };
@@ -67,52 +67,60 @@ export async function renderMyDepartmentView(main) {
     });
   }
 
-  await renderDepartmentStatus(document.getElementById('mydept-status-box'), selected);
-  await renderRoster(selected);
-  await renderDeptChannel(document.getElementById('mydept-channel-box'), selected);
+  // Every part loads by itself, all together: one that cannot be read says so, with Try again, and the others are there.
+  const parts = [];
+  const part = (boxId, draw) => {
+    const box = document.getElementById(boxId);
+    if (!box) return;
+    const run = async () => { try { await draw(box); } catch (e) { if (box.isConnected) showLoadFailed(box, e, run); } };
+    parts.push(run());
+  };
+  part('mydept-status-box', box => renderDepartmentStatus(box, selected));
+  part('mydept-roster-box', () => renderRoster(selected));
+  part('mydept-channel-box', box => renderDeptChannel(box, selected));
   // HR's work starts with Team Applications (screening candidates before they're even Operators)
   // and continues with the People roster (GOVERNANCE.md §6.2) once they're on the team - both
   // belong here, per the owner's request 2026-09-17/18, so an HR lead doesn't have to bounce
   // between My Department and two separate standalone tabs. Reused as-is (same component the
   // standalone Team Applications tab uses), not duplicated.
-  if (selected === 'HR') await renderApplicationsView(document.getElementById('mydept-applications-box'));
-  if (selected === 'HR') await renderPeopleSection(document.getElementById('mydept-people-box'));
+  part('mydept-applications-box', box => renderApplicationsView(box));
   // Pending decisions (people_decisions - suspend/reinstate/qualification/role-change proposals)
   // used to live only in the standalone People tab; that tab is gone now (owner's request
   // 2026-09-20, redundant with this page), so it's embedded here instead.
-  if (selected === 'HR') await renderPendingDecisions();
+  part('mydept-people-box', async box => { await renderPeopleSection(box); await renderPendingDecisions(); });
   // Reward needs to see credits in circulation to tune rates/tiers and, later, plan compensation
   // runs (GOVERNANCE.md §6.4, migration 88) - same numbers Admin already sees in Tasks -> Budget,
   // read-only here (topping up the budget stays an Owner/Admin action, decision matrix row 16).
-  if (selected === 'RF') await renderRewardCredits(document.getElementById('mydept-credits-box'));
+  part('mydept-credits-box', box => renderRewardCredits(box));
   // GOVERNANCE.md §6.4 (migration 91): "credits earned" vs "credits paid" reconciliation and an
   // anomaly report - the two pieces migration 88 left open.
-  if (selected === 'RF') await renderCompensationRuns(document.getElementById('mydept-compensation-box'));
-  if (selected === 'RF') await renderRewardAnomalies(document.getElementById('mydept-anomalies-box'));
+  part('mydept-compensation-box', box => renderCompensationRuns(box));
+  part('mydept-anomalies-box', box => renderRewardAnomalies(box));
   // Tokens of appreciation (docs/TOKEN_POLICY.md, migration 127): what people gave outside tasks.
-  if (selected === 'RF') await renderRewardTokens(document.getElementById('mydept-tokens-box'));
+  part('mydept-tokens-box', box => renderRewardTokens(box));
   // Coordination needs a live flow overview - counts plus who to follow up with - since
   // Tasks -> Team overview (js/tasks.js) only ever shows a filtered list, no counts, and
   // excludes open (unclaimed) tasks entirely. Read-only here: reassigning/reclaiming a task
   // stays in Team overview, which already does it correctly against the real RLS.
-  if (selected === 'COORD') await renderCoordinationOverview(document.getElementById('mydept-tasks-box'));
+  part('mydept-tasks-box', box => renderCoordinationOverview(box));
   // Formation needs the pipeline (what's being written, what's published) and a way into each
   // path to actually coordinate/help - a FORM lead already has full read access to every path
   // (including drafts) and the formatori-only chat channel via existing RLS (is_any_formatore()
   // == FORM membership since migration 80), so no new migration is needed here, only the view.
-  if (selected === 'FORM') await renderFormationPipeline(document.getElementById('mydept-formation-box'));
-  if (selected === 'FORM' && canManageReserved()) await renderReservedAccess(document.getElementById('mydept-reserved-box'));
+  part('mydept-formation-box', box => renderFormationPipeline(box));
+  part('mydept-reserved-box', box => renderReservedAccess(box));
   // Communication authors the "Start Here" cards (95_onboarding_and_share_with_us.sql) from here -
   // onboarding.js only ever reads onboarding_cards, this is the one place that writes it.
-  if (selected === 'COMM') await renderOnboardingCardsManager(document.getElementById('mydept-onboarding-box'));
+  part('mydept-onboarding-box', box => renderOnboardingCardsManager(box));
   // "Archive & Data" department (owner's request 2026-09-20): the cataloguing tools that used to be a flat,
   // qualification-gated set of Operator tabs (Hayat Index/Match Review/Work Consolidation/Hayat
   // Editor/Bulk Import) are now grouped here for whoever is a member of this department - launch
   // buttons only, the tools themselves stay their own tabs/modules (window.__renderTab, same
   // escape hatch docdetail.js/onboarding.js already use to jump tabs without a circular import).
-  if (selected === 'ARCHIVE') renderArchiveTools(document.getElementById('mydept-archive-box'));
-  if (selected === 'ARCHIVE' && isAdmin()) await renderTranslationPromptEditor(document.getElementById('mydept-translation-box'));
-  await renderPolicySection(document.getElementById('mydept-policy-box'), { departmentFilter: selected });
+  part('mydept-archive-box', box => renderArchiveTools(box));
+  part('mydept-translation-box', box => renderTranslationPromptEditor(box));
+  part('mydept-policy-box', box => renderPolicySection(box, { departmentFilter: selected }));
+  await Promise.all(parts);
 }
 
 // ---------- "Department Pulse" (migration 98, owner's request 2026-09-20) ----------
@@ -142,6 +150,7 @@ async function renderDepartmentStatus(box, code) {
   const status = statusRows[0] || { status: 'on_track', note: null, updated_by_email: null, updated_at: null };
   const meta = STATUS_META[status.status] || STATUS_META.on_track;
   const suggestion = suggestionRows[0] || null;
+  const updatedBy = status.updated_by_email ? (await nameMapForEmails([status.updated_by_email]))[status.updated_by_email] : '';
 
   const priorityRow = p => `
     <div class="btn-row" style="align-items:center;justify-content:space-between;padding:4px 0;${p.done ? 'opacity:.6;' : ''}">
@@ -160,7 +169,7 @@ async function renderDepartmentStatus(box, code) {
         ${canManage ? '<button class="btn secondary" id="dept-status-edit">Update status</button>' : ''}
       </div>
       ${status.note ? `<p style="margin:6px 0 0;">${esc(status.note)}</p>` : (canManage ? '<p class="hint" style="margin:6px 0 0;">No note yet - click "Update status" to add one.</p>' : '')}
-      ${status.updated_at ? `<p class="hint" style="margin:4px 0 0;">Updated by ${esc(status.updated_by_email) || '—'} on ${esc((status.updated_at || '').slice(0, 10))}</p>` : ''}
+      ${status.updated_at ? `<p class="hint" style="margin:4px 0 0;">Updated by ${esc(updatedBy) || '—'} on ${esc((status.updated_at || '').slice(0, 10))}</p>` : ''}
       ${suggestion ? `<p class="hint" style="margin:4px 0 0;">Data suggests: <strong>${esc(STATUS_META[suggestion.suggested]?.label || suggestion.suggested)}</strong> — ${esc(suggestion.reason)}</p>` : ''}
       <h3 style="margin:14px 0 4px;">Priorities</h3>
       <div id="dept-priorities-list">${priorities.length ? priorities.map(priorityRow).join('') : '<p class="hint">Nothing pinned right now.</p>'}</div>
@@ -473,7 +482,7 @@ async function renderTranslationPromptEditor(box) {
     <div class="panel">
       <h2>Translation prompt <span class="hint">&mdash; what the Translate button copies</span></h2>
       <p class="hint">Saving adds a new version; older ones are kept and the newest is the one in force. Keep it in step with the style guide: when the manual changes a canonical term, change it here and say in one line what changed.</p>
-      ${active ? '' : '<p class="hint" style="color:var(--danger, #b3261e);">No prompt in the database yet - run migration 106, or paste one below and save it as the first version.</p>'}
+      ${active ? '' : '<p class="hint" style="color:var(--danger, #b3261e);">No prompt in the database yet: paste one below and save it as the first version.</p>'}
       <div class="field"><label>Version</label><input id="tp-version" value="${esc(active ? active.version : '')}" placeholder="e.g. prompt-core v3 (2026-11-02, manual v3.5)"></div>
       <div class="field"><label>Prompt</label><textarea id="tp-body" rows="18" style="width:100%;font-size:12.5px;">${esc(active ? active.body : '')}</textarea></div>
       <div class="field"><label>What changed <span class="hint">(one line)</span></label><input id="tp-note"></div>
@@ -631,7 +640,7 @@ async function renderCoordinationOverview(box) {
   box.innerHTML = `
     ${pendingExtraCredits.length ? `<div class="panel">
       <h2>Extra credits awaiting approval <span class="count-badge">${pendingExtraCredits.length}</span></h2>
-      <p class="hint">Above the policy threshold (My Department &rarr; Policy, GOVERNANCE.md §8.3) - can't be given a passing review verdict until approved here. The proposer can't approve their own task.</p>
+      <p class="hint">Above the threshold shown in Policy, below: these tasks can't be given a passing review verdict until approved here. The proposer can't approve their own task.</p>
       <div class="grid-wrap"><table class="grid">
         <thead><tr><th>Task</th><th>Category</th><th>Base</th><th>Extra</th><th>Reason</th><th>Proposed by</th><th></th></tr></thead>
         <tbody>${pendingExtraCredits.map(extraCreditsRowHtml).join('')}</tbody>
@@ -674,7 +683,7 @@ async function renderRewardCredits(box) {
 
   box.innerHTML = `
     <div class="panel">
-      <h2>Credits in circulation <span class="hint">— live, GOVERNANCE.md §6.4</span></h2>
+      <h2>Credits in circulation <span class="hint">— as they are now</span></h2>
       <p class="hint">Every credit currently posted, claimed, awaiting review, or already published - useful for tuning rates and reputation tiers (Policy, below), and later for planning compensation runs.</p>
       <div class="field-grid">
         ${tile('Budget', o.budget)}
@@ -738,7 +747,7 @@ async function renderCompensationRuns(box) {
 
   box.innerHTML = `
     <div class="panel">
-      <h2>Compensation runs <span class="hint">— GOVERNANCE.md §6.4, decision matrix row 15</span></h2>
+      <h2>Compensation runs</h2>
       <p class="hint">Records that credits were converted to money - it never moves money itself, only the record that a payment happened. ${isRfMember() ? '<button class="btn" id="mydept-new-comp-run-btn" style="margin-left:8px;">New compensation run</button>' : ''}</p>
       <div class="grid-wrap"><table class="grid">
         <thead><tr><th>Period</th><th>Lines</th><th>Status</th><th>Prepared by</th><th></th></tr></thead>
@@ -854,7 +863,7 @@ async function renderRewardAnomalies(box) {
 
   box.innerHTML = `
     <div class="panel">
-      <h2>Anomaly report <span class="hint">— GOVERNANCE.md §2.4/§6.4</span></h2>
+      <h2>Anomaly report</h2>
 
       <h3>Tasks with extra credits <span class="count-badge">${extraCreditTasks.length}</span></h3>
       <div class="grid-wrap"><table class="grid">
@@ -900,7 +909,7 @@ async function renderRewardTokens(box) {
 
   box.innerHTML = `
     <div class="panel">
-      <h2>Tokens of appreciation <span class="hint">— docs/TOKEN_POLICY.md</span></h2>
+      <h2>Tokens of appreciation</h2>
       <p class="hint">Given by themselves when a proposal or a reading is published, by its pages or minutes. Tokens are never money. How many tokens a page, a minute or a unit is worth is set in Policy values below; while a value is 0, the tokens wait${waiting ? ` (${waiting} entries waiting now)` : ''}, and they are counted as soon as the value is approved.</p>
 
       <h3>Who gave <span class="count-badge">${people.length}</span></h3>
@@ -957,7 +966,7 @@ async function renderRewardTokens(box) {
       <div id="tok-thanks-box"></div>
 
       <h3 style="margin-top:16px;">A batch of Urdu title answers received</h3>
-      <p class="hint">One unit for each batch a reviewer sends (docs/TOKEN_POLICY.md §2). Someone else in Reward gives it for your own answers.</p>
+      <p class="hint">One unit for each batch a reviewer sends. Someone else in Reward gives it for your own answers.</p>
       <div class="field-grid">
         <div class="field"><label>Reviewer's email</label><input id="tok-titles-email" type="email" autocomplete="off"></div>
         <div class="field"><label>Which batch</label><input id="tok-titles-note" placeholder="for example: the file of 12 November, Titles filter"></div>
@@ -1055,20 +1064,22 @@ async function renderRoster(code) {
   for (const p of profileRows) profileByUid[p.user_id] = p;
   for (const r of rosterRows) profileByUid[r.user_id] = { ...profileByUid[r.user_id], user_id: r.user_id, full_name: r.full_name || profileByUid[r.user_id]?.full_name };
   const lead = memberRows.find(r => r.is_lead);
+  // Logins are for Coordinators and Admins: for the others the column would hold only their own.
+  const anyEmail = profileRows.length > 1 || isAdmin();
   const leadName = lead ? (profileByUid[lead.user_id]?.full_name || profileByUid[lead.user_id]?.email || '(name not set)') : '(none yet)';
 
   box.innerHTML = `
     <div class="panel">
       <h2>Team <span class="count-badge">${memberRows.length}</span></h2>
-      <p class="hint">Lead: <strong>${esc(leadName)}</strong>${canManage ? ' <span class="hint">— appointing or replacing the lead is done from Options &rarr; Departments (Admin), see GOVERNANCE.md §2.8/§4 row 8</span>' : ''}</p>
+      <p class="hint">Lead: <strong>${esc(leadName)}</strong>${canManage ? ' <span class="hint">— appointing or replacing the lead is done from Options &rarr; Departments (Admin)</span>' : ''}</p>
       <div class="grid-wrap"><table class="grid">
-        <thead><tr><th>Name</th><th>Email</th><th></th></tr></thead>
+        <thead><tr><th>Name</th>${anyEmail ? '<th>Email</th>' : ''}${canManage ? '<th></th>' : ''}</tr></thead>
         <tbody>${memberRows.map(r => {
           const p = profileByUid[r.user_id] || {};
           return `<tr>
             <td>${esc(p.full_name) || '(no name)'}${r.is_lead ? ' <strong>(lead)</strong>' : ''}</td>
-            <td>${esc(p.email)}</td>
-            <td>${canManage && !r.is_lead ? `<button class="btn danger mydept-remove-btn" data-uid="${esc(r.user_id)}" style="padding:2px 8px;">Remove</button>` : ''}</td>
+            ${anyEmail ? `<td>${esc(p.email)}</td>` : ''}
+            ${canManage ? `<td>${!r.is_lead ? `<button class="btn danger mydept-remove-btn" data-uid="${esc(r.user_id)}" style="padding:2px 8px;">Remove</button>` : ''}</td>` : ''}
           </tr>`;
         }).join('') || '<tr><td colspan="3" class="hint">No members yet.</td></tr>'}</tbody>
       </table></div>

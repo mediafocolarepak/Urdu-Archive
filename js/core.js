@@ -727,20 +727,23 @@ const AVOID_LIST = [
 
 function repClass(rep) { return rep >= 70 ? 'rep-good' : rep >= 40 ? 'rep-ok' : 'rep-low'; }
 
+// One small button beside the app's name: the credits, and how the good practice is going. A tap opens the good practices.
 function renderStandingWidget(credits, reputation) {
   const box = document.getElementById('standing-widget');
   if (!box) return;
+  const rep = Math.max(0, Math.min(100, reputation ?? 70));
   box.style.display = 'flex';
   box.innerHTML = `
-    <span class="credits-badge">${esc(credits ?? 0)} credits</span>
-    <span class="rep-label hint">Good practice</span>
-    <span class="rep-track"><span class="rep-fill ${repClass(reputation ?? 70)}" style="width:${Math.max(0, Math.min(100, reputation ?? 70))}%;"></span></span>
-    <span class="rep-val">${esc(reputation ?? 70)}</span>
-    <button class="btn secondary" id="good-practices-btn">Good practices</button>`;
+    <button type="button" class="standing-btn" id="good-practices-btn" title="Good practices" aria-label="${esc(credits ?? 0)} credits. Good practice: ${rep} out of 100. Open the good practices">
+      <span class="credits-badge">${esc(credits ?? 0)} credits</span>
+      <span class="rep-label">Good practice</span>
+      <span class="rep-track"><span class="rep-fill ${repClass(rep)}" style="width:${rep}%;"></span></span>
+      <span class="rep-val">${rep}</span>
+    </button>`;
   document.getElementById('good-practices-btn').addEventListener('click', showGoodPracticesModal);
 }
 
-function showGoodPracticesModal() {
+export function showGoodPracticesModal() {
   const backdrop = document.createElement('div');
   backdrop.className = 'overlay-backdrop';
   backdrop.innerHTML = `
@@ -1348,7 +1351,35 @@ function dialogShell(id, title, message, extraHtml, buttonsHtml) {
       <div class="btn-row app-dialog-buttons">${buttonsHtml}</div>
     </div>`;
   document.body.appendChild(backdrop);
+  // Esc answers like the first button: No, Cancel, or OK where there is nothing else. The keyboard then goes back to where it was.
+  const before = document.activeElement;
+  backdrop.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); backdrop.querySelector('.app-dialog-buttons .btn')?.click(); } });
+  new MutationObserver((_, o) => { if (!backdrop.isConnected) { o.disconnect(); if (before && before.isConnected) before.focus(); } }).observe(document.body, { childList: true });
   return backdrop;
+}
+// A window of the app's own: Esc or a tap outside closes it, the keyboard stays inside it and then goes back where it was.
+export function popupShell(id, { width = 520, label = '', section = '' } = {}) {
+  document.getElementById(id)?.remove();
+  const before = document.activeElement;
+  const back = document.createElement('div');
+  back.id = id;
+  back.className = 'popup-back';
+  if (section) back.dataset.section = section;
+  back.innerHTML = `<div class="panel" role="dialog" aria-modal="true" aria-label="${esc(label)}" tabindex="-1" style="max-width:${width}px;"></div>`;
+  document.body.appendChild(back);
+  const panel = back.firstElementChild;
+  const close = () => { back.remove(); if (before && before.isConnected) before.focus(); };
+  back.addEventListener('mousedown', e => { if (e.target === back) close(); });
+  back.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.stopPropagation(); close(); return; }
+    if (e.key !== 'Tab') return;
+    const all = [...panel.querySelectorAll('button, input, select, textarea, a[href]')].filter(x => !x.disabled && x.offsetParent !== null);
+    if (!all.length) return;
+    if (e.shiftKey && (document.activeElement === all[0] || document.activeElement === panel)) { e.preventDefault(); all[all.length - 1].focus(); }
+    else if (!e.shiftKey && document.activeElement === all[all.length - 1]) { e.preventDefault(); all[0].focus(); }
+  });
+  panel.focus();
+  return { panel, close };
 }
 export function confirmPopup(message, { title = '', danger = false, confirmLabel = 'Yes', cancelLabel } = {}) {
   const noLabel = cancelLabel || (confirmLabel === 'Yes' ? 'No' : 'Cancel');
@@ -1388,6 +1419,36 @@ export function alertPopup(message, { title = '' } = {}) {
   });
 }
 window.alert = message => { alertPopup(message); };
+
+// When something does not work, say so (until 2026-11-25 only a small line in the top bar did, and many buttons seemed to
+// do nothing). In plain words: what happened and what to do. What a function of the database answers is shown as it is.
+export function errorText(e) {
+  const message = String((e && e.message) || e || '');
+  if (/failed to fetch|networkerror|load failed|network request failed/i.test(message)) return 'The connection did not work. Please check it and try again.';
+  if (e && e.code === 'P0001') return message;
+  if (e && (e.code === '42501' || /row-level security|permission denied/i.test(message))) return 'You do not have permission for this. If you think you should, please tell a Coordinator or an Admin.';
+  if (/jwt|session|refresh token/i.test(message)) return 'Your sign-in has expired. Please sign out from My Profile and sign in again.';
+  return 'That did not work. Please try again. If it happens again, use "Report a problem".' + (message ? `\n\n(${message})` : '');
+}
+// Every request that nobody handles ends here; one message at a time.
+let errorShown = false;
+window.addEventListener('unhandledrejection', event => {
+  const e = event.reason;
+  const fromServer = e && typeof e === 'object' && ('hint' in e || 'details' in e || 'statusCode' in e || e.name === 'StorageApiError' || e.name === 'AuthApiError');
+  if (!fromServer && !/failed to fetch|networkerror|load failed/i.test(String((e && e.message) || ''))) return;
+  event.preventDefault();
+  console.error(e);
+  if (errorShown) return;
+  errorShown = true;
+  alertPopup(errorText(e)).then(() => { errorShown = false; });
+});
+// Instead of a part of the screen that could not be read: what happened, and Try again.
+export function showLoadFailed(box, e, again) {
+  console.error(e);
+  if (!box) return;
+  box.innerHTML = `<div class="panel load-failed"><p style="margin:0 0 10px;white-space:pre-wrap;">${esc(errorText(e))}</p><button class="btn secondary">Try again</button></div>`;
+  box.querySelector('button').addEventListener('click', again);
+}
 
 // Text size and colours for this device (Owner's request, 2026-11-23), chosen in My Profile and kept in this browser
 // only. The size scales the content of the screen (style.css, --text-zoom); the colours follow the phone unless
