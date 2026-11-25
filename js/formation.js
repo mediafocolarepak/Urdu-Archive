@@ -10,9 +10,9 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, quiet, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForIds, confirmPopup } from './core.js?v=20261125162405';
+import { sb, State, esc, withStatus, canReviewApplications, quiet, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForIds, confirmPopup } from './core.js?v=20261125163746';
 // The reader (a path read like a book) shows the same document card as the Library, as dashboard.js and matchreview.js do.
-import { renderDocDetail } from './docdetail.js?v=20261125162405';
+import { renderDocDetail } from './docdetail.js?v=20261125163746';
 
 // Thumbnails (migration 93, owner's request to make the catalog "look like Coursera") - a public
 // bucket, same shape as board post images (BOARD_MEDIA_BUCKET in core.js), but not shared outside

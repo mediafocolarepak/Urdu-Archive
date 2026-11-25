@@ -3,7 +3,7 @@
 // admins see every message and can reply + dismiss. Everything stays in chat_messages
 // forever - "dismiss" is a soft flag hiding a row from the admin's default list, not a delete.
 
-import { displayLogin, nameMapForIds, sb, State, esc, canReviewApplications, withStatus, labelOf, confirmPopup } from './core.js?v=20261125162405';
+import { displayLogin, nameMapForIds, sb, State, esc, canReviewApplications, withStatus, labelOf, confirmPopup } from './core.js?v=20261125163746';
 
 // Report types are admin-editable from Options ("Report type" list) - see OPTION_LIST_NAMES
 // in core.js and 55_report_types.sql for the seed. Read fresh each time rather than cached in

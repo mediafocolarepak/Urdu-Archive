@@ -73,16 +73,56 @@ async function fetchGDriveFileBlob(folderId, fileName) {
   }
 }
 
+// The libraries from outside, each with its exact version and fingerprint (the browser refuses a file that is not that one),
+// loaded the first time someone needs them. To change a version: the new address and fingerprint here, and the address in
+// the Content-Security-Policy of index.html. The fingerprint: curl -sL <address> | openssl dgst -sha384 -binary | openssl base64 -A
+const LIBRARIES = {
+  pdf: ['pdfjsLib', 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js', 'sha384-OemFRmhjDZwhIKuUld0HJozkF2YErsgDaCL41trxGQZt4/WgnopJQqQl2DvDZ07Z'],
+  docx: ['docx', 'https://cdn.jsdelivr.net/npm/docx@9.7.1/dist/index.iife.js', 'sha384-9OH56uLhIvkZkwF0jWNlfpcK3gPuSy5DfEMNqKe156wCpkND+MDdtaRyd05kwpG0'],
+  mammoth: ['mammoth', 'https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js', 'sha384-/cXAMbzovUIKbBERjPmR3SnPTh8siWr5lsvFYj1Uq4XP0yaJUZJmsh0YXyGv5P0y'],
+};
+const PDF_WORKER = ['https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.worker.min.js', 'sha384-sS8B4COeBqzQV9DaPpp5cbpF+xz2jPcFbN3L8FL3/dx0RMC6WLUwTUOFm0iFb1lw'];
+const libraryLoading = {};
+export function loadLibrary(name, failed = 'Could not load a part of the app. Please check the connection and try again.') {
+  const [global, src, integrity] = LIBRARIES[name];
+  if (window[global]) return Promise.resolve(window[global]);
+  libraryLoading[name] ||= new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    Object.assign(script, { src, integrity, crossOrigin: 'anonymous' });
+    script.onload = () => resolve(window[global]);
+    script.onerror = () => { delete libraryLoading[name]; script.remove(); reject(new Error(failed)); };
+    document.head.appendChild(script);
+  });
+  return libraryLoading[name];
+}
+// pdf.js does its work in a second file, which a page cannot check by itself: it is read with its fingerprint first.
+async function loadPdfJs() {
+  const pdfjs = await loadLibrary('pdf');
+  if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+    const worker = await fetch(PDF_WORKER[0], { integrity: PDF_WORKER[1], mode: 'cors', credentials: 'omit' });
+    if (!worker.ok) throw new Error('pdf.worker ' + worker.status);
+    pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([await worker.arrayBuffer()], { type: 'text/javascript' }));
+  }
+  return pdfjs;
+}
+
+// A page opened for printing: the print dialog once it is ready. Said from here, because a page may not carry a script of its own.
+export function printWhenReady(w) {
+  const go = () => w.setTimeout(() => w.print(), 150);
+  if (w.document.readyState === 'complete') go(); else w.addEventListener('load', go, { once: true });
+}
+
 // Counts the pages of a PDF Blob/File with pdf.js. Returns null (never throws) on any failure
 // - callers should fall back to letting the person type the page count in by hand. Shared by
 // readPdfPageCount below (fetches the blob from Storage/Drive first) and by anything that
 // already holds the raw file locally (e.g. Bulk Import, reading straight off disk before the
 // file is ever uploaded anywhere).
 export async function readPdfPageCountFromBlob(blob) {
-  if (!window.pdfjsLib || !blob) return null;
+  if (!blob) return null;
   try {
+    const pdfjs = await loadPdfJs();
     const buf = await blob.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const pdf = await pdfjs.getDocument({ data: buf }).promise;
     return pdf.numPages;
   } catch {
     return null;
@@ -94,7 +134,6 @@ export async function readPdfPageCountFromBlob(blob) {
 // pdf.js. Returns null (never throws) on any failure - callers should fall back to letting
 // the person type the page count in by hand.
 export async function readPdfPageCount(doc) {
-  if (!window.pdfjsLib) return null;
   let blob = null;
   if (doc.storage_path) {
     const { data } = await sb.storage.from(BUCKET).createSignedUrl(doc.storage_path, 60);
@@ -111,7 +150,7 @@ export async function readPdfPageCount(doc) {
 // Options -> Maintenance backfill tool, where "no PDF found" alone isn't enough to tell a
 // missing storage_path from a Drive filename mismatch from a corrupt PDF pdf.js can't parse.
 export async function readPdfPageCountDebug(doc, accessToken) {
-  if (!window.pdfjsLib) return { pages: null, detail: 'pdf.js did not load' };
+  try { await loadPdfJs(); } catch { return { pages: null, detail: 'pdf.js did not load' }; }
   if (doc.storage_path) {
     const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(doc.storage_path, 60);
     if (error || !data?.signedUrl) return { pages: null, detail: `storage_path "${doc.storage_path}" - could not sign a URL` };

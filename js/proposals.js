@@ -7,8 +7,8 @@ import {
   sb, State, esc, withStatus, optionsHtml, labelOf, isAdmin, isCoordinator, canManageReserved, canWrite, BUCKET, likeSafe,
   titleOverlapScore, ACCESS_LEVELS, readPdfPageCountFromBlob, getDriveAccessToken, uploadPdfToGDrive,
   AUDIO_BUCKET, AUDIO_FORMATS, audioFileProblem, audioDurationOf, HIDDEN_DOC_STATUSES, isMediaLinkOk, videoLinkHtml, mountAudioPlayer,
-  helpLinkHtml, textDir, confirmPopup, promptPopup
-} from './core.js?v=20261125162405';
+  helpLinkHtml, textDir, confirmPopup, promptPopup, loadLibrary
+} from './core.js?v=20261125163746';
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // the Supabase Free plan's limit per file
 const FORMATS = [['DOC', 'Text or PDF'], ['AUD', 'Audio'], ['VID', 'Video']];
@@ -28,10 +28,6 @@ const EVENT_LABELS = {
   released: 'A reviewer released it', sent_back: 'Sent back to correct', published: 'Published', rejected: 'Rejected',
 };
 
-// Reads the text out of a Word file. Loaded only when someone uses it: it is 630 KB, too much to
-// make every phone download at sign-in. The version is pinned and its checksum verified.
-const MAMMOTH_URL = 'https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js';
-const MAMMOTH_INTEGRITY = 'sha384-/cXAMbzovUIKbBERjPmR3SnPTh8siWr5lsvFYj1Uq4XP0yaJUZJmsh0YXyGv5P0y';
 const MAX_WORD_BYTES = 20 * 1024 * 1024;
 
 let currentTab = 'mine';
@@ -45,30 +41,10 @@ async function act(fn) {
   catch (e) { alert(e.message); return false; }
 }
 
-let mammothLoading = null;
-function loadMammoth() {
-  if (window.mammoth) return Promise.resolve(window.mammoth);
-  if (!mammothLoading) {
-    mammothLoading = new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = MAMMOTH_URL;
-      script.integrity = MAMMOTH_INTEGRITY;
-      script.crossOrigin = 'anonymous';
-      script.onload = () => resolve(window.mammoth);
-      script.onerror = () => {
-        mammothLoading = null;
-        reject(new Error('Could not load the Word reader. Please check the connection and try again.'));
-      };
-      document.head.appendChild(script);
-    });
-  }
-  return mammothLoading;
-}
-
 // The text only: layout and images stay out, and the file itself is not kept.
 async function textFromWord(file) {
   if (file.size > MAX_WORD_BYTES) throw new Error(`"${file.name}" is larger than 20 MB.`);
-  const reader = await loadMammoth();
+  const reader = await loadLibrary('mammoth', 'Could not load the Word reader. Please check the connection and try again.');
   let result;
   try {
     result = await reader.extractRawText({ arrayBuffer: await file.arrayBuffer() });
