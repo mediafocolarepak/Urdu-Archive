@@ -1046,7 +1046,95 @@ export const TRACKING_STEPS = [
 
 // ---------- AUTH ----------
 
+// A new password: eight characters, and not one of the first that anyone would try. Passwords already in use stay as they are.
+// The same in the Edge Function phone-account.
+export const MIN_PASSWORD = 8;
+const EASY_PASSWORD = /^(.)\1*$|^(0?123456789?0?|9?87654321?0?|password\d*|qwerty\w*|abcd(efgh)?\d*|pakistan\d*|focolare\d*)$/i;
+export function passwordProblem(pw, login = '') {
+  if (pw.length < MIN_PASSWORD) return `The password needs at least ${MIN_PASSWORD} characters.`;
+  const digits = String(login).replace(/\D/g, '');
+  if (EASY_PASSWORD.test(pw) || (digits.length > 6 && pw.replace(/\D/g, '').endsWith(digits.slice(-9)))) return 'This password is too easy to guess. Please choose another one.';
+  return '';
+}
+
+// Whoever can change the archive is signed out after a time without using the app: a phone or a computer left somewhere stays
+// closed. Never the Users. In milliseconds, by role.
+const HOUR = 3600000;
+const IDLE_LIMIT = { operator: 7 * 24 * HOUR, coordinator: 12 * HOUR, admin: 12 * HOUR };
+const IDLE_WARNING = 5 * 60000;
+const lastActive = () => { try { return Number(localStorage.getItem('lastActive')) || 0; } catch { return 0; } };
+let activeNoted = 0;
+function noteActive() {
+  const now = Date.now();
+  if (now - activeNoted < 30000) return;
+  activeNoted = now;
+  try { localStorage.setItem('lastActive', String(now)); } catch { /* private window: no limit */ }
+}
+export function idleLeft(role, last, now = Date.now()) { return IDLE_LIMIT[role] && last ? last + IDLE_LIMIT[role] - now : Infinity; }
+async function signOutIdle() {
+  try { sessionStorage.setItem('signedOutIdle', '1'); localStorage.removeItem('lastActive'); } catch { /* only the message is lost */ }
+  await sb.auth.signOut({ scope: 'local' }).catch(() => {});
+  history.replaceState(null, '', location.pathname);
+  location.reload();
+}
+let idleTimer = null, idleWarned = false;
+function watchIdle() {
+  clearInterval(idleTimer);
+  if (!IDLE_LIMIT[State.currentRole]) return;
+  activeNoted = 0; noteActive();
+  if (!watchIdle.wired) { watchIdle.wired = true; for (const e of ['pointerdown', 'keydown', 'scroll', 'touchstart']) window.addEventListener(e, () => { if (idleLeft(State.currentRole, lastActive()) > 0) noteActive(); }, { passive: true, capture: true }); }
+  const check = () => {
+    const left = idleLeft(State.currentRole, lastActive());
+    if (left <= 0) { clearInterval(idleTimer); signOutIdle(); return; }
+    if (left > IDLE_WARNING) { idleWarned = false; return; }
+    if (!idleWarned && !document.hidden) { idleWarned = true; alertPopup('You will be signed out in a few minutes, because DUA has not been used for a long time. Press OK to stay.'); }
+  };
+  idleTimer = setInterval(check, 60000);
+  if (!watchIdle.seen) { watchIdle.seen = true; document.addEventListener('visibilitychange', () => { if (!document.hidden && State.appShown && idleTimer) check(); }); }
+}
+
+// The second step of the sign-in (My Profile): the code of an authenticator app, after the password. The database asks for it
+// too (second_step_done, 175_sign_in.sql). True while the code is still to be given.
+async function secondStepMissing() {
+  if (!sb.auth.mfa) return false;
+  const { data } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+  return !!data && data.nextLevel === 'aal2' && data.currentLevel !== 'aal2';
+}
+function showSecondStep(renderDashboardTab) {
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('closed-screen')?.remove();
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="closed-screen" class="closed-screen"><div class="panel">
+      <h2>Second step</h2>
+      <p>Open your authenticator app and write the 6 digits it shows for DUA.</p>
+      <div class="field"><label for="second-code">Code</label><input id="second-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" style="font-size:24px;letter-spacing:4px;"></div>
+      <div id="second-error" class="dob-error" role="alert"></div>
+      <div class="btn-row"><button type="button" class="btn big-btn" id="second-go">Continue</button><button type="button" class="btn secondary" id="second-out">Sign out</button></div>
+      <p class="hint">If you no longer have that phone, ask the other Admin of DUA.</p>
+    </div></div>`);
+  const input = document.getElementById('second-code'), error = document.getElementById('second-error'), go = document.getElementById('second-go');
+  input.focus();
+  document.getElementById('second-out').addEventListener('click', () => document.getElementById('logout-btn').click());
+  const send = async () => {
+    const code = input.value.replace(/\D/g, '');
+    if (code.length !== 6) { error.textContent = 'The code has 6 digits.'; return; }
+    go.disabled = true; error.textContent = '';
+    try {
+      const { data: factors, error: e1 } = await sb.auth.mfa.listFactors();
+      const factor = factors && factors.totp[0];
+      const { error: e2 } = e1 || !factor ? { error: e1 || new Error('No second step found.') } : await sb.auth.mfa.challengeAndVerify({ factorId: factor.id, code });
+      if (e2) { error.textContent = /invalid|expired/i.test(e2.message) ? 'This code is not right, or it has expired. Try the one shown now.' : errorText(e2); input.select(); return; }
+      document.getElementById('closed-screen').remove();
+      const { data: { session } } = await sb.auth.getSession();
+      await showApp(session, renderDashboardTab);
+    } finally { go.disabled = false; }
+  };
+  go.addEventListener('click', send);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+}
+
 export async function boot(renderDashboardTab) {
+  try { if (sessionStorage.getItem('signedOutIdle')) { sessionStorage.removeItem('signedOutIdle'); setTimeout(() => alertPopup('You were signed out because DUA was not used for a long time on this device. Please sign in again.'), 600); } } catch { /* no message */ }
   const { data: { session } } = await sb.auth.getSession();
   if (session) { await showApp(session, renderDashboardTab); } else { showLogin(); }
   sb.auth.onAuthStateChange(async (event, session) => {
@@ -1099,6 +1187,7 @@ async function showApp(session, renderDashboardTab) {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('landing-screen')?.style.setProperty('display', 'none');
   document.getElementById('reading-view')?.remove();
+  if (await secondStepMissing()) { showSecondStep(renderDashboardTab); return; }
   document.getElementById('app').style.display = 'flex';
 
   const { data: roleRows } = await sb.from('user_roles').select('role,credits,reputation,standing,board_posting_blocked').eq('user_id', session.user.id);
@@ -1107,6 +1196,8 @@ async function showApp(session, renderDashboardTab) {
   State.standing = roleRow ? roleRow.standing : 'active';
   // The same the database does (current_role_is, 170): never for an Admin.
   if (State.currentRole !== 'admin' && State.standing === 'excluded') { showClosed(); return; }
+  if (idleLeft(State.currentRole, lastActive()) <= 0) { await signOutIdle(); return; }
+  watchIdle();
   State.paused = State.currentRole !== 'admin' && State.currentRole !== 'user' && State.standing === 'suspended';
   if (State.paused) State.currentRole = 'user';
   State.boardPostingBlocked = roleRow ? !!roleRow.board_posting_blocked : false;
@@ -1977,7 +2068,9 @@ export function displayLogin(email) {
 }
 const PHONE_SIGNUP_ERRORS = {
   phone_invalid: 'This mobile number does not look right. Write it like 0300 1234567.',
-  password_short: 'The password needs at least 6 characters.',
+  password_short: 'The password needs at least 8 characters.',
+  password_easy: 'This password is too easy to guess. Please choose another one.',
+  too_many: 'Many people are signing up at this moment. Please try again in an hour, or ask an Admin of DUA.',
   fields_missing: 'Please fill in every field.',
   phone_in_use: 'This number already has an account. Sign in with it, or ask an Admin of DUA for help.',
 };
@@ -2000,6 +2093,7 @@ export function wireAuthButtons() {
       email = digits + '@' + PHONE_LOGIN_DOMAIN;
     }
     const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (!error) { try { localStorage.setItem('lastActive', String(Date.now())); } catch { /* no limit */ } }
     if (error) showError(/invalid login credentials/i.test(error.message) ? 'The number (or email) or the password is not right.' : error.message);
   });
 
@@ -2058,7 +2152,8 @@ export function wireAuthButtons() {
     const dob = readDateOfBirth('signup-dob');
     errBox.textContent = '';
     if (!digits) { showError(PHONE_SIGNUP_ERRORS.phone_invalid); return; }
-    if (password.length < 6) { showError(PHONE_SIGNUP_ERRORS.password_short); return; }
+    const weak = passwordProblem(password, digits);
+    if (weak) { showError(weak); return; }
     if (!full_name || !city || !membership_type || !gender) { showError('Please fill in your full name, city, membership type, and choose Male or Female.'); return; }
     if (dob.error || !dob.value) { showError(dob.error || 'Please choose your date of birth.'); return; }
     const btn = document.getElementById('signup-btn');
@@ -2087,7 +2182,8 @@ export function wireAuthButtons() {
     sessionStorage.removeItem('dobAsked');
     // A fresh page after signing out, so that nothing the screens kept in memory (the Help guides, qualifications)
     // carries over to the next person who signs in on the same phone.
-    sb.auth.signOut().finally(() => { history.replaceState(null, '', location.pathname); location.reload(); });
+    // This device only: the others stay signed in ("Sign out from all devices" is in My Profile).
+    sb.auth.signOut({ scope: 'local' }).finally(() => { history.replaceState(null, '', location.pathname); location.reload(); });
   });
 
   // An email account gets a reset link; a phone account has no email, so an Admin gives a temporary password (Users).
@@ -2119,7 +2215,8 @@ function showRecoveryScreen() {
     const pw = document.getElementById('recovery-password').value;
     const pw2 = document.getElementById('recovery-password-confirm').value;
     errBox.style.color = 'var(--danger)'; errBox.textContent = '';
-    if (pw.length < 6) { errBox.textContent = 'Password must be at least 6 characters.'; return; }
+    const weak = passwordProblem(pw);
+    if (weak) { errBox.textContent = weak; return; }
     if (pw !== pw2) { errBox.textContent = 'Passwords do not match.'; return; }
     const { error } = await sb.auth.updateUser({ password: pw });
     if (error) { errBox.textContent = error.message; return; }
