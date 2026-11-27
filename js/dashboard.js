@@ -1,5 +1,5 @@
-import { quiet, sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml, docCardHtml } from './core.js?v=20261125223139';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261125223139';
+import { quiet, sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml, docCardHtml } from './core.js?v=20261127113639';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261127113639';
 
 // The "From the boards" section (84_boards_moderation.sql) was removed on the Owner's request, 2026-11-18: the
 // Library shows only the archive; board posts are in the Boards tab.
@@ -22,6 +22,9 @@ export async function renderDashboardView(main) {
   // Operator shares the simplified read/search-only Dashboard layout with User - their write
   // access still works everywhere else (Tasks, and the doc-detail panel for their own claimed
   // work), just not via this quick "+ New document" shortcut or the full editor here.
+  // An address (#doc/1699): that document, open (Owner's decision, 2026-11-27).
+  const askedDoc = /^doc\/(\d+)$/.exec(State.sub || '');
+  if (askedDoc) { State.selectedDocId = askedDoc[1]; State.dashOpenDetail = true; }
   const isUser = State.currentRole === 'user' || State.currentRole === 'operator';
   // Plain Users see this tab as "Library" (owner's request 2026-09-21) - Operator and everyone
   // else keeps "Dashboard", same layout either way (see isUser above).
@@ -275,6 +278,8 @@ function closeDocDetailScreen() {
   split.querySelectorAll('.dash-detail-col audio').forEach(a => a.pause());
   split.classList.remove('detail-open');
   split.parentElement.classList.remove('dash-reading');
+  // Back on the list: the address is the Library's again, so that reloading does not reopen the card.
+  if (location.hash.startsWith('#doc/')) history.replaceState(history.state, '', '#dashboard');
   scrollMainTo(listScrollY);
 }
 

@@ -7,12 +7,12 @@
 // see who, via a security definer function (board_post_readers) that checks the permission
 // itself, the same pattern as is_board_editor()/document_is_postable() in 71_boards.sql.
 
-import {
+import { titleTrioHtml,
   quiet, sb, State, esc, withStatus, canReviewApplications, nameMapForIds,
   openBoardPostPopup, likeSafe, DEFAULT_BOARD_FOR_MEMBERSHIP, BOARD_MEDIA_BUCKET, ackBoardPolicy,
   canWrite, isMediaLinkOk,
   helpLinkHtml, promptPopup
-} from './core.js?v=20261125223139';
+} from './core.js?v=20261127113639';
 
 // Shown once, before a person's first post (84_boards_moderation.sql) - keep this in sync with
 // the Help guide "boards" (116_help_redesign.sql), which says the same thing in its own section.
@@ -66,7 +66,7 @@ export async function renderBoardsView(main) {
 
   const posts = await withStatus(sb.from('board_posts').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }));
   const docIds = [...new Set(posts.filter(p => p.document_id != null).map(p => p.document_id))];
-  const docs = docIds.length ? await withStatus(sb.from('documents').select('document_id,en_title,ur_title').in('document_id', docIds)) : [];
+  const docs = docIds.length ? await withStatus(sb.from('documents').select('document_id,title,en_title,ur_title,it_title,it_title_translated,original_title').in('document_id', docIds)) : [];
   const docById = {}; for (const d of docs) docById[d.document_id] = d;
   const texts = docIds.length ? await withStatus(sb.from('document_texts').select('document_id,body,reviewed').in('document_id', docIds)) : [];
   const textById = {}; for (const t of texts) textById[t.document_id] = t;
@@ -307,7 +307,7 @@ function renderPostCard(p, doc, text, myId, iRead, readCount, alreadyPromoted, a
       ${imageUrl ? `<img src="${esc(imageUrl)}" alt="" style="max-width:100%;max-height:320px;margin-top:6px;border-radius:6px;">` : ''}
       ${doc ? `<div class="field" style="margin-top:8px;">
         <label>Document</label>
-        <div style="font-size:13px;">#${esc(doc.document_id)} &middot; ${esc(doc.en_title) || '<span class="hint">(no title)</span>'}${doc.ur_title ? ` / <span dir="auto">${esc(doc.ur_title)}</span>` : ''}</div>
+        ${titleTrioHtml(doc, { small: true })}
         ${text ? `<div class="board-doc-preview" dir="auto">${esc(textPreview(text.body))}</div>` : ''}
         <button class="btn secondary" data-open-doc="${esc(doc.document_id)}" style="margin-top:4px;">Open</button>
       </div>` : ''}

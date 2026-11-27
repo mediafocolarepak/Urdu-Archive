@@ -3,14 +3,14 @@
 // `documents` table's full field set.
 
 import { quiet,
-  sb, State, esc, today, labelOf, optionsHtml, canWrite, canCatalogue, asArchiveFile, canDelete, isCoordinator, isAdmin, docTitlesHtml, URDU_SCRIPT, docDateLabel,
+  sb, State, esc, today, labelOf, optionsHtml, canWrite, canCatalogue, asArchiveFile, canDelete, isCoordinator, isAdmin, docTitlesHtml, URDU_SCRIPT, docDateLabel, titleTrio,
   computeFileName, uniqueFileName, withStatus, BUCKET, downloadFromGDrive,
   createWorkFor, TRACKING_STEPS, getCollectionsForDocument, saveDocumentCollections, setPreferredVersion,
   readPdfPageCount, readPdfPageCountFromBlob, nameMapForEmails, nameMapForIds, openBoardPostPopup, isDocPostable,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, DRIVE_AUDIO_PREFIX, mountAudioPlayer, eraseMyAudioFiles,
   textDir, readerChoices, confirmPopup, promptPopup
-} from './core.js?v=20261125223139';
+} from './core.js?v=20261127113639';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved ✓' : '☆ Save'; }
 
@@ -273,40 +273,46 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
   // The head of the card (Owner's request, 2026-11-23): the number, the English and the Urdu title, the author and the
   // date. A title missing on this record is taken from another version of the same Work.
   const all = [doc, ...(workSiblings || []).filter(s => String(s.document_id) !== String(doc.document_id))];
-  const urduOf = d => (d.ur_title || '').trim() || (URDU_SCRIPT.test(d.original_title || '') ? d.original_title.trim() : '');
-  const urTitle = urduOf(doc) || all.map(urduOf).find(Boolean) || '';
-  const enTitle = (doc.en_title || doc.title || '').trim() || all.map(d => (d.en_title || '').trim()).find(Boolean) || '';
+  const trio = titleTrio(doc, all.slice(1));
   const facts = [labelOf(State.authors, doc.author), docDateLabel(doc)].filter(Boolean).map(esc).join(' &middot; ');
+  const work = !reader && (canEdit || (canWrite() && atWork));
   box.innerHTML = `
     <div class="doc-head">
       <div class="doc-head-top">
-        <h3 style="margin:0;">Document #${esc(doc.document_id)}</h3>
+        <h3 class="doc-head-num" aria-label="Document number ${esc(doc.document_id)}">#${esc(doc.document_id)}</h3>
         <div class="btn-row" style="margin:0;">
-          ${canEdit ? '<button class="btn secondary" id="doc-open-editor">Edit</button>' : ''}
           <button class="btn fav-btn${State.myFavorites.has(doc.document_id) ? ' fav-on' : ''}" id="doc-fav" aria-pressed="${State.myFavorites.has(doc.document_id)}">${favLabel(doc.document_id)}</button>
-          ${State.myBoards.size > 0 && atWork && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-board">+ Board</button>' : ''}
-          ${(State.isFormatore || canReviewApplications()) && atWork && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-path">+ Path</button>' : ''}
         </div>
       </div>
       ${doc.access_level === 'reserved' ? '<span class="count-badge">Reserved</span>' : ''}
-      ${enTitle ? `<div class="doc-head-en" dir="auto">${esc(enTitle)}</div>` : ''}
-      ${urTitle ? `<div class="doc-head-ur" dir="rtl" lang="ur">${esc(urTitle)}</div>` : ''}
+      ${trio.en ? `<div class="doc-head-en" dir="auto">${esc(trio.en)}</div>` : ''}
+      ${trio.ur ? `<div class="doc-head-ur" dir="rtl" lang="ur">${esc(trio.ur)}</div>` : ''}
+      ${trio.it ? `<div class="doc-head-it" dir="auto" lang="it">${esc(trio.it)}${trio.itTranslated ? ' <span class="doc-title-mark">(translated)</span>' : ''}</div>` : ''}
       ${facts ? `<div class="doc-head-facts">${facts}</div>` : ''}
       ${doc.contained_in_document_id ? `<div class="doc-head-facts">In the magazine issue <a href="#" id="doc-contained-in">#${esc(doc.contained_in_document_id)}</a>${doc.contained_page ? `, page ${esc(doc.contained_page)}` : ''}</div>` : ''}
       <div id="doc-contains"></div>
     </div>
     ${readerChoicesHtml(choices, media)}
     ${media.some(m => m.media_type === 'AUD' && String(m.source_document_id) === String(doc.document_id) && m.source_text_at && text?.updated_at > m.source_text_at) ? '<div class="hint">The text has been corrected since it was read aloud, so the two may differ.</div>' : ''}
-    <div class="btn-row" style="margin:0 0 8px;">
-      ${text && canWrite() && atWork ? '<button class="btn secondary" id="doc-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Open editable text</button>' : ''}
-      ${originalText && canWrite() && atWork ? '<button class="btn secondary" id="doc-original-text-open" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Original text (Italian)</button>' : ''}
+    ${work ? `<div class="doc-group"><div class="doc-group-name">Work on this text</div><div class="btn-row" style="margin:0;">
+      ${canWrite() && atWork ? '<button class="btn secondary" id="doc-translate">Translate</button>' : ''}
+      ${canEdit ? '<button class="btn secondary" id="doc-open-editor">Edit</button>' : ''}
+      ${text && canWrite() && atWork ? '<button class="btn secondary" id="doc-text-open">Open editable text</button>' : ''}
+      ${originalText && canWrite() && atWork ? '<button class="btn secondary" id="doc-original-text-open">Original text (Italian)</button>' : ''}
       <span id="doc-read-aloud" style="display:contents;"></span>
-      ${canAddRelated ? '<button class="btn secondary" id="doc-add-related" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">+ Add a related version</button>' : ''}
-      ${canEdit && text && !text.reviewed && doc.source !== 'STE' ? '<button class="btn secondary" id="doc-mark-checked" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;" title="Once checked, the text can be read aloud">Mark the text as checked</button>' : ''}
-      ${canWrite() && atWork ? '<button class="btn secondary" id="doc-translate" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Translate</button>' : ''}
-      ${isAdmin() && ownReading ? '<button class="btn secondary" id="doc-reader-name" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Correct the name</button><button class="btn danger" id="doc-erase-reading" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">Erase the recording</button>' : ''}
-      <button class="btn secondary" id="doc-report-problem" style="flex:0 0 auto;white-space:normal;font-size:15px;padding:6px 12px;min-height:40px;">${reader ? 'Something to say about this text?' : 'Report a problem'}</button>
-    </div>
+      ${canAddRelated ? '<button class="btn secondary" id="doc-add-related">+ Add a related version</button>' : ''}
+      ${canEdit && text && !text.reviewed && doc.source !== 'STE' ? '<button class="btn secondary" id="doc-mark-checked" title="Once checked, the text can be read aloud">Mark the text as checked</button>' : ''}
+      ${isAdmin() && ownReading ? '<button class="btn secondary" id="doc-reader-name">Correct the name</button><button class="btn danger" id="doc-erase-reading">Erase the recording</button>' : ''}
+    </div></div>` : '<span id="doc-read-aloud" hidden></span>'}
+    ${reader ? `<div class="btn-row doc-group">
+      <button class="btn secondary" id="doc-report-problem">Something to say about this text?</button>
+      <button class="btn secondary" id="doc-copy-link">&#128279; Copy the link</button>
+    </div>` : `<details class="doc-group doc-more"><summary>More</summary><div class="btn-row" style="margin:0;">
+      <button class="btn secondary" id="doc-report-problem">Report a problem</button>
+      ${State.myBoards.size > 0 && atWork && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-board">+ Board</button>' : ''}
+      ${(State.isFormatore || canReviewApplications()) && atWork && isDocPostable(doc) ? '<button class="btn secondary" id="doc-add-path">+ Path</button>' : ''}
+      <button class="btn secondary" id="doc-copy-link">&#128279; Copy the link</button>
+    </div></details>`}
     ${canEdit ? `
     <div class="field doc-wide-only" style="font-size:13px;line-height:1.7;">${renderDocSummary(doc)}</div>
     <div class="field doc-wide-only">
@@ -370,13 +376,19 @@ export function renderDocDetailConsultation(box, doc, workSiblings, docCollectio
     sb.rpc('reading_state', { p_document_id: doc.document_id }).then(({ data }) => {
       const slot = document.getElementById('doc-read-aloud');
       if (!slot || !data || !['available', 'mine', 'rerecord'].includes(data.state)) return;
-      slot.innerHTML = `<button class="btn secondary" id="doc-read-aloud-btn" style="flex:0 0 auto;white-space:nowrap;font-size:14px;padding:6px 12px;min-height:40px;">&#127908; ${data.state === 'rerecord' ? 'Record again' : 'Read aloud'}</button>`;
+      slot.innerHTML = `<button class="btn secondary" id="doc-read-aloud-btn">&#127908; ${data.state === 'rerecord' ? 'Record again' : 'Read aloud'}</button>`;
       document.getElementById('doc-read-aloud-btn').addEventListener('click', () => {
         State.readingTarget = doc.document_id;
         window.__renderTab('readings');
       });
     }, () => {});
   }
+  document.getElementById('doc-copy-link')?.addEventListener('click', async () => {
+    const link = `${location.origin}${location.pathname}#doc/${doc.document_id}`;
+    try { await navigator.clipboard.writeText(link); alert('Link copied. Whoever opens it sees this document only if they may read it.'); }
+    catch { await promptPopup('Copy this link:', link); }
+  });
+  if (document.getElementById('main')?.dataset.section === 'dashboard' && location.hash !== `#doc/${doc.document_id}`) history.replaceState(history.state, '', `#doc/${doc.document_id}`);
   // 154_readings_any_language.sql: until now a text could only be marked as checked in SQL. Checked, it can be read aloud.
   document.getElementById('doc-mark-checked')?.addEventListener('click', async () => {
     if (!await confirmPopup('Has someone read this text against its source? Once marked as checked, it can be read aloud.')) return;
@@ -781,7 +793,8 @@ export async function renderDocDetail(id, opts = {}) {
   box.querySelectorAll('audio').forEach(a => a.pause());
   if (!id) { box.innerHTML = '<div class="empty-msg">Select a document from the list, or create a new one.</div>'; return; }
   const rows = await withStatus(sb.from('documents').select('*').eq('document_id', id));
-  if (!rows.length) { box.innerHTML = '<div class="empty-msg">Document not found.</div>'; return; }
+  // The same words for a document that does not exist and for one this person may not read: nothing says it is there.
+  if (!rows.length) { box.innerHTML = '<div class="empty-msg">This document cannot be opened.</div>'; return; }
   const doc = rows[0];
   const siblings = await fetchWorkSiblings(doc.work_id);
   const media = await fetchDocMedia(doc, siblings);

@@ -8,7 +8,7 @@
 // The recordings of the Work can be heard on the page. Reserved and hidden texts never appear: the database decides
 // what each person can read (row level security), and proposals and removed texts are left out here.
 
-import { sb, State, esc, withStatus, HIDDEN_DOC_STATUSES, mountAudioPlayer, URDU_SCRIPT } from './core.js?v=20261125223139';
+import { sb, State, esc, withStatus, HIDDEN_DOC_STATUSES, mountAudioPlayer, URDU_SCRIPT } from './core.js?v=20261127113639';
 
 // A book: code (for its bookmark), category, title, the cover's author line, what a page is called, a line under the
 // title. Optional: order 'title' (A to Z, with letters, for texts that seldom have a date; otherwise by date, with
@@ -152,6 +152,9 @@ function titleOf(it, book) {
   return it.en || it.it || it.ur || (it.date ? `${capital(book.unit[0])} of ${dayLabel(it.date)}` : `${capital(book.unit[0])} without a title`);
 }
 const itemTitle = it => titleOf(it, view.book);
+// Under the name of a page, the titles it does not already say (Owner's request, 2026-11-27: always the three languages).
+const otherTitles = it => { const name = itemTitle(it).toLowerCase(); return [['ur', it.ur], ['it', it.it], ['en', it.en]].filter(([, t], i, a) => t && t.toLowerCase() !== name && a.findIndex(([, u]) => u && u.toLowerCase() === t.toLowerCase()) === i); };
+const numberOf = (it, doc) => (doc || it.urdu || it.italian || it.audios[0] || {}).document_id;
 
 // ---------- The shelf ----------
 
@@ -252,8 +255,8 @@ function indexHtml(items, current = -1) {
         <span class="book-index-date">${esc(indexDate(it))}</span>
         <span class="book-index-text">
           <span class="book-index-name" dir="auto">${esc(itemTitle(it))}</span>
-          ${it.ur ? `<span class="book-index-ur" dir="rtl" lang="ur">${esc(it.ur)}</span>` : ''}
-          ${it.it && it.en && !view.book.monthly ? `<span class="book-index-it" dir="auto">${esc(it.it)}</span>` : ''}
+          ${otherTitles(it).map(([k, t]) => (k === 'ur' ? `<span class="book-index-ur" dir="rtl" lang="ur">${esc(t)}</span>` : `<span class="book-index-it" dir="auto">${esc(t)}</span>`)).join('')}
+          ${numberOf(it) ? `<span class="book-index-num">#${esc(numberOf(it))}</span>` : ''}
         </span>
         <span class="book-index-kinds" aria-hidden="true">${kinds}</span>${mark}
       </button>`;
@@ -324,7 +327,8 @@ async function showPage(index) {
       <article class="book-leaf">
         <div class="book-leaf-date">${esc(dayLabel(it.date))}</div>
         <h2 class="book-leaf-title" dir="auto">${esc(view.book.monthly && it.date ? view.book.unit[0] : itemTitle(it))}</h2>
-        ${it.ur ? `<div class="book-leaf-ur" dir="rtl" lang="ur">${esc(it.ur)}</div>` : ''}
+        ${otherTitles(it).map(([k, t]) => (k === 'ur' ? `<div class="book-leaf-ur" dir="rtl" lang="ur">${esc(t)}</div>` : `<div class="book-leaf-it" dir="auto">${esc(t)}</div>`)).join('')}
+        ${numberOf(it, doc) ? `<div class="book-leaf-num">#${esc(numberOf(it, doc))}</div>` : ''}
         <div class="book-leaf-tools">
           ${it.urdu && it.italian ? `<div class="book-lang" role="group" aria-label="Language">
             <button type="button" class="btn ${lang === 'URD' ? '' : 'secondary'}" data-lang="URD" aria-pressed="${lang === 'URD'}">Urdu</button>
