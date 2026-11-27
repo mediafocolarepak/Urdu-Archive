@@ -10,14 +10,14 @@ import { quiet,
   openFormationPostPopup, canReviewApplications, openTranslatePopup, nextDocumentId, logEntriesHtml,
   ACCESS_LEVELS, canManageReserved, HIDDEN_DOC_STATUSES, isMediaLinkOk, audioFileUrl, DRIVE_AUDIO_PREFIX, mountAudioPlayer, eraseMyAudioFiles,
   textDir, readerChoices, confirmPopup, promptPopup
-} from './core.js?v=20261127113639';
+} from './core.js?v=20261127123527';
 
 function favLabel(docId) { return State.myFavorites.has(docId) ? '★ Saved ✓' : '☆ Save'; }
 
 // Categories that gate visibility/assignment to a specific qualification - duplicated from the
 // same constant in tasks.js (project convention: modules only import from core.js, never each
 // other) - mirrors 37_task_qualifications_categories.sql. Keep all three in sync.
-const CATEGORY_REQUIRES_QUALIFICATION = { IT_UR: 'TRANSLATOR', EN_UR: 'TRANSLATOR', REVISION: 'REVISOR' };
+const CATEGORY_REQUIRES_QUALIFICATION = { IT_UR: 'TRANSLATOR', EN_UR: 'TRANSLATOR', UR_EN: 'TRANSLATOR', REVISION: 'REVISOR' };
 const TASK_STATUS_LABEL = { open: 'Open', claimed: 'In progress', submitted: 'Submitted', approved: 'Approved', rejected: 'Rejected', published: 'Published' };
 
 // Builds the "riassunto" text block that replaces the old grid of disabled input fields -

@@ -1,30 +1,31 @@
-import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons, confirmPopup, showLoadFailed, showOperatorIntro } from './core.js?v=20261127113639';
-import { renderDashboardView } from './dashboard.js?v=20261127113639';
-import { renderReportsView } from './reports.js?v=20261127113639';
-import { renderHayatView } from './hayatindex.js?v=20261127113639';
-import { renderMatchReviewView } from './matchreview.js?v=20261127113639';
-import { renderBulkImportView } from './bulkimport.js?v=20261127113639';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20261127113639';
-import { renderAdminMessagesView, initChatNotifications } from './chat.js?v=20261127113639';
-import { renderWorkView, loadWork } from './work.js?v=20261127113639';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20261127113639';
-import { renderHayatEditorView } from './hayateditor.js?v=20261127113639';
-import { renderInPageConverterView } from './inpageconverter.js?v=20261127113639';
-import { renderUserGuideView } from './userguide.js?v=20261127113639';
-import { renderJoinTeamView } from './collaboration.js?v=20261127113639';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20261127113639';
-import { renderMyProfileView } from './profile.js?v=20261127113639';
-import { renderMySpaceView } from './myspace.js?v=20261127113639';
-import { renderBoardsView } from './boards.js?v=20261127113639';
-import { renderFormationView } from './formation.js?v=20261127113639';
-import { renderBooksView } from './books.js?v=20261127113639';
-import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261127113639';
-import { renderOnboardingView } from './onboarding.js?v=20261127113639';
-import { renderLanding } from './landing.js?v=20261127113639';
-import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20261127113639';
-import { renderProposalsView, initProposalNotifications } from './proposals.js?v=20261127113639';
-import { renderReadingsView, initReadingNotifications } from './readings.js?v=20261127113639';
-import { registerServiceWorker, initInstallBanner } from './pwa-register.js?v=20261127113639';
+import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons, confirmPopup, showLoadFailed, showOperatorIntro } from './core.js?v=20261127123527';
+import { renderDashboardView } from './dashboard.js?v=20261127123527';
+import { renderReportsView } from './reports.js?v=20261127123527';
+import { renderFindWorkView, canFindWork } from './findwork.js?v=20261127123527';
+import { renderHayatView } from './hayatindex.js?v=20261127123527';
+import { renderMatchReviewView } from './matchreview.js?v=20261127123527';
+import { renderBulkImportView } from './bulkimport.js?v=20261127123527';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20261127123527';
+import { renderAdminMessagesView, initChatNotifications } from './chat.js?v=20261127123527';
+import { renderWorkView, loadWork } from './work.js?v=20261127123527';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20261127123527';
+import { renderHayatEditorView } from './hayateditor.js?v=20261127123527';
+import { renderInPageConverterView } from './inpageconverter.js?v=20261127123527';
+import { renderUserGuideView } from './userguide.js?v=20261127123527';
+import { renderJoinTeamView } from './collaboration.js?v=20261127123527';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20261127123527';
+import { renderMyProfileView } from './profile.js?v=20261127123527';
+import { renderMySpaceView } from './myspace.js?v=20261127123527';
+import { renderBoardsView } from './boards.js?v=20261127123527';
+import { renderFormationView } from './formation.js?v=20261127123527';
+import { renderBooksView } from './books.js?v=20261127123527';
+import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261127123527';
+import { renderOnboardingView } from './onboarding.js?v=20261127123527';
+import { renderLanding } from './landing.js?v=20261127123527';
+import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20261127123527';
+import { renderProposalsView, initProposalNotifications } from './proposals.js?v=20261127123527';
+import { renderReadingsView, initReadingNotifications } from './readings.js?v=20261127123527';
+import { registerServiceWorker, initInstallBanner } from './pwa-register.js?v=20261127123527';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -74,6 +75,7 @@ function getTabs() {
       { id: 'chat', label: 'Messages' },
       { id: 'sharewithus', label: 'Share with us' },
       { id: 'reports', label: 'Print Reports' },
+      { id: 'findwork', label: 'Find work' },
       { id: 'users', label: 'Users' },
       { id: 'options', label: 'Options' },
       { id: 'profile', label: 'My Profile' },
@@ -92,6 +94,7 @@ function getTabs() {
     { id: 'boards', label: 'Boards' },
     { id: 'formation', label: 'Formation Paths' },
     { id: 'reports', label: 'Print Reports' },
+    { id: 'findwork', label: 'Find work' },
     { id: 'hayat', label: 'Hayat Index' },
     { id: 'matchreview', label: 'Match Review' },
     { id: 'workconsolidation', label: 'Work Consolidation' },
@@ -119,7 +122,7 @@ function initTopbar() {
 
 // The two places. Sections only of the work; sections that serve both, dressed differently in each (core.js quiet()); the
 // others belong to Home. A section opened from inside another keeps the place the person is in.
-const WORK_ONLY = new Set(['work', 'tasks', 'proposals', 'mydepartment', 'inpageconverter', 'hayat', 'hayateditor', 'matchreview', 'workconsolidation', 'bulkimport', 'deptoverview']);
+const WORK_ONLY = new Set(['work', 'tasks', 'proposals', 'mydepartment', 'findwork', 'inpageconverter', 'hayat', 'hayateditor', 'matchreview', 'workconsolidation', 'bulkimport', 'deptoverview']);
 const BOTH = new Set(['dashboard', 'boards', 'formation', 'readings', 'sharewithus', 'help']);
 function placeFor(id, asked) {
   if (State.currentRole !== 'operator') return 'home';
@@ -135,7 +138,7 @@ function voiceOf(id) {
   return id === 'help' ? '' : 'onboarding';
 }
 // Each section's guide, for the Help button at the top (userguide.js).
-const GUIDE_OF = { dashboard: 'find-read', boards: 'boards', formation: 'formation-paths', readings: 'read-aloud', sharewithus: 'talk-team', tasks: 'tasks', proposals: 'propose', mydepartment: 'my-department', work: 'teamwork' };
+const GUIDE_OF = { dashboard: 'find-read', boards: 'boards', formation: 'formation-paths', readings: 'read-aloud', sharewithus: 'talk-team', tasks: 'tasks', proposals: 'propose', mydepartment: 'my-department', work: 'teamwork', findwork: 'find-work' };
 
 const NAV_ICONS = {
   onboarding: 'M3 11l9-8 9 8M5 10v10h14V10',
@@ -221,7 +224,7 @@ window.addEventListener('popstate', e => {
 function canOpen(id) {
   if (getTabs().some(t => t.id === id)) return true;
   if (State.currentRole === 'user') return ['books', 'myspace', 'boards', 'formation', 'readings', 'jointeam', 'help', 'chat'].includes(id) && !(id === 'jointeam' && State.paused);
-  if (State.currentRole === 'operator') return ['books', 'myspace', 'boards', 'formation', 'readings', 'tasks', 'proposals', 'inpageconverter', 'help', 'chat'].includes(id) || (id === 'mydepartment' && State.myDepartments.length > 0);
+  if (State.currentRole === 'operator') return ['books', 'myspace', 'boards', 'formation', 'readings', 'tasks', 'proposals', 'inpageconverter', 'help', 'chat'].includes(id) || (id === 'mydepartment' && State.myDepartments.length > 0) || (id === 'findwork' && canFindWork());
   return false;
 }
 
@@ -279,6 +282,7 @@ function drawSection(id, main) {
   else if (id === 'boards') return renderBoardsView(main);
   else if (id === 'formation') return renderFormationView(main);
   else if (id === 'reports') return renderReportsView(main);
+  else if (id === 'findwork') return renderFindWorkView(main);
   else if (id === 'hayat') return renderHayatView(main);
   else if (id === 'users') return renderUsersView(main);
   else if (id === 'options') return renderOptionsView(main);
@@ -304,7 +308,7 @@ function drawSection(id, main) {
 }
 
 // The tools made for a computer say so on a phone, kindly; they stay usable (Owner's decision, 2026-11-27).
-const COMPUTER_TOOLS = new Set(['inpageconverter', 'hayateditor', 'matchreview', 'workconsolidation', 'bulkimport', 'hayat']);
+const COMPUTER_TOOLS = new Set(['findwork', 'inpageconverter', 'hayateditor', 'matchreview', 'workconsolidation', 'bulkimport', 'hayat']);
 function computerNote(id, main) {
   if (!COMPUTER_TOOLS.has(id) || main.dataset.section !== id || !window.matchMedia('(max-width: 900px)').matches || main.querySelector('.computer-note')) return;
   main.insertAdjacentHTML('afterbegin', '<p class="computer-note"><span aria-hidden="true">&#128187;</span> This tool works best on a computer.</p>');

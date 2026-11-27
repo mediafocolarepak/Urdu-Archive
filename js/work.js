@@ -2,7 +2,7 @@
 // spiritual home, the same for everyone and silent; here are the things to do, what waits for others, the tools, the credits
 // and the notices of the team. The sections that serve both places appear in both, each with its own dress (core.js quiet()).
 
-import { sb, State, esc, today, isDeptLead, isAnyDeptLead, standingHtml, showGoodPracticesModal, openTranslatePopup } from './core.js?v=20261127113639';
+import { sb, State, esc, today, isDeptLead, isAnyDeptLead, standingHtml, showGoodPracticesModal, openTranslatePopup } from './core.js?v=20261127123527';
 
 const quietly = promise => Promise.resolve(promise).then(r => (r && !r.error ? r.data : null), () => null);
 
@@ -62,7 +62,7 @@ const ICONS = {
   tasks: 'M4 6h3M4 12h3M4 18h3M10 6h10M10 12h10M10 18h10', proposals: 'M12 4v16M4 12h16', review: 'M2 12c3-6 17-6 20 0-3 6-17 6-20 0zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
   mydepartment: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20a6 6 0 0 1 12 0M17 11a3 3 0 1 0 0-6M17 14a6 6 0 0 1 4 6', dashboard: 'M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3zM4 17a3 3 0 0 1 3-3h12',
   formation: 'M12 4l9 5-9 5-9-5zM7 11v5c3 2 7 2 10 0v-5', boards: 'M4 4h16v11H4zM8 20l4-5 4 5M8 8h8M8 11h5', readings: 'M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zM6 11a6 6 0 0 0 12 0M12 17v4',
-  inpageconverter: 'M4 7h13l-3-3M20 17H7l3 3', sharewithus: 'M4 5h16v11H9l-5 4z', translate: 'M4 5h9M8 3v2M11 5c-1 4-4 7-7 8M6 9c1 2 3 4 5 5M12 20l4-9 4 9M13.5 17h5',
+  inpageconverter: 'M4 7h13l-3-3M20 17H7l3 3', findwork: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-5-5', sharewithus: 'M4 5h16v11H9l-5 4z', translate: 'M4 5h9M8 3v2M11 5c-1 4-4 7-7 8M6 9c1 2 3 4 5 5M12 20l4-9 4 9M13.5 17h5',
   received: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.600-7 10-7 10z', practices: 'M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8l-5.4 2.900 1.100-6.100L3.200 9.400l6.100-.8z',
 };
 const icon = k => `<span class="start-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${ICONS[k]}"/></svg></span>`;
@@ -84,6 +84,7 @@ function toolsFor(w) {
   if (State.isFormatore) tools.push(['formation', 'Formation Paths, to prepare', 'Write and look after the paths', 'formation', go('formation', () => { State.formationSelectedPathId = null; })]);
   if (State.myBoards.size) tools.push(['boards', 'Boards, to look after', some(c.pending, c.pending === 1 ? 'post waiting' : 'posts waiting') || 'Nothing is waiting', 'boards', go('boards')]);
   if (c.readings.to_listen) tools.push(['readings', 'Readings to listen to', some(c.readings.to_listen, 'waiting'), 'readings', go('readings', () => { State.readingsTab = 'listen'; })]);
+  if (isAnyDeptLead()) tools.push(['findwork', 'Find work to do', 'What is missing in the archive', 'work', go('findwork')]);
   tools.push(['inpageconverter', 'InPage Converter', 'From InPage to Word and PDF', 'dept', go('inpageconverter')]);
   if (isAnyDeptLead()) tools.push(['received', 'What people shared', 'Read, thank, write back', 'share', go('sharewithus')]);
   tools.push(['sharewithus', 'Share with us', 'Tell the team, by voice or in writing', 'share', () => window.__renderTab('sharewithus', 'home')]);
