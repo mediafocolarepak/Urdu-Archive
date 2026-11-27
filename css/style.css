@@ -528,7 +528,8 @@ td.sibling-title.doc-title-ur { font-size: 1.05em; line-height: 2; }
   .has-bottom-nav #bottom-nav { display: flex; flex-shrink: 0; background: var(--panel); border-top: 1px solid var(--line); box-shadow: 0 -1px 3px rgba(0,0,0,0.08); padding-bottom: env(safe-area-inset-bottom, 0px); }
   .bn-btn { flex: 1; min-width: 0; min-height: 64px; border-top: 3px solid transparent; font-size: 13px; line-height: 1.15; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 6px 2px; }
   .bn-label { text-align: center; overflow-wrap: anywhere; }
-  .bn-btn.active { color: var(--sec, var(--accent)); border-top-color: var(--sec, var(--accent)); font-weight: 600; }
+  .bn-btn.active, .bn-btn.phone-on { color: var(--sec, var(--accent)); border-top-color: var(--sec, var(--accent)); font-weight: 600; }
+  .bn-btn.bn-more { display: none; }
   .bn-count { position: absolute; top: 3px; left: calc(50% + 6px); line-height: 17px; min-width: 17px; padding: 0 4px; font-size: 12px; }
 }
 @media (min-width: 901px) {

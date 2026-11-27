@@ -1,31 +1,31 @@
-import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons, confirmPopup, showLoadFailed, showOperatorIntro } from './core.js?v=20261127161123';
-import { renderDashboardView } from './dashboard.js?v=20261127161123';
-import { renderReportsView } from './reports.js?v=20261127161123';
-import { renderFindWorkView, canFindWork } from './findwork.js?v=20261127161123';
-import { renderHayatView } from './hayatindex.js?v=20261127161123';
-import { renderMatchReviewView } from './matchreview.js?v=20261127161123';
-import { renderBulkImportView } from './bulkimport.js?v=20261127161123';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20261127161123';
-import { renderAdminMessagesView, initChatNotifications } from './chat.js?v=20261127161123';
-import { renderWorkView, loadWork } from './work.js?v=20261127161123';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20261127161123';
-import { renderHayatEditorView } from './hayateditor.js?v=20261127161123';
-import { renderInPageConverterView } from './inpageconverter.js?v=20261127161123';
-import { renderUserGuideView } from './userguide.js?v=20261127161123';
-import { renderJoinTeamView } from './collaboration.js?v=20261127161123';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20261127161123';
-import { renderMyProfileView } from './profile.js?v=20261127161123';
-import { renderMySpaceView } from './myspace.js?v=20261127161123';
-import { renderBoardsView } from './boards.js?v=20261127161123';
-import { renderFormationView } from './formation.js?v=20261127161123';
-import { renderBooksView } from './books.js?v=20261127161123';
-import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261127161123';
-import { renderOnboardingView } from './onboarding.js?v=20261127161123';
-import { renderLanding } from './landing.js?v=20261127161123';
-import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20261127161123';
-import { renderProposalsView, initProposalNotifications } from './proposals.js?v=20261127161123';
-import { renderReadingsView, initReadingNotifications } from './readings.js?v=20261127161123';
-import { registerServiceWorker, initInstallBanner } from './pwa-register.js?v=20261127161123';
+import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons, confirmPopup, showLoadFailed, showOperatorIntro } from './core.js?v=20261127163927';
+import { renderDashboardView } from './dashboard.js?v=20261127163927';
+import { renderReportsView } from './reports.js?v=20261127163927';
+import { renderFindWorkView, canFindWork } from './findwork.js?v=20261127163927';
+import { renderHayatView } from './hayatindex.js?v=20261127163927';
+import { renderMatchReviewView } from './matchreview.js?v=20261127163927';
+import { renderBulkImportView } from './bulkimport.js?v=20261127163927';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20261127163927';
+import { renderAdminMessagesView, initChatNotifications } from './chat.js?v=20261127163927';
+import { renderWorkView, loadWork } from './work.js?v=20261127163927';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20261127163927';
+import { renderHayatEditorView } from './hayateditor.js?v=20261127163927';
+import { renderInPageConverterView } from './inpageconverter.js?v=20261127163927';
+import { renderUserGuideView } from './userguide.js?v=20261127163927';
+import { renderJoinTeamView } from './collaboration.js?v=20261127163927';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20261127163927';
+import { renderMyProfileView } from './profile.js?v=20261127163927';
+import { renderMySpaceView } from './myspace.js?v=20261127163927';
+import { renderBoardsView } from './boards.js?v=20261127163927';
+import { renderFormationView } from './formation.js?v=20261127163927';
+import { renderBooksView } from './books.js?v=20261127163927';
+import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261127163927';
+import { renderOnboardingView } from './onboarding.js?v=20261127163927';
+import { renderLanding } from './landing.js?v=20261127163927';
+import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20261127163927';
+import { renderProposalsView, initProposalNotifications } from './proposals.js?v=20261127163927';
+import { renderReadingsView, initReadingNotifications } from './readings.js?v=20261127163927';
+import { registerServiceWorker, initInstallBanner } from './pwa-register.js?v=20261127163927';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -133,7 +133,7 @@ function placeFor(id, asked) {
 // Which voice of the bar a section belongs to.
 function voiceOf(id) {
   if (State.place === 'work') return 'work';
-  if (['dashboard', 'sharewithus', 'profile'].includes(id)) return id;
+  if (['dashboard', 'sharewithus', 'profile', 'jointeam', ...BAR_MORE.map(([x]) => x)].includes(id)) return id;
   if (id === 'chat') return 'sharewithus';
   return id === 'help' ? '' : 'onboarding';
 }
@@ -148,9 +148,9 @@ const NAV_ICONS = {
   sharewithus: 'M4 5h16v11H9l-5 4z',
   mydepartment: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20a6 6 0 0 1 12 0M17 11a3 3 0 1 0 0-6M17 14a6 6 0 0 1 4 6',
   tasks: 'M4 6h3M4 12h3M4 18h3M10 6h10M10 12h10M10 18h10',
-  books: 'M12 6c-2-2-5-2-8-1v14c3-1 6-1 8 1 2-2 5-2 8-1V5c-3-1-6-1-8 1zM12 6v14',
+  books: 'M4 19V5a2 2 0 0 1 2-2h13v14H6a2 2 0 0 0-2 2zm0 0a2 2 0 0 0 2 2h13M9 7h6',
   boards: 'M4 4h16v11H4zM8 20l4-5 4 5M8 8h8M8 11h5',
-  formation: 'M12 4l9 5-9 5-9-5zM7 11v5c3 2 7 2 10 0v-5',
+  formation: 'M12 6C10 4.5 7 4 4 4v15c3 0 6 .5 8 2 2-1.5 5-2 8-2V4c-3 0-6 .5-8 2zM12 6v15',
   proposals: 'M12 4v16M4 12h16',
   readings: 'M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zM6 11a6 6 0 0 0 12 0M12 17v4',
   inpageconverter: 'M4 7h13l-3-3M20 17H7l3 3',
@@ -161,6 +161,18 @@ const NAV_ICONS = {
   more: 'M5 12h.01M12 12h.01M19 12h.01',
 };
 const navIcon = id => `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="${id === 'more' ? 3 : 2}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${NAV_ICONS[id] || NAV_ICONS.more}"/></svg>`;
+// On a computer the bar on the left also lists what Home offers, in the order of its tiles (Owner's request, 2026-11-27): there
+// is room, and it helps to go from one to another. On a phone these stay hidden (style.css .bn-more) and Home stays lit.
+const BAR_MORE = [['books', 'Books'], ['formation', 'Formation Paths'], ['boards', 'Boards'], ['myspace', 'My Space'], ['readings', 'Read aloud']];
+function barItems(tabs) {
+  const out = [];
+  for (const t of tabs) {
+    out.push(t);
+    if (t.id === 'dashboard') out.push(...BAR_MORE.map(([id, label]) => ({ id, label, more: true })));
+    if (t.id === 'sharewithus' && State.currentRole === 'user' && !State.paused) out.push({ id: 'jointeam', label: 'Join the Team', more: true });
+  }
+  return out;
+}
 // The bar of Users and Operators: at the bottom on a phone, on the left on a computer (style.css). Coordinators and Admins
 // keep the row of sections at the top.
 function initBottomNav(tabs) {
@@ -171,7 +183,7 @@ function initBottomNav(tabs) {
   document.body.classList.toggle('is-operator', State.currentRole === 'operator');
   document.getElementById('help-top').hidden = !on;
   if (!on) { nav.innerHTML = ''; return; }
-  nav.innerHTML = tabs.map(t => `<button class="bn-btn" data-tab="${t.id}">${navIcon(t.id)}<span class="bn-label">${t.label}</span>${t.id === 'work' ? '<span class="bn-count" id="work-count" hidden></span>' : ''}</button>`).join('')
+  nav.innerHTML = barItems(tabs).map(t => `<button class="bn-btn${t.more ? ' bn-more' : ''}" data-tab="${t.id}">${navIcon(t.id)}<span class="bn-label">${t.label}</span>${t.id === 'work' ? '<span class="bn-count" id="work-count" hidden></span>' : ''}</button>`).join('')
     + '<button class="bn-narrow" id="bn-narrow" type="button"></button>';
   nav.querySelectorAll('.bn-btn').forEach(b => b.addEventListener('click', () => renderTab(b.dataset.tab, b.dataset.tab === 'work' ? 'work' : 'home')));
   // On a computer the bar can be only its signs; the choice stays on this device.
@@ -250,6 +262,8 @@ function renderTab(id, place, sub = '') {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
   const voice = voiceOf(id);
   document.querySelectorAll('.bn-btn').forEach(b => { b.classList.toggle('active', b.dataset.tab === voice); b.toggleAttribute('aria-current', b.dataset.tab === voice); });
+  // On a phone the sections of Home have no voice of their own in the bar: Home stays lit.
+  document.querySelector('.bn-btn[data-tab="onboarding"]')?.classList.toggle('phone-on', BAR_MORE.some(([x]) => x === voice) || voice === 'jointeam');
   // The band that says "you are in the room of the work", and leads back to it.
   const bar = document.getElementById('place-bar');
   bar.hidden = State.place !== 'work';
