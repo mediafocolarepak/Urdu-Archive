@@ -1031,7 +1031,45 @@ button.ov-row:hover { background: var(--accent-soft); }
 .ov-track span { display: block; height: 100%; background: var(--sec); }
 .ov-check { display: flex; gap: 10px; align-items: center; min-height: 44px; font-size: 17px; margin: 0; }
 .ov-check input { width: 22px; height: 22px; }
-@media (max-width: 900px) { .ov-board { grid-template-columns: 1fr; } .ov-when { flex-basis: 84px; } }
+.ov-head-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.ov-head-btns { margin: 0; gap: 8px; }
+.ov-head-btns .btn { min-height: 44px; }
+.ov-print-date { display: none; font-size: 16px; font-weight: 400; color: var(--ink-soft); margin-left: 8px; }
+.ov-since { margin: 8px 0 0; font-size: 16px; line-height: 1.5; }
+.ov-trends { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 4px 24px; }
+.ov-trend { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+.ov-trend-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 16px; }
+.ov-trend-t .hint { font-size: 14px; margin: 0; }
+.ov-trend-v { font-size: 22px; font-weight: 700; }
+.ov-trend-v .hint { font-size: 14px; font-weight: 400; }
+.ov-change { font-size: 14px; font-weight: 600; color: var(--ink-soft); white-space: nowrap; }
+.ov-spark { flex: 0 0 auto; overflow: visible; }
+.ov-spark rect { fill: var(--c-work); }
+.ov-spark rect.now { opacity: .45; }
+.ov-spark rect.zero { fill: var(--line); }
+.ov-bar-static { cursor: default; }
+.ov-bar-static:hover { background: none; }
+.ov-goto-q { width: 100%; font-size: 18px; min-height: 48px; padding: 8px 12px; box-sizing: border-box; }
+.ov-goto-list { max-height: 50vh; overflow: auto; margin: 10px 0 4px; display: grid; gap: 4px; }
+.ov-goto-item { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font: inherit; font-size: 17px; color: var(--ink); text-align: left; cursor: pointer; }
+.ov-goto-item .hint { flex: 0 0 auto; font-size: 14px; }
+.ov-goto-item.on, .ov-goto-item:hover { background: var(--accent-soft); border-color: var(--c-work); }
+.ov-fav-list { display: grid; gap: 0 16px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); margin: 6px 0 12px; }
+.ov-fav-list input:disabled + * , .ov-fav-list label:has(input:disabled) { color: var(--ink-soft); }
+.bn-key { font-size: 12px; font-weight: 400; opacity: .7; margin-left: 4px; }
+@media (max-width: 900px) { .ov-board { grid-template-columns: 1fr; } .ov-when { flex-basis: 84px; } .ov-head-btns #ov-print { display: none; } }
+/* "Print the week": the Overview on paper. */
+@media print {
+  .print-week .ov-head-btns, .print-week .ov-tools, .print-week #ov-depts, .print-week .computer-note, .print-week .overlay-backdrop, .print-week .popup-back, .print-week .work-toast, .print-week .toast-notification { display: none !important; }
+  .print-week .ov-print-date { display: inline; }
+  .print-week .ov-wait, .print-week button.ov-row { display: flex !important; }
+  .print-week .ov-bar { display: block !important; }
+  .print-week .ov-board { grid-template-columns: 1fr 1fr; }
+  .print-week .ov-wait-grid { grid-template-columns: repeat(4, 1fr); }
+  .print-week .ov-box, .print-week .ov-wait, .print-week .panel { box-shadow: none; break-inside: avoid; }
+  .print-week .ov-trends { grid-template-columns: 1fr 1fr; }
+  .print-week .ov-spark rect, .print-week .ov-track span, .print-week .ov-dot { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+}
 @media (max-width: 900px) { .ov-tools { display: block; } .ov-wait-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } .ov-num { font-size: 26px; } .ov-what { font-size: 16px; } }
 /* My work */
 .work-page { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }

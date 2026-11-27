@@ -1,32 +1,32 @@
-import { State, isAdmin, isLeader, canReviewApplications, isAnyDeptLead, openTranslatePopup, boot, wireAuthButtons, confirmPopup, showLoadFailed, showOperatorIntro } from './core.js?v=20261127211058';
-import { renderDashboardView } from './dashboard.js?v=20261127211058';
-import { renderReportsView } from './reports.js?v=20261127211058';
-import { renderFindWorkView, canFindWork } from './findwork.js?v=20261127211058';
-import { renderHayatView } from './hayatindex.js?v=20261127211058';
-import { renderMatchReviewView } from './matchreview.js?v=20261127211058';
-import { renderBulkImportView } from './bulkimport.js?v=20261127211058';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20261127211058';
-import { renderAdminMessagesView, initChatNotifications } from './chat.js?v=20261127211058';
-import { renderWorkView, loadWork } from './work.js?v=20261127211058';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20261127211058';
-import { renderHayatEditorView } from './hayateditor.js?v=20261127211058';
-import { renderInPageConverterView } from './inpageconverter.js?v=20261127211058';
-import { renderUserGuideView } from './userguide.js?v=20261127211058';
-import { renderJoinTeamView } from './collaboration.js?v=20261127211058';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20261127211058';
-import { renderMyProfileView } from './profile.js?v=20261127211058';
-import { renderMySpaceView } from './myspace.js?v=20261127211058';
-import { renderBoardsView } from './boards.js?v=20261127211058';
-import { renderFormationView } from './formation.js?v=20261127211058';
-import { renderBooksView } from './books.js?v=20261127211058';
-import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261127211058';
-import { renderOnboardingView } from './onboarding.js?v=20261127211058';
-import { renderLanding } from './landing.js?v=20261127211058';
-import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20261127211058';
-import { renderProposalsView, initProposalNotifications } from './proposals.js?v=20261127211058';
-import { renderReadingsView, initReadingNotifications } from './readings.js?v=20261127211058';
-import { renderOverviewView, renderArchiveToolsView, loadWaiting } from './overview.js?v=20261127211058';
-import { registerServiceWorker, initInstallBanner } from './pwa-register.js?v=20261127211058';
+import { sb, State, isAdmin, isLeader, canReviewApplications, isAnyDeptLead, openTranslatePopup, boot, wireAuthButtons, confirmPopup, showLoadFailed, showOperatorIntro } from './core.js?v=20261127223631';
+import { renderDashboardView } from './dashboard.js?v=20261127223631';
+import { renderReportsView } from './reports.js?v=20261127223631';
+import { renderFindWorkView, canFindWork } from './findwork.js?v=20261127223631';
+import { renderHayatView } from './hayatindex.js?v=20261127223631';
+import { renderMatchReviewView } from './matchreview.js?v=20261127223631';
+import { renderBulkImportView } from './bulkimport.js?v=20261127223631';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20261127223631';
+import { renderAdminMessagesView, initChatNotifications } from './chat.js?v=20261127223631';
+import { renderWorkView, loadWork } from './work.js?v=20261127223631';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20261127223631';
+import { renderHayatEditorView } from './hayateditor.js?v=20261127223631';
+import { renderInPageConverterView } from './inpageconverter.js?v=20261127223631';
+import { renderUserGuideView } from './userguide.js?v=20261127223631';
+import { renderJoinTeamView } from './collaboration.js?v=20261127223631';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20261127223631';
+import { renderMyProfileView } from './profile.js?v=20261127223631';
+import { renderMySpaceView } from './myspace.js?v=20261127223631';
+import { renderBoardsView } from './boards.js?v=20261127223631';
+import { renderFormationView } from './formation.js?v=20261127223631';
+import { renderBooksView } from './books.js?v=20261127223631';
+import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261127223631';
+import { renderOnboardingView } from './onboarding.js?v=20261127223631';
+import { renderLanding } from './landing.js?v=20261127223631';
+import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20261127223631';
+import { renderProposalsView, initProposalNotifications } from './proposals.js?v=20261127223631';
+import { renderReadingsView, initReadingNotifications } from './readings.js?v=20261127223631';
+import { renderOverviewView, renderArchiveToolsView, loadWaiting, workFavourites, openGoTo } from './overview.js?v=20261127223631';
+import { registerServiceWorker, initInstallBanner } from './pwa-register.js?v=20261127223631';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -119,14 +119,31 @@ function getTabs() {
 function workMenu() {
   if (!isLeader()) return [];
   const admin = isAdmin();
-  return [
-    ['', [['work', 'Overview']]],
+  const menu = [
     ['To decide', [['tasks', 'Tasks'], ['proposals', 'Proposals'], ['readings', 'Recordings'], ['chat', 'Messages'], ...(admin || isAnyDeptLead() ? [['sharewithus', 'Shared with us']] : [])]],
     ['Archive', [['dashboard', 'Library'], ['translate', 'Translate a text', 'action'], ['findwork', 'Find work'], ['reports', 'Print Reports'], ['archivetools', 'Archive tools']]],
     ['Team', [...(State.myDepartments.length || admin ? [['mydepartment', admin ? 'Departments' : 'My Department']] : []), ['boards', 'Boards'], ['formation', 'Formation Paths'], ...(admin ? [['users', 'Users'], ['announcements', 'Announcements']] : [])]],
     ...(admin ? [['Settings', [['options', 'Options']]]] : []),
   ];
+  // Favourites (up to 3, overview.js) go to the top, out of their group.
+  const fav = workFavourites(), all = menu.flatMap(([, items]) => items);
+  const top = fav.map(id => all.find(([x]) => x === id)).filter(Boolean);
+  return [['', [['work', 'Overview']]], ...(top.length ? [['Favourites', top]] : []),
+    ...menu.map(([group, items]) => [group, items.filter(([x]) => !top.some(([t]) => t === x))]).filter(([, items]) => items.length)];
 }
+// "Go to..." (overview.js): the tools of My work and the places of Home. Ctrl+K, for Admins and Coordinators.
+function goTo() {
+  if (!isLeader()) return;
+  const work = workMenu().flatMap(([group, items]) => items.map(([id, label]) => ({ label, group: group === 'Favourites' || !group ? 'My work' : group, open: () => workTool(id) })));
+  const home = barItems(getTabs()).filter(t => !['work', 'dashboard'].includes(t.id)).map(t => ({ label: t.label, group: 'Home', open: () => renderTab(t.id, 'home') }));
+  openGoTo([...work, ...home, { label: 'Help', group: 'Home', open: () => renderTab('help') }]);
+}
+window.__goTo = goTo;
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k' && isLeader()) { e.preventDefault(); goTo(); }
+});
+// After the favourites change: the bar again, and the Overview.
+window.__rebuildWork = () => { initBottomNav(getTabs()); renderTab('work', 'work'); };
 // A tool of My work, from the bar or from the Overview.
 function workTool(id) {
   const item = workMenu().flatMap(([, items]) => items).find(([x]) => x === id);
@@ -219,11 +236,13 @@ function initBottomNav(tabs) {
   nav.innerHTML = barItems(tabs).map(t => `<button class="bn-btn${t.more ? ' bn-more' : ''}" data-tab="${t.id}">${navIcon(t.id)}<span class="bn-label">${t.label}</span>${t.id === 'work' ? '<span class="bn-count" id="work-count" hidden></span>' : ''}</button>`).join('')
     // In My work, on a computer, the bar of an Admin or a Coordinator shows the tools instead (style.css .bn-wm).
     + (isLeader() ? '<button class="bn-btn bn-wm bn-wm-back" data-tab="onboarding" type="button"><span aria-hidden="true">&lsaquo;</span><span class="bn-label">Home</span></button>'
+      + `<button class="bn-btn bn-wm bn-goto" type="button" aria-keyshortcuts="Control+K">${navIcon('findwork')}<span class="bn-label">Go to&hellip; <span class="bn-key">Ctrl K</span></span></button>`
       + workMenu().map(([group, items]) => (group ? `<span class="bn-group bn-wm">${group}</span>` : '')
         + items.map(([id, label]) => `<button class="bn-btn bn-wm" data-tab="${id}" data-tool="${id}" type="button">${navIcon(id)}<span class="bn-label">${label}</span>${id === 'work' ? '<span class="bn-count" id="wm-count" hidden></span>' : ''}</button>`).join('')).join('') : '')
     + '<button class="bn-narrow" id="bn-narrow" type="button"></button>';
   nav.querySelectorAll('.bn-btn:not(.bn-wm)').forEach(b => b.addEventListener('click', () => renderTab(b.dataset.tab, b.dataset.tab === 'work' ? 'work' : 'home')));
   nav.querySelector('.bn-wm-back')?.addEventListener('click', () => renderTab('onboarding', 'home'));
+  nav.querySelector('.bn-goto')?.addEventListener('click', goTo);
   nav.querySelectorAll('.bn-wm[data-tool]').forEach(b => b.addEventListener('click', () => workTool(b.dataset.tool)));
   // On a computer the bar can be only its signs; the choice stays on this device.
   const narrow = document.getElementById('bn-narrow');
@@ -386,6 +405,8 @@ boot(() => {
   // Everyone lands on Home (Operators since 2026-11-25, Admins and Coordinators since 2026-11-27). An address with a section
   // (#tasks) opens it, if this person has it.
   initTopbar();
+  // Counts this visit (only how many people, by role; migration 188) and keeps when this person came in before today.
+  State.visitAsked = Promise.resolve(sb.rpc('note_visit')).then(r => (r && !r.error ? r.data : null), () => null);
   const hash = location.hash.slice(1), subOf = Object.keys(SUBS).find(k => SUBS[k].test(hash));
   const asked = subOf || (hash.match(/^([a-z]+)$/) || [])[1];
   const first = 'onboarding';
