@@ -5,8 +5,8 @@
 
 import {
   sb, State, esc, withStatus, isAdmin, isDeptMember, isDeptLead, labelOf, optionsHtml, logEntriesHtml, popupShell, errorText, displayLogin
-} from './core.js?v=20261127205542';
-import { st, plural, factHtml, namesByIds, decideButtons, outcomeHtml, agoText, dayText } from './deptui.js?v=20261127205542';
+} from './core.js?v=20261127211058';
+import { st, plural, factHtml, namesByIds, decideButtons, outcomeHtml, agoText, dayText } from './deptui.js?v=20261127211058';
 
 const ROLE_OPTIONS = [['user', 'User'], ['operator', 'Operator'], ['coordinator', 'Coordinator'], ['admin', 'Admin']];
 const BOARD_TYPES = ['board_misuse', 'board_block', 'board_unblock'];

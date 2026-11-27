@@ -8,12 +8,12 @@ import { authorNames,
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, labelOf,
   nameMapForIds, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved, canReviewApplications, canReviewTeamApplications,
   helpLinkHtml, confirmPopup, promptPopup, popupShell, showLoadFailed, errorText
-} from './core.js?v=20261127205542';
-import { renderRules, loadRuleItems } from './policy.js?v=20261127205542';
-import { renderPeopleTool, renderDecisionsTool, loadPeopleItems } from './people.js?v=20261127205542';
-import { renderCredits, renderRuns, renderUnusual, renderTokens, renderThanks, renderCertificates, loadRewardItems } from './reward.js?v=20261127205542';
-import { renderApplicationsView, loadApplicationItems } from './collaboration.js?v=20261127205542';
-import { deptLabel, plural, st, itemHtml, wireItems, tableHtml, namesByIds, nameOnly, personSearch, agoText, dayText } from './deptui.js?v=20261127205542';
+} from './core.js?v=20261127211058';
+import { renderRules, loadRuleItems } from './policy.js?v=20261127211058';
+import { renderPeopleTool, renderDecisionsTool, loadPeopleItems } from './people.js?v=20261127211058';
+import { renderCredits, renderRuns, renderUnusual, renderTokens, renderThanks, renderCertificates, loadRewardItems } from './reward.js?v=20261127211058';
+import { renderApplicationsView, loadApplicationItems } from './collaboration.js?v=20261127211058';
+import { deptLabel, plural, st, itemHtml, wireItems, tableHtml, namesByIds, nameOnly, personSearch, agoText, dayText } from './deptui.js?v=20261127211058';
 
 // Each department's page opens its own guide from the "?" beside the title.
 const DEPT_GUIDES = { HR: 'dept-hr', COORD: 'dept-coordination', FORM: 'dept-formation', RF: 'dept-reward', COMM: 'dept-communication', ARCHIVE: 'dept-archive' };

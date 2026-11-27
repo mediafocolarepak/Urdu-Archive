@@ -1009,6 +1009,29 @@ input[type="checkbox"]:not(.switch), input[type="radio"] { width: 20px; height: 
 .ov-tool:hover { background: var(--accent-soft); }
 .ov-tool .hint { display: block; font-weight: 400; font-size: 14px; }
 .ov-tool-big { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); max-width: 1100px; margin: 0 auto; }
+.ov-board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ov-box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 12px 16px; }
+.ov-box-wide { grid-column: 1 / -1; }
+.ov-box .ov-h { margin: 2px 0 8px; }
+.ov-box .ov-h .hint { font-size: 14px; font-weight: 400; margin-left: 6px; }
+.ov-row { display: flex; align-items: baseline; gap: 10px; width: 100%; min-height: 40px; padding: 7px 4px; border: 0; border-bottom: 1px solid var(--line); background: none; font: inherit; font-size: 16px; color: var(--ink); text-align: left; }
+.ov-box .ov-row:last-child { border-bottom: 0; }
+button.ov-row { cursor: pointer; border-radius: 6px; }
+button.ov-row:hover { background: var(--accent-soft); }
+.ov-when { flex: 0 0 96px; font-weight: 700; color: var(--ink-soft); font-size: 15px; }
+.ov-when.late { color: var(--st-red); }
+.ov-when.soon { color: var(--st-amber); }
+.ov-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ov-dot { flex: 0 0 12px; width: 12px; height: 12px; border-radius: 50%; align-self: center; }
+.ov-green { background: var(--st-green); } .ov-amber { background: var(--st-amber); } .ov-red { background: var(--st-red); }
+.ov-bar { display: block; width: 100%; padding: 7px 4px; border: 0; border-radius: 6px; background: none; font: inherit; color: var(--ink); text-align: left; cursor: pointer; }
+.ov-bar:hover { background: var(--accent-soft); }
+.ov-bar-t { display: flex; justify-content: space-between; gap: 10px; font-size: 16px; }
+.ov-track { display: block; height: 10px; background: var(--line); border-radius: 5px; overflow: hidden; margin-top: 4px; }
+.ov-track span { display: block; height: 100%; background: var(--sec); }
+.ov-check { display: flex; gap: 10px; align-items: center; min-height: 44px; font-size: 17px; margin: 0; }
+.ov-check input { width: 22px; height: 22px; }
+@media (max-width: 900px) { .ov-board { grid-template-columns: 1fr; } .ov-when { flex-basis: 84px; } }
 @media (max-width: 900px) { .ov-tools { display: block; } .ov-wait-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } .ov-num { font-size: 26px; } .ov-what { font-size: 16px; } }
 /* My work */
 .work-page { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }

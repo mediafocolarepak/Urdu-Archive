@@ -1,5 +1,5 @@
-import { passwordProblem, authorNames, dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261127205542';
-import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261127205542';
+import { passwordProblem, authorNames, dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261127211058';
+import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261127211058';
 
 // ---------- Users ----------
 
