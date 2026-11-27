@@ -4,7 +4,7 @@
 // "There" in a language means a typed text or a PDF in the same Work.
 
 import { sb, State, esc, labelOf, optionsHtml, withStatus, titleTrio, docDateLabel, yearOf, readPdfPageCount, popupShell,
-  alertPopup, canReviewApplications, getDisplayNameByEmail, today } from './core.js?v=20261127205542';
+  alertPopup, canReviewApplications, getDisplayNameByEmail, today } from './core.js?v=20261127211058';
 
 const SEARCHES = [
   { group: 'Languages', key: 'it-ur', name: 'Italian, not yet in Urdu', note: 'Documents to translate', kind: 'lang', has: 'ITA', missing: 'URD' },
@@ -32,6 +32,11 @@ export function canFindWork() { return canReviewApplications() || State.myDepart
 const st = () => (State.findWork ||= { key: 'it-ur', category: '', from: '', to: '', has: 'ENG', missing: 'URD', language: 'URD', source: '',
   what: 'en_title', sort: 'date', wolFrom: '1980-01', wolTo: thisMonth(), wolMissing: 'URD', rows: null, ran: '' });
 const searchOf = key => SEARCHES.find(s => s.key === key) || SEARCHES[0];
+// Opens Find work on one search, with some of its choices (the Overview of My work, overview.js).
+export function openFindWork(key, choices = {}) {
+  Object.assign(st(), { category: '', from: '', to: '' }, choices, { key, rows: null, ran: '' });
+  window.__renderTab('findwork', 'work');
+}
 const langName = code => labelOf(State.langs, code) || code;
 
 // The task a row of a language search makes: into Urdu from Italian or English, into English from Urdu, else Others.
