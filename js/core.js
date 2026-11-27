@@ -557,7 +557,9 @@ export function optionsHtml(list, value, allowEmpty, emptyLabel = '') {
 export function canWrite() { return State.currentRole === 'operator' || State.currentRole === 'coordinator' || State.currentRole === 'admin'; }
 // Home is the spiritual home, the same for everyone and silent; My work is the one room an Operator has more (Owner's concept,
 // 2026-11-25). In Home an Operator sees what a User sees, without the buttons of the work. Always false for the other roles.
-export function quiet() { return State.currentRole === 'operator' && State.place !== 'work'; }
+export function quiet() { return ['operator', 'coordinator', 'admin'].includes(State.currentRole) && State.place !== 'work'; }
+// Admins and Coordinators: the same Home as everyone, and My work with the tools in groups (Owner's decision, 2026-11-27).
+export function isLeader() { return State.currentRole === 'admin' || State.currentRole === 'coordinator'; }
 // The archive tools (Match Review, Work Consolidation, Hayat Editor): the members of Archive & Data, Coordinators and Admins.
 // The database says the same (can_catalogue, 170).
 export function canCatalogue() { return isCoordinator() || isAdmin() || (State.currentRole === 'operator' && isDeptMember('ARCHIVE')); }

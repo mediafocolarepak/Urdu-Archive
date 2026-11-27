@@ -4,7 +4,7 @@
 // "There" in a language means a typed text or a PDF in the same Work.
 
 import { sb, State, esc, labelOf, optionsHtml, withStatus, titleTrio, docDateLabel, yearOf, readPdfPageCount, popupShell,
-  alertPopup, canReviewApplications, getDisplayNameByEmail, today } from './core.js?v=20261127163927';
+  alertPopup, canReviewApplications, getDisplayNameByEmail, today } from './core.js?v=20261127205542';
 
 const SEARCHES = [
   { group: 'Languages', key: 'it-ur', name: 'Italian, not yet in Urdu', note: 'Documents to translate', kind: 'lang', has: 'ITA', missing: 'URD' },

@@ -1,7 +1,7 @@
 // The small pieces My Department's screens share (phase 4, 2026-11-25): what state a thing is in, who did it, a table that
 // becomes cards on a phone, the choice of a person by name. People are shown by name, never by login.
 
-import { sb, State, esc, nameMapForIds, confirmPopup, promptPopup, errorText } from './core.js?v=20261127163927';
+import { sb, State, esc, nameMapForIds, confirmPopup, promptPopup, errorText } from './core.js?v=20261127205542';
 
 export const plural = (n, one, many) => `${n} ${Number(n) === 1 ? one : many}`;
 export const dash = '&mdash;';

@@ -5,8 +5,8 @@
 // the UI) - only Admin can set 'approved', paired with the actual role promotion in
 // user_roles (already an admin-only action, see 05_roles_and_permissions.sql).
 
-import { authorNames, sb, State, esc, canReviewTeamApplications, isAdmin, withStatus, confirmPopup, displayLogin } from './core.js?v=20261127163927';
-import { namesByIds, agoText } from './deptui.js?v=20261127163927';
+import { authorNames, sb, State, esc, canReviewTeamApplications, isAdmin, withStatus, confirmPopup, displayLogin } from './core.js?v=20261127205542';
+import { namesByIds, agoText } from './deptui.js?v=20261127205542';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],

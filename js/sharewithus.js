@@ -7,7 +7,7 @@
 // dispatched in app.js exactly like chat.js already splits admin/user - see renderTab('chat')
 // there for the precedent this follows.
 
-import { nameMapForIds, sb, State, esc, labelOf, withStatus, isAdmin, isAnyDeptLead, canRecordAudio, mountVoiceRecorder, uploadVoice } from './core.js?v=20261127163927';
+import { nameMapForIds, sb, State, esc, labelOf, withStatus, isAdmin, isAnyDeptLead, canRecordAudio, mountVoiceRecorder, uploadVoice } from './core.js?v=20261127205542';
 
 function formatDateTime(iso) { return esc((iso || '').slice(0, 16).replace('T', ' ')); }
 
@@ -159,7 +159,7 @@ export async function renderShareInboxView(main) {
   markShareSeen('lead_' + user.id);
   main.innerHTML = `
     <div class="panel">
-      <h2>Share with us</h2>
+      <h2>Shared with us</h2>
       <p class="hint">What people have shared - not technical reports, just experiences, feelings and ideas. Every lead and Admin sees every share; thank one, or write back, as many of you as want to.</p>
       <div id="swu-inbox"></div>
     </div>
