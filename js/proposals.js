@@ -8,8 +8,8 @@ import {
   titleOverlapScore, ACCESS_LEVELS, readPdfPageCountFromBlob, getDriveAccessToken, uploadPdfToGDrive,
   AUDIO_BUCKET, AUDIO_FORMATS, audioFileProblem, audioDurationOf, HIDDEN_DOC_STATUSES, isMediaLinkOk, videoLinkHtml, mountAudioPlayer,
   helpLinkHtml, textDir, confirmPopup, promptPopup, loadLibrary
-} from './core.js?v=20261127223631';
-import { fileSource, documentPane, openDocument, wireSplit } from './desk.js?v=20261127223631';
+} from './core.js?v=20261127224837';
+import { fileSource, documentPane, openDocument, wireSplit } from './desk.js?v=20261127224837';
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // the Supabase Free plan's limit per file
 const FORMATS = [['DOC', 'Text or PDF'], ['AUD', 'Audio'], ['VID', 'Video']];

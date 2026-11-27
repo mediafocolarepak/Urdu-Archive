@@ -3,8 +3,8 @@
 // module is only their screen. Since phase 4 (2026-11-25) each rule is a plain sentence, and people are shown by name. Used by
 // My Department (tab Rules, and "To decide" in Today), by Reward's certificates and by Options (admin.js).
 
-import { sb, State, esc, withStatus, canProposePolicyChange, canApprovePolicyChange, popupShell, errorText, labelOf } from './core.js?v=20261127223631';
-import { deptLabel, namesByIds, itemHtml, wireItems, decideButtons, agoText, dayText, outcomeHtml } from './deptui.js?v=20261127223631';
+import { sb, State, esc, withStatus, canProposePolicyChange, canApprovePolicyChange, popupShell, errorText, labelOf } from './core.js?v=20261127224837';
+import { deptLabel, namesByIds, itemHtml, wireItems, decideButtons, agoText, dayText, outcomeHtml } from './deptui.js?v=20261127224837';
 
 // Who may propose a change to each policy_values key (GOVERNANCE.md §2.8). task_category_rates and task_reputation_tiers are
 // Reward's alone.

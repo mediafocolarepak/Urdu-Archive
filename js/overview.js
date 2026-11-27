@@ -5,10 +5,10 @@
 // Step C (migration 188): the last 12 weeks, readings by branch, "since your last visit", favourites, "Go to..." and
 // "Print the week". Without 188 those are simply not there.
 
-import { sb, State, esc, isAdmin, today, popupShell, labelOf } from './core.js?v=20261127223631';
-import { departmentsWaiting, renderDepartmentsOverviewView } from './mydepartment.js?v=20261127223631';
-import { deptLabel } from './deptui.js?v=20261127223631';
-import { openFindWork } from './findwork.js?v=20261127223631';
+import { sb, State, esc, isAdmin, today, popupShell, labelOf } from './core.js?v=20261127224837';
+import { departmentsWaiting, renderDepartmentsOverviewView } from './mydepartment.js?v=20261127224837';
+import { deptLabel } from './deptui.js?v=20261127224837';
+import { openFindWork } from './findwork.js?v=20261127224837';
 
 const quietly = promise => Promise.resolve(promise).then(r => (r && !r.error ? r.data : null), () => null);
 const daysSince = when => (when ? Math.max(0, Math.round((new Date(today() + 'T00:00') - new Date(String(when).slice(0, 10) + 'T00:00')) / 86400000)) : null);
