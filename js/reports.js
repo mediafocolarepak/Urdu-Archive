@@ -1,5 +1,5 @@
-import { authorNames, sb, State, esc, labelOf, optionsHtml, withStatus, withStatusCount, isDeptMember, isAdmin, reportTable } from './core.js?v=20261127113639';
-import { namesByIds } from './deptui.js?v=20261127113639';
+import { authorNames, sb, State, esc, labelOf, optionsHtml, withStatus, withStatusCount, isDeptMember, isAdmin, reportTable } from './core.js?v=20261127123527';
+import { namesByIds } from './deptui.js?v=20261127123527';
 
 const APPLICATION_STATUS_LABEL = {
   pending: 'Pending', recommended: 'Recommended to Admin', approved: 'Approved', rejected: 'Rejected',
@@ -16,6 +16,7 @@ export function renderReportsView(main) {
   const canSeePersonnel = isDeptMember('HR') || isAdmin();
 
   main.innerHTML = `
+    <div class="panel no-print fw-pointer"><span>Looking for what is missing?</span> <button class="btn secondary" id="r-findwork">Find work to do</button></div>
     <div class="panel no-print">
       <h2>Print Reports</h2>
       <div class="field-grid">
@@ -51,6 +52,7 @@ export function renderReportsView(main) {
     <div id="personnel-report-area"></div>
     <style>@media print { @page { size: A4 landscape; } }</style>
   `;
+  document.getElementById('r-findwork').addEventListener('click', () => window.__renderTab('findwork'));
   document.getElementById('r-generate').addEventListener('click', generateFilteredReport);
   document.getElementById('r-print').addEventListener('click', () => window.print());
   if (canSeePersonnel) {

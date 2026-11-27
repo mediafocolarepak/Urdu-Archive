@@ -1,7 +1,10 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.28 (2026-11-27) — decisions taken by the Owner; all of phases 1 through 3 are built and
+**Status: v1.29 (2026-11-27) — decisions taken by the Owner; all of phases 1 through 3 are built and
 merged (migrations 80–115). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.29:** Find work to do (§5.22, migration 186): ready searches of what is missing in the archive, for Admins,
+Coordinators and department leads, to print, to download for Excel and to turn into tasks; task categories Urdu to English and Typing.
 
 **What changed in v1.28:** phase 5 (§5.14, §5.20, migration 184): a proposal in four steps, its review beside the document, an
 address for each document and proposal, the first steps of an Operator, and the three titles always in sight.
@@ -1097,6 +1100,24 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
   publish in the app (for example as a Start Here card) and in Hayat.
 
 ---
+
+### 5.22 Find work to do (migration 186)
+
+Owner's decisions, 2026-11-27. Ready searches of what is missing in the archive, in four groups: **Languages** (Italian not yet
+in Urdu, Urdu without English, Urdu without the Italian original, any other pair), **Periods** (the months of the Word of Life
+without a given language, from January 1980, shown as a calendar), **Texts** (PDF without typed text, text not yet reread, Urdu
+text ready to read aloud without a recording) and **Catalogue** (missing details, possible duplicates).
+
+- **Who:** Admins and Coordinators (a tab, and a link at the top of Print Reports) and the leads of any department (My work).
+  The server checks the same rule (`find_work_allowed`).
+- **What a person sees:** only what they may read. The searches are read-only functions run with the caller's rights.
+- **A language is there** when a version of the same Work has a typed text or a PDF; a version with only its title is missing.
+- **Lists:** filter by category, sort by date, title, category or number; print on A4 with the search, the filters, who printed
+  it and when; download for Excel.
+- **Tasks:** Admins and Coordinators turn the chosen rows into tasks, one per document, open in the store. Credits are the rate
+  of the category × the pages, read from the PDF when the document does not say. A document with a task already (open, taken,
+  sent or approved), or whose pages cannot be read, is left out and named. Leads ask a Coordinator.
+- **New task categories:** Urdu to English Translation (needs a Translator; its draft becomes an English version) and Typing.
 
 ## 6. What's left to build
 

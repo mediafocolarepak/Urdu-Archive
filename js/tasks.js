@@ -7,8 +7,8 @@
 // un'operazione tecnica). RLS impedisce di toccare un task preso da qualcun altro (vedi
 // 34_task_store.sql) - i pulsanti qui sotto rispecchiano solo quel vincolo, non lo sostituiscono.
 
-import { helpLinkHtml, popupShell, showGoodPracticesModal, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup, nameMapForIds, authorNames, errorText, archiveFileEnding, asArchiveFile, ARCHIVE_FILE_MAX } from './core.js?v=20261127113639';
-import { documentSources, fileSource, documentPane, openDocument, wireSplit } from './desk.js?v=20261127113639';
+import { helpLinkHtml, popupShell, showGoodPracticesModal, sb, State, esc, today, canWrite, canReviewApplications, isAdmin, withStatus, nameMapForEmails, optionsHtml, labelOf, BUCKET, downloadInpFromGDrive, getDriveAccessToken, uploadInpToGDrive, computeFileName, uniqueFileName, nextDocumentId, confirmPopup, promptPopup, nameMapForIds, authorNames, errorText, archiveFileEnding, asArchiveFile, ARCHIVE_FILE_MAX } from './core.js?v=20261127123527';
+import { documentSources, fileSource, documentPane, openDocument, wireSplit } from './desk.js?v=20261127123527';
 
 function isOverdue(t) { return t.status === 'claimed' && t.due_date && t.due_date < today(); }
 function formatDate(d) { return d ? esc(d) : '—'; }
@@ -23,7 +23,7 @@ function relativeDate(iso) {
 // Categories that gate visibility/assignment to a specific qualification - mirrors the case
 // expression in operator_qualifies_for_category()/user_qualifies_for_category() in
 // 37_task_qualifications_categories.sql. Keep the two in sync if the category list changes.
-const CATEGORY_REQUIRES_QUALIFICATION = { IT_UR: 'TRANSLATOR', EN_UR: 'TRANSLATOR', REVISION: 'REVISOR' };
+const CATEGORY_REQUIRES_QUALIFICATION = { IT_UR: 'TRANSLATOR', EN_UR: 'TRANSLATOR', UR_EN: 'TRANSLATOR', REVISION: 'REVISOR' };
 
 // Below this, Team overview flags the operator in red so Coordinator/Admin notice and can have
 // a human conversation - deliberately not an automatic block on anything (see 2026-08-31
@@ -224,7 +224,7 @@ const taskKind = t => labelOf(State.optionListsByName.task_category || [], t.cat
 const plusDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const limitNow = () => State.policyValues?.task_max_in_progress ?? 3;
 // What step 2 is called: the work itself, in plain words.
-const WORK_WORDS = { IT_UR: ['Translate it', 'From Italian to Urdu, in Word or InPage, on your computer.'], EN_UR: ['Translate it', 'From English to Urdu, in Word or InPage, on your computer.'],
+const WORK_WORDS = { IT_UR: ['Translate it', 'From Italian to Urdu, in Word or InPage, on your computer.'], EN_UR: ['Translate it', 'From English to Urdu, in Word or InPage, on your computer.'], UR_EN: ['Translate it', 'From Urdu to English, in Word, on your computer.'],
   TYPING: ['Type it', 'In Word or InPage, on your computer.'], PROOFREAD: ['Read and correct it', 'In Word or InPage, on your computer.'], REVISION: ['Read and correct it', 'In Word or InPage, on your computer.'] };
 const workWords = t => WORK_WORDS[t.category] || ['Do the work', 'On your computer.'];
 
@@ -648,11 +648,11 @@ async function uploadCorrectedFile(task, file) {
     await withStatus(sb.from('documents').update({ draft_inp_path: draftPath }).eq('document_id', old.document_id), 'Replacing corrected file...');
   } else {
     const newId = await nextDocumentId();
-    const isTranslation = ['IT_UR', 'EN_UR'].includes(task.category);
+    const isTranslation = ['IT_UR', 'EN_UR', 'UR_EN'].includes(task.category);
     await withStatus(sb.from('documents').insert({
       document_id: newId, work_id: orig.work_id, title: orig.title, en_title: orig.en_title, it_title: orig.it_title, it_title_translated: orig.it_title_translated,
       original_title: isTranslation ? null : orig.original_title, ur_title: isTranslation ? null : orig.ur_title,
-      category: orig.category, author: orig.author, language: isTranslation ? 'URD' : orig.language,
+      category: orig.category, author: orig.author, language: task.category === 'UR_EN' ? 'ENG' : isTranslation ? 'URD' : orig.language,
       ref_date: orig.ref_date, ref_period: orig.ref_period, recipient: orig.recipient, main_topic: orig.main_topic,
       secondary_tags: orig.secondary_tags, bible_verse: orig.bible_verse, media_type: orig.media_type || 'DOC',
       workflow_status: 'revision', source_task_id: task.id, draft_inp_path: draftPath,

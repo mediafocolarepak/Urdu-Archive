@@ -5,9 +5,9 @@
 // Since 2026-11-23 (Owner's request) Home starts with the Word of Life of the month, as the landing page does, and with
 // "Continue" tiles: the last document opened on this device, and the formation path being read.
 
-import { sb, State, esc } from './core.js?v=20261127113639';
-import { openReadingView } from './docdetail.js?v=20261127113639';
-import { lastBookBookmark } from './books.js?v=20261127113639';
+import { sb, State, esc } from './core.js?v=20261127123527';
+import { openReadingView } from './docdetail.js?v=20261127123527';
+import { lastBookBookmark } from './books.js?v=20261127123527';
 
 // The Urdu names are the ones of the Urdu guides (Documentazione/guide-help/ur1.mjs, ur2.mjs, migration 119): Boards,
 // Formation Paths and Help have one there; the others are named in Latin letters there too, so they stand alone

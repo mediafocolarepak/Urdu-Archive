@@ -1,9 +1,9 @@
 // Reward's tools in My Department (GOVERNANCE.md §6.4): the credits, the compensation runs, the unusual credits, the tokens, the
 // public thanks and the certificates. One screen for each since phase 4 (2026-11-25); people are shown by name.
 
-import { authorNames, sb, State, esc, withStatus, isAdmin, popupShell, promptPopup, errorText, labelOf } from './core.js?v=20261127113639';
-import { openPolicyProposalModal } from './policy.js?v=20261127113639';
-import { plural, factHtml, tableHtml, namesByIds, nameOnly, decideButtons, itemHtml, wireItems, outcomeHtml, agoText, dayText, personSearch } from './deptui.js?v=20261127113639';
+import { authorNames, sb, State, esc, withStatus, isAdmin, popupShell, promptPopup, errorText, labelOf } from './core.js?v=20261127123527';
+import { openPolicyProposalModal } from './policy.js?v=20261127123527';
+import { plural, factHtml, tableHtml, namesByIds, nameOnly, decideButtons, itemHtml, wireItems, outcomeHtml, agoText, dayText, personSearch } from './deptui.js?v=20261127123527';
 
 const isRfMember = () => State.myDepartments.some(d => d.department_code === 'RF');
 const category = code => labelOf(State.optionListsByName.task_category || [], code) || code;

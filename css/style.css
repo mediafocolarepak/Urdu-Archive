@@ -1300,3 +1300,70 @@ table.dep-table tbody tr { cursor: default; }
   .desk-work { overflow: visible !important; }
   details > *:not(summary) { display: block !important; }
 }
+
+/* ---------- Find work to do (findwork.js, 186) ---------- */
+.fw-pointer { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.fw-page { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; align-items: start; }
+.fw-side { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 8px; position: sticky; top: 0; }
+.fw-side h3 { margin: 12px 8px 4px; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-soft); }
+.fw-search { display: block; width: 100%; text-align: left; border: 0; background: none; border-radius: 10px; padding: 9px 10px; font: inherit; color: var(--ink); cursor: pointer; min-height: 44px; }
+.fw-search b { display: block; font-weight: 600; }
+.fw-search span { color: var(--ink-soft); font-size: 14px; }
+.fw-search:hover { background: var(--accent-soft); }
+.fw-search.on { background: var(--accent-soft); box-shadow: inset 4px 0 0 var(--c-work); }
+.fw-filters .fw-year input { max-width: 110px; }
+.fw-count { font-size: 17px; margin: 0 0 10px; }
+.fw-count b { font-size: 22px; }
+.fw-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+.fw-table { width: 100%; border-collapse: collapse; background: var(--panel); }
+.fw-table th, .fw-table td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+.fw-table th { background: var(--bg); font-size: 14px; white-space: nowrap; }
+.fw-table td b { display: block; }
+.fw-table .fw-ur { display: block; font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif; font-size: 18px; line-height: 2; text-align: right; }
+.fw-table .fw-it { display: block; color: var(--ink-soft); font-size: 14px; }
+.fw-table tr.fw-open { cursor: pointer; }
+.fw-table tr.fw-open:hover td { background: var(--accent-soft); }
+.fw-table tr.fw-has-task td { color: var(--ink-soft); }
+.fw-ck { width: 36px; }
+.fw-ck input { width: 20px; height: 20px; }
+.fw-langs { display: inline-flex; gap: 3px; }
+.fw-langs i { font-style: normal; font-size: 12px; font-weight: 700; border-radius: 6px; padding: 1px 6px; border: 1px solid var(--st-green); color: var(--st-green); }
+.fw-task { white-space: nowrap; font-size: 14px; }
+.fw-print-head { display: none; }
+@media (max-width: 900px) {
+  .fw-page { grid-template-columns: 1fr; }
+  .fw-side { position: static; display: flex; gap: 6px; overflow-x: auto; }
+  .fw-side h3 { display: none; }
+  .fw-search { flex: 0 0 auto; width: auto; max-width: 220px; }
+}
+@media print {
+  .fw-page { display: block; }
+  .fw-sheet { box-shadow: none !important; border: 0; padding: 0; }
+  .fw-print-head { display: flex; justify-content: space-between; gap: 20px; border-bottom: 2px solid #222; padding-bottom: 6px; margin-bottom: 10px; font-size: 12px; }
+  .fw-print-head h2 { margin: 0; font-size: 18px; }
+  .fw-print-who { text-align: right; color: #555; }
+  .fw-table-wrap { border: 0; overflow: visible; }
+  .fw-table th, .fw-table td { padding: 4px 6px; font-size: 11.5px; border-bottom: 1px solid #bbb; }
+  .fw-table tr { break-inside: avoid; }
+  .fw-table .fw-ur { font-size: 14px; line-height: 1.8; }
+  .fw-langs i { border: 1px solid #999; background: none; color: #000; }
+}
+.fw-cal { display: grid; grid-template-columns: 48px repeat(12, minmax(0, 1fr)); gap: 3px; font-size: 12px; margin: 0 0 14px; }
+.fw-cal b { align-self: center; font-weight: 600; }
+.fw-cal-h { text-align: center; color: var(--ink-soft); }
+.fw-cal-m { min-height: 26px; border: 1px solid var(--line); border-radius: 6px; display: flex; flex-wrap: wrap; gap: 2px; align-items: center; justify-content: center; padding: 2px; }
+.fw-cal-m.gap { background: color-mix(in srgb, var(--st-red) 14%, transparent); border-color: color-mix(in srgb, var(--st-red) 45%, transparent); }
+.fw-cal-m i { font-style: normal; font-weight: 700; font-size: 11px; color: var(--st-green); }
+@media print { .fw-cal { font-size: 9px; gap: 1px; } .fw-cal-m { min-height: 16px; } .fw-cal-m.gap { background: #f3d6d2; } }
+@media screen and (max-width: 700px) {
+  .fw-table-wrap { border: 0; }
+  .fw-table, .fw-table tbody, .fw-table tr, .fw-table td { display: block; }
+  .fw-table thead { display: none; }
+  .fw-table tr { border: 1px solid var(--line); border-radius: 12px; padding: 8px 0; margin: 0 0 10px; position: relative; }
+  .fw-table td { border: 0; padding: 2px 12px; }
+  .fw-table td.fw-ck { position: absolute; top: 8px; right: 4px; width: auto; }
+  .fw-table td[data-h]:empty { display: none; }
+  .fw-table td[data-h]::before { content: attr(data-h) ": "; color: var(--ink-soft); font-size: 14px; }
+  .fw-table td[data-h="#"]::before { content: ""; }
+  .fw-table td.fw-title { padding-right: 44px; }
+}
