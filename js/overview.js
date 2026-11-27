@@ -2,12 +2,13 @@
 // opens first and says what waits for this person, oldest first; every box leads to where it is done. On a computer the tools
 // are in the bar on the left, in groups (app.js workMenu); on a phone they are listed here, under what waits.
 // Step B (migration 187): what falls due, how we are, how far the archive is. Without 187 those boxes are simply not there.
-// Step C will add the weeks, "since your last visit" and "Go to...".
+// Step C (migration 188): the last 12 weeks, readings by branch, "since your last visit", favourites, "Go to..." and
+// "Print the week". Without 188 those are simply not there.
 
-import { sb, State, esc, isAdmin, today, popupShell } from './core.js?v=20261127211058';
-import { departmentsWaiting, renderDepartmentsOverviewView } from './mydepartment.js?v=20261127211058';
-import { deptLabel } from './deptui.js?v=20261127211058';
-import { openFindWork } from './findwork.js?v=20261127211058';
+import { sb, State, esc, isAdmin, today, popupShell, labelOf } from './core.js?v=20261127223631';
+import { departmentsWaiting, renderDepartmentsOverviewView } from './mydepartment.js?v=20261127223631';
+import { deptLabel } from './deptui.js?v=20261127223631';
+import { openFindWork } from './findwork.js?v=20261127223631';
 
 const quietly = promise => Promise.resolve(promise).then(r => (r && !r.error ? r.data : null), () => null);
 const daysSince = when => (when ? Math.max(0, Math.round((new Date(today() + 'T00:00') - new Date(String(when).slice(0, 10) + 'T00:00')) / 86400000)) : null);
@@ -125,7 +126,7 @@ function archiveBars(x) {
   ].map(([what, has, of, colour, open]) => ({ what, has: has || 0, of: of || 0, colour, open }));
 }
 
-function boardHtml(deadlines, health, bars) {
+function boardHtml(deadlines, health, bars, extra = '') {
   const n = x => Number(x).toLocaleString('en');
   return `<div class="ov-board">
     ${deadlines ? `<section class="ov-box"><h3 class="ov-h">Deadlines <span class="hint">the next 30 days</span></h3>
@@ -133,10 +134,150 @@ function boardHtml(deadlines, health, bars) {
         : '<p class="hint">Nothing falls due in the next 30 days.</p>'}</section>` : ''}
     ${health.length ? `<section class="ov-box"><h3 class="ov-h">How we are</h3>
       ${health.map((h, i) => `<${h.open ? 'button type="button"' : 'div'} class="ov-row" data-health="${i}"><span class="ov-dot ov-${h.tone}" aria-hidden="true"></span><span class="ov-text">${esc(h.text)}</span></${h.open ? 'button' : 'div'}>`).join('')}</section>` : ''}
+    ${extra}
     ${bars.length ? `<section class="ov-box ov-box-wide"><h3 class="ov-h">The archive: how far we are <span class="hint">each line opens Find work</span></h3>
       ${bars.map((b, i) => `<button type="button" class="ov-bar" data-bar="${i}" style="--sec:var(--c-${b.colour})"><span class="ov-bar-t"><span>${esc(b.what)}</span><b>${n(b.has)} of ${n(b.of)}</b></span>
         <span class="ov-track" aria-hidden="true"><span style="width:${b.of ? Math.round((100 * b.has) / b.of) : 0}%"></span></span></button>`).join('')}</section>` : ''}
   </div>`;
+}
+
+// ---------- Step C (migration 188) ----------
+const DAY = 86400000;
+const dateOf = s => new Date(String(s).slice(0, 10) + 'T00:00');
+const shortDate = s => dateOf(s).toLocaleDateString('en', { day: 'numeric', month: 'short' });
+const n0 = x => Number(x || 0).toLocaleString('en');
+// The days of a week (from its Monday) that were counted: from `since` (the first day of a new count), up to today.
+function daysIn(week, since) {
+  const from = Math.max(+dateOf(week), since ? +dateOf(since) : 0), to = Math.min(+dateOf(week) + 6 * DAY, +dateOf(today()));
+  return to < from ? 0 : Math.round((to - from) / DAY) + 1;
+}
+// The last 4 weeks (this one as far as it went) against the 4 before, day for day.
+function periodOf(weeks, key, since) {
+  const part = (a, b) => weeks.slice(a, b).reduce((s, w) => ({ sum: s.sum + (w[key] || 0), days: s.days + daysIn(w.week, since) }), { sum: 0, days: 0 });
+  const now = part(8, 12), before = part(4, 8);
+  const change = before.days >= 14 && now.days && before.sum ? Math.round(100 * ((now.sum / now.days) / (before.sum / before.days) - 1)) : null;
+  return { now, change };
+}
+// Twelve small bars, one a week; this week's is lighter, as it is not over. The number of each is in its tooltip.
+function sparkHtml(weeks, key, since, label) {
+  const vals = weeks.map(w => w[key] || 0), max = Math.max(1, ...vals), H = 30, BW = 9, GAP = 3;
+  return `<svg class="ov-spark" viewBox="0 0 ${12 * (BW + GAP) - GAP} ${H}" width="${12 * (BW + GAP) - GAP}" height="${H}" role="img" aria-label="${esc(label)}, week by week">
+    ${weeks.map((w, i) => { const v = vals[i], h = v ? Math.max(3, Math.round((H - 1) * v / max)) : 1, counted = !since || +dateOf(w.week) + 6 * DAY >= +dateOf(since);
+      return `<rect x="${i * (BW + GAP)}" y="${H - h}" width="${BW}" height="${h}" rx="2" class="${i === 11 ? 'now' : ''}${v ? '' : ' zero'}"><title>${esc(`Week of ${shortDate(w.week)}${i === 11 ? ' (so far)' : ''}: ${counted ? n0(v) : 'not counted yet'}`)}</title></rect>`; }).join('')}
+  </svg>`;
+}
+function trendsHtml(t) {
+  if (!t || !t.weeks || t.weeks.length !== 12) return '';
+  const W = t.weeks, since = t.counting_since;
+  const ROWS = [
+    ['visits', 'People who came in', 'a day, on average', since],
+    ['opens', 'Documents opened', 'in 4 weeks'],
+    ['plays', 'Recordings heard', 'in 4 weeks'],
+    ['published', 'Tasks published', 'in 4 weeks'],
+    ['accounts', 'New accounts', 'in 4 weeks'],
+  ];
+  const ROLE = { user: 'Users', operator: 'Operators', coordinator: 'Coordinators', admin: 'Admins' };
+  const roles = Object.entries(ROLE).filter(([k]) => t.roles && t.roles[k]).map(([k, l]) => `${l} ${n0(t.roles[k])}`).join(' · ');
+  const rows = ROWS.map(([key, what, unit, from]) => {
+    if (key === 'visits' && !since) return `<div class="ov-trend"><span class="ov-trend-t"><b>${what}</b><span class="hint">Counted from today: only how many, never who.</span></span></div>`;
+    const p = periodOf(W, key, from);
+    const value = key === 'visits' ? (p.now.days ? (p.now.sum / p.now.days).toFixed(p.now.sum / p.now.days < 10 ? 1 : 0) : '0') : n0(p.now.sum);
+    const ch = p.change === null ? '' : `<span class="ov-change">${p.change > 0 ? '&#9650;' : p.change < 0 ? '&#9660;' : '='} ${Math.abs(p.change)}%</span>`;
+    const note = key === 'visits' ? `${since > W[0].week ? `Counted since ${shortDate(since)}. ` : ''}${roles ? `In 12 weeks: ${roles}` : ''}` : '';
+    return `<div class="ov-trend"><span class="ov-trend-t"><b>${what}</b><span class="ov-trend-v">${value} <span class="hint">${unit}</span> ${ch}</span>${note ? `<span class="hint">${esc(note)}</span>` : ''}</span>${sparkHtml(W, key, from, what)}</div>`;
+  }).join('');
+  return `<section class="ov-box ov-box-wide"><h3 class="ov-h">The last 12 weeks <span class="hint">the arrows compare the last 4 weeks with the 4 before</span></h3><div class="ov-trends">${rows}</div></section>`;
+}
+// Readings by branch of the Focolare (Owner's request, 2026-11-27): how many, never who nor what.
+function branchesHtml(t) {
+  if (!t || !t.branches) return '';
+  const list = State.optionListsByName.membership_type || [];
+  const name = b => (b === 'none' ? 'Not said in the profile' : labelOf(list, b));
+  const max = Math.max(1, ...t.branches.map(b => b.opens + b.plays));
+  const from = t.branches_since && t.branches_since > t.weeks[0].week ? `Since ${shortDate(t.branches_since)}` : 'In 12 weeks';
+  return `<section class="ov-box ov-box-wide"><h3 class="ov-h">Readings by branch <span class="hint">${esc(from)}, how many and never who</span></h3>
+    ${t.branches.length ? t.branches.map(b => `<div class="ov-bar ov-bar-static" style="--sec:var(--c-readings)"><span class="ov-bar-t"><span>${esc(name(b.branch))}</span><b>${n0(b.opens)} opened · ${n0(b.plays)} heard</b></span>
+      <span class="ov-track" aria-hidden="true"><span style="width:${Math.round((100 * (b.opens + b.plays)) / max)}%"></span></span></div>`).join('')
+      : '<p class="hint">Counted from today. Nothing yet.</p>'}</section>`;
+}
+// "Since your last visit": only what changed.
+function sinceHtml(t, at) {
+  const s = t && t.since;
+  if (!s || !at) return '';
+  const parts = [[s.accounts, 'new account', 'new accounts'], [s.opens, 'document opened', 'documents opened'], [s.plays, 'recording heard', 'recordings heard'],
+    [s.submitted, 'task sent for review', 'tasks sent for review'], [s.published, 'task published', 'tasks published'], [s.messages, 'message', 'messages']]
+    .filter(([v]) => v).map(([v, one, many]) => `${n0(v)} ${v === 1 ? one : many}`);
+  return `<p class="ov-since"><b>Since your last visit</b> <span class="hint">(${esc(shortDate(at))})</span>: ${parts.length ? esc(parts.join(' · ')) : 'nothing new.'}</p>`;
+}
+
+// Favourites: up to 3 tools at the top of My work (Owner's decision, 2026-11-27). They stay on this device.
+const FAV_KEY = 'workFavourites';
+export function workFavourites() { try { const v = JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); return Array.isArray(v) ? v.slice(0, 3) : []; } catch { return []; } }
+function openFavourites(menu) {
+  const tools = menu.flatMap(([group, items]) => (group && group !== 'Favourites' ? items : [])), now = workFavourites();
+  const { panel, close } = popupShell('ov-favourites', { width: 460, label: 'Favourites' });
+  panel.innerHTML = `<h2 style="margin-top:0;">Favourites</h2><p>Choose up to 3 tools. They go to the top of My work, on this device.</p>
+    <div class="ov-fav-list">${tools.map(([id, label]) => `<label class="ov-check"><input type="checkbox" data-id="${esc(id)}" ${now.includes(id) ? 'checked' : ''}> ${esc(label)}</label>`).join('')}</div>
+    <div class="btn-row" style="justify-content:flex-end;"><button type="button" class="btn secondary" id="ov-fav-close">Cancel</button><button type="button" class="btn" id="ov-fav-save">Save</button></div>`;
+  const boxes = [...panel.querySelectorAll('[data-id]')];
+  const limit = () => { const n = boxes.filter(b => b.checked).length; boxes.forEach(b => { b.disabled = !b.checked && n >= 3; }); };
+  boxes.forEach(b => b.addEventListener('change', limit)); limit();
+  panel.querySelector('#ov-fav-close').addEventListener('click', close);
+  panel.querySelector('#ov-fav-save').addEventListener('click', () => {
+    try { localStorage.setItem(FAV_KEY, JSON.stringify(boxes.filter(b => b.checked).map(b => b.dataset.id))); } catch { /* not needed to work */ }
+    close();
+    window.__rebuildWork();
+  });
+}
+
+// "Go to...": one box to reach a tool, a document (#1593 or words of its title), a task or a proposal. Ctrl+K (app.js).
+export function openGoTo(tools) {
+  const { panel, close } = popupShell('ov-goto', { width: 560, label: 'Go to' });
+  panel.innerHTML = `<h2 style="margin-top:0;">Go to&hellip;</h2>
+    <input type="search" id="ov-goto-q" class="ov-goto-q" placeholder="A tool, #1593, task 51, or words of a title" autocomplete="off" aria-label="Where to go" aria-controls="ov-goto-list">
+    <div id="ov-goto-list" class="ov-goto-list" role="listbox" aria-label="Places"></div>
+    <p class="hint">&uarr; &darr; to choose, Enter to go, Esc to close.</p>`;
+  const input = panel.querySelector('#ov-goto-q'), list = panel.querySelector('#ov-goto-list');
+  let found = [], at = 0, asked = 0;
+  const draw = () => {
+    list.innerHTML = found.length ? found.map((x, i) => `<button type="button" class="ov-goto-item${i === at ? ' on' : ''}" role="option" aria-selected="${i === at}" data-i="${i}"><span dir="auto">${esc(x.label)}</span><span class="hint">${esc(x.where)}</span></button>`).join('')
+      : `<p class="hint">${input.value.trim() ? 'Nothing found.' : ''}</p>`;
+    list.querySelectorAll('[data-i]').forEach(b => b.addEventListener('click', () => go(+b.dataset.i)));
+  };
+  const go = i => { const x = found[i]; if (!x) return; close(); x.open(); };
+  const search = async () => {
+    const q = input.value.trim(), low = q.toLowerCase(), mine = ++asked;
+    found = tools.filter(t => !q || t.label.toLowerCase().includes(low)).slice(0, q ? 8 : 30).map(t => ({ label: t.label, where: t.group, open: t.open }));
+    const num = (q.match(/^#?\s*(\d{1,7})$/) || [])[1], task = (low.match(/^task\s*#?\s*(\d+)$/) || [])[1], prop = (low.match(/^proposal\s*#?\s*(\d+)$/) || [])[1];
+    if (task) found.unshift({ label: `Task #${task}`, where: 'Tasks', open: () => window.__renderTab('tasks', 'work', 'task/' + task) });
+    if (prop) found.unshift({ label: `Proposal #${prop}`, where: 'Proposals', open: () => window.__renderTab('proposals', 'work', 'proposal/' + prop) });
+    if (num) found.unshift({ label: `Document #${num}`, where: 'Library', open: () => window.__renderTab('dashboard', 'work', 'doc/' + num) });
+    at = 0; draw();
+    const words = q.replace(/[,()*%\\]/g, ' ').trim();
+    if (words.length < 3 || num || task || prop) return;
+    const like = `%${words}%`;
+    const docs = await quietly(sb.from('documents').select('document_id,title,en_title,ur_title').is('deleted_at', null)
+      .or(`title.ilike.${like},en_title.ilike.${like},ur_title.ilike.${like},it_title.ilike.${like}`).limit(6));
+    if (mine !== asked || !docs) return;
+    found.push(...docs.map(d => ({ label: `#${d.document_id} ${d.en_title || d.title || d.ur_title || ''}`, where: 'Document', open: () => window.__renderTab('dashboard', 'work', 'doc/' + d.document_id) })));
+    draw();
+  };
+  let timer = 0;
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 200); });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (found.length) { at = (at + (e.key === 'ArrowDown' ? 1 : found.length - 1)) % found.length; draw(); list.querySelector('.on')?.scrollIntoView({ block: 'nearest' }); } }
+    else if (e.key === 'Enter') { e.preventDefault(); go(at); }
+  });
+  search();
+  input.focus();
+}
+
+// "Print the week": the Overview on paper, for the meeting of the coordinators.
+function printWeek() {
+  document.body.classList.add('print-week');
+  const done = () => { document.body.classList.remove('print-week'); window.removeEventListener('afterprint', done); };
+  window.addEventListener('afterprint', done);
+  window.print();
 }
 
 const ageText = x => (x.note && !x.oldest ? x.note : x.oldest === null || x.oldest === undefined ? (x.note || '') : x.oldest === 0 ? 'the oldest: today' : `the oldest: ${x.oldest} ${x.oldest === 1 ? 'day' : 'days'}`);
@@ -144,20 +285,25 @@ const ageText = x => (x.note && !x.oldest ? x.note : x.oldest === null || x.olde
 // The tools of My work, the same groups as the bar (app.js passes them in): on a phone they are here.
 export async function renderOverviewView(main, menu) {
   main.innerHTML = '<div class="panel ov-head"><h2>Overview</h2></div><div class="empty-msg">Loading...</div>';
-  const [w, board, arch, ticks] = await Promise.all([
+  const lastVisit = await Promise.resolve(State.visitAsked).catch(() => null);
+  const [w, board, arch, ticks, trends] = await Promise.all([
     loadWaiting(),
     quietly(sb.rpc('overview_board')),
     quietly(sb.rpc('overview_archive')),
     isAdmin() ? protectionTicks().catch(() => []) : [],
+    quietly(sb.rpc('overview_trends', { p_since: lastVisit || null })),
   ]);
   if (main.dataset.section !== 'work') return w;
   const deadlines = board || arch ? deadlineRows(board, arch) : null;
   const health = healthRows(board, ticks, () => renderOverviewView(main, menu));
   const bars = archiveBars(arch);
   const waiting = w.items.filter(x => x.count), clear = w.items.filter(x => !x.count);
+  const extra = trendsHtml(trends) + branchesHtml(trends);
   main.innerHTML = `
-    <div class="panel ov-head"><h2>Overview</h2>
-      <p class="hint">${w.total ? `${w.total} ${w.total === 1 ? 'thing is' : 'things are'} waiting for you. The oldest first.` : 'Nothing is waiting for you. Thank you!'}</p></div>
+    <div class="panel ov-head"><div class="ov-head-top"><h2>Overview <span class="ov-print-date">${esc(new Date(today() + 'T00:00').toLocaleDateString('en', { day: 'numeric', month: 'long', year: 'numeric' }))}</span></h2>
+      <div class="btn-row ov-head-btns"><button type="button" class="btn secondary" id="ov-goto">&#8981; Go to&hellip;</button><button type="button" class="btn secondary" id="ov-fav">&#9734; Favourites</button><button type="button" class="btn secondary" id="ov-print">Print the week</button></div></div>
+      <p class="hint">${w.total ? `${w.total} ${w.total === 1 ? 'thing is' : 'things are'} waiting for you. The oldest first.` : 'Nothing is waiting for you. Thank you!'}</p>
+      ${sinceHtml(trends, lastVisit)}</div>
     <section class="ov-section">
       <h3 class="ov-h">Waiting for you</h3>
       <div class="ov-wait-grid">
@@ -166,12 +312,15 @@ export async function renderOverviewView(main, menu) {
       </div>
       ${clear.length ? `<p class="hint ov-clear">Nothing waiting: ${clear.map(x => esc(x.what)).join(' · ')}</p>` : ''}
     </section>
-    ${board || arch ? `<div class="ov-section">${boardHtml(deadlines, health, bars)}</div>` : ''}
+    ${board || arch || extra ? `<div class="ov-section">${boardHtml(deadlines, health, bars, extra)}</div>` : ''}
     <section class="ov-section ov-tools">
       <h3 class="ov-h">Tools</h3>
       ${menu.filter(([group]) => group).map(([group, items]) => `<h4 class="ov-group">${esc(group)}</h4><div class="ov-tool-list">${items.map(([id, label]) => `<button type="button" class="ov-tool" data-tool="${id}">${esc(label)}<span class="start-chevron" aria-hidden="true">&rsaquo;</span></button>`).join('')}</div>`).join('')}
     </section>
     ${isAdmin() ? '<section class="ov-section" id="ov-depts"></section>' : ''}`;
+  main.querySelector('#ov-goto').addEventListener('click', () => window.__goTo());
+  main.querySelector('#ov-fav').addEventListener('click', () => openFavourites(menu));
+  main.querySelector('#ov-print').addEventListener('click', printWeek);
   main.querySelectorAll('.ov-wait').forEach(b => b.addEventListener('click', () => waiting[+b.dataset.i].open()));
   main.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => window.__workTool(b.dataset.tool)));
   main.querySelectorAll('[data-due]').forEach(b => b.addEventListener('click', () => deadlines[+b.dataset.due].open()));

@@ -1,5 +1,5 @@
-import { passwordProblem, authorNames, dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261127211058';
-import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261127211058';
+import { passwordProblem, authorNames, dateOfBirthFieldsHtml, readDateOfBirth, ageFromDate, sb, State, esc, optionsHtml, isAdmin, withStatus, loadOptions, labelOf, announcementsPopupOn, displayLogin, PHONE_ACCOUNT_FUNCTION, likeSafe, OPTION_LIST_NAMES, OPTION_LIST_LABELS, readPdfPageCountDebug, getDriveAccessToken, canProposePolicyChange, confirmPopup, promptPopup } from './core.js?v=20261127223631';
+import { openPolicyProposalModal, ownersFor } from './policy.js?v=20261127223631';
 
 // ---------- Users ----------
 
@@ -176,6 +176,14 @@ export async function renderOptionsView(main) {
       <div id="dept-editor"></div>
     </div>
     <div class="panel">
+      <h2>Overview <span class="hint">— when something asks for attention</span></h2>
+      <div class="btn-row" style="align-items:flex-end;">
+        <div class="field" style="margin:0;"><label for="ov-red">Something waiting turns red after (days)</label><input id="ov-red" type="number" min="1" max="90" value="${esc(String(State.policyValues.waiting_red_days ?? 7))}" style="width:90px;"></div>
+        <div class="field" style="margin:0;"><label for="ov-idle">A task taken with no due date goes into Deadlines after (days)</label><input id="ov-idle" type="number" min="1" max="90" value="${esc(String(State.policyValues.task_idle_days ?? 14))}" style="width:90px;"></div>
+        <button type="button" class="btn secondary" id="ov-limits-save">Save</button><span class="hint" id="ov-limits-status" role="status"></span>
+      </div>
+    </div>
+    <div class="panel">
       <h2>Rules <span class="hint">— the numbers of the project</span></h2>
       <p class="hint">The lead of a department proposes a change, an Admin decides: <strong>My Department, Rules</strong>. Nobody changes them here.</p>
     </div>
@@ -192,6 +200,15 @@ export async function renderOptionsView(main) {
       </div>
     </div>`;
   document.getElementById('opt-list-select').addEventListener('change', e => { State.optionsSelectedList = e.target.value; renderOptionsEditor(); });
+  document.getElementById('ov-limits-save').addEventListener('click', async () => {
+    const red = parseInt(document.getElementById('ov-red').value, 10), idle = parseInt(document.getElementById('ov-idle').value, 10), status = document.getElementById('ov-limits-status');
+    status.textContent = '';
+    if (!(red >= 1 && red <= 90 && idle >= 1 && idle <= 90)) { alert('Please choose numbers from 1 to 90.'); return; }
+    const { error } = await sb.rpc('set_overview_thresholds', { p_red: red, p_idle: idle });
+    if (error) { alert(error.code === 'PGRST202' ? 'This is not ready yet. An Admin has one step to do.' : (error.message || 'It was not saved.')); return; }
+    State.policyValues.waiting_red_days = red; State.policyValues.task_idle_days = idle;
+    status.textContent = 'Saved \u2713';
+  });
   await renderOptionsEditor();
   await renderDepartmentsEditor();
   wireBackfillPageCounts();
