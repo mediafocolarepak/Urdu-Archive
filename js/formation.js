@@ -10,9 +10,9 @@
 // (formation_enrollees) e' visibile solo al proprietario o a Coordinator/Admin, stesso schema
 // del "Who?" delle bacheche (72_board_post_reads.sql).
 
-import { sb, State, esc, withStatus, canReviewApplications, quiet, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForIds, confirmPopup } from './core.js?v=20261125223139';
+import { titleTrioHtml, sb, State, esc, withStatus, canReviewApplications, quiet, isDeptLead, isAdmin, optionsHtml, labelOf, today, nameMapForIds, confirmPopup } from './core.js?v=20261127113639';
 // The reader (a path read like a book) shows the same document card as the Library, as dashboard.js and matchreview.js do.
-import { renderDocDetail } from './docdetail.js?v=20261125223139';
+import { renderDocDetail } from './docdetail.js?v=20261127113639';
 
 // Thumbnails (migration 93, owner's request to make the catalog "look like Coursera") - a public
 // bucket, same shape as board post images (BOARD_MEDIA_BUCKET in core.js), but not shared outside
@@ -361,7 +361,7 @@ async function renderPathDetail(main, pathId) {
   const docIds = [...new Set(posts.filter(p => p.document_id != null).map(p => p.document_id))];
   const docById = {}, textById = {};
   if (docIds.length) {
-    const docs = await withStatus(sb.from('documents').select('document_id,en_title,ur_title').in('document_id', docIds));
+    const docs = await withStatus(sb.from('documents').select('document_id,title,en_title,ur_title,it_title,it_title_translated,original_title').in('document_id', docIds));
     for (const d of docs) docById[d.document_id] = d;
     const texts = await withStatus(sb.from('document_texts').select('document_id,body,reviewed').in('document_id', docIds));
     for (const t of texts) textById[t.document_id] = t;
@@ -1244,7 +1244,7 @@ function renderPostRow(p, canEdit, doc, text) {
     ${p.body ? `<div dir="auto" style="white-space:pre-wrap;">${esc(p.body)}</div>` : ''}
     ${doc ? `<div class="field" style="margin-top:6px;">
       <label>Document</label>
-      <div style="font-size:13px;">#${esc(doc.document_id)} &middot; ${esc(doc.en_title) || '<span class="hint">(no title)</span>'}${doc.ur_title ? ` / <span dir="auto">${esc(doc.ur_title)}</span>` : ''}</div>
+      ${titleTrioHtml(doc, { small: true })}
       ${text ? `<div class="board-doc-preview" dir="auto">${esc(textPreview(text.body))}</div>` : ''}
     </div>` : ''}
     <button class="btn secondary" data-read-post="${p.id}" style="margin-top:4px;">&#128214; Open</button>

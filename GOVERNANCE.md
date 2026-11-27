@@ -1,7 +1,10 @@
 # Governance — roles, departments and decision policies
 
-**Status: v1.27 (2026-11-25) — decisions taken by the Owner; all of phases 1 through 3 are built and
+**Status: v1.28 (2026-11-27) — decisions taken by the Owner; all of phases 1 through 3 are built and
 merged (migrations 80–115). Team comments welcome, changes go through a new version.**
+
+**What changed in v1.28:** phase 5 (§5.14, §5.20, migration 184): a proposal in four steps, its review beside the document, an
+address for each document and proposal, the first steps of an Operator, and the three titles always in sight.
 
 **What changed in v1.27:** My Department in four tabs (§5.3, migration 179): the list of People is for HR and Admins only, a person's
 login is read one at a time by HR and Admins, the proposals on the rules are read by the team, and people are known by name.
@@ -549,6 +552,8 @@ open — two low-priority known gaps.
   `suspend`, `reinstate`, `exclude` (role → `user`, standing → `excluded`, department/board/
   qualification rows dropped; account and every ledger kept — §8.7), `role_change`,
   `board_misuse` / `board_block` / `board_unblock` (§5.4).
+  Read by HR members and Admin (all), by the person a decision is about and by whoever proposed it (theirs), and by
+  the Formation lead (the boards only): migration 181, Owner's decision, 2026-11-25.
 - **People** (`hr_people_overview()`), visible to HR members and Admin (Owner's decision, 2026-11-25; until
   migration 179 also to the lead of any department). It carries no login, telephone or city: the login of one
   person is asked one at a time with `person_contact()`, by HR members and Admin. Role, standing, credits, reputation, qualifications, departments, last event, negative events
@@ -686,6 +691,7 @@ open — two low-priority known gaps.
   for a meeting or a periodic review.
 - **Rules**: values in force read by everyone, proposals by the team; propose by department leads;
   decide by Admin (not the proposer).
+- Decisions about people: HR members and Admin all; the person and the proposer their own; the Formation lead the boards.
 - Team Applications: HR members + Admin (My Department → HR), no longer a separate tab.
 - Budget (top-up), Options (option lists, departments): Admin only. Reward members get a
   read-only view of credit circulation, the outcome ledger, compensation runs and the anomaly
@@ -892,7 +898,12 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
 
 ### 5.14 Proposals: the one door for new content (migration 112)
 
-- **Form:** three steps. Is it new or does it already exist (a search suggests, a person decides, nothing
+- **Form (four steps since 2026-11-27, Owner's decision):** *Is it already here?*, *About the text*, *The text or the file*,
+  *Check and send*, one shown at a time, with **Save draft** and **Next** (in the last step **Send for review**) always in sight.
+  The last step lists what is still missing, with the way to it; Send opens when nothing is. While writing, the app keeps a copy
+  on the device (not the files chosen) and offers it again if the page closes; only Save draft puts it in My proposals. On a
+  computer the PDF chosen is shown beside the text, and a PDF or a Word file can be dropped on the form.
+- **Before, in three parts:** is it new or does it already exist (a search suggests, a person decides, nothing
   is linked by itself); what the versions share (English title, category, author, date or period, and
   optionally recipient, topic, tags, Bible verse); then one version per language, with its title and
   its text or a PDF. The text can be pasted or loaded from a Word `.docx`, of which only the text is
@@ -908,6 +919,12 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
   only by another Formation member or Admin. Admin may review their own, and may publish directly.
   A proposal's text cannot be changed by direct writes, only through the form.
 - **A text counts as reread only if the reviewer says so,** version by version. The rest stays unverified.
+- **The review (2026-11-27):** the proposed document beside the decision, as for the tasks: PDF, text, recording or video on the
+  left, three choices and a note on the right (a note is needed to send back or reject). **Approve and publish** opens only when
+  every version has been looked at (its PDF or text opened, its recording played, its video opened).
+- **Addresses:** each proposal has its own (`#proposal/42`): the person's own draft opens as the form, otherwise as the review.
+  Each document too (`#doc/1699`, **Copy the link** on its card): it opens only for who may read it, and the same sentence answers
+  for a reserved document and for one that does not exist.
 - **Nothing gets stuck:** the proposer sees how long it has waited and can send a reminder after 3 days,
   then once every 3 days. It reaches the queue, not a person. Taking a proposal holds it for 48 hours,
   then it returns by itself. After 7 days it is marked as overdue (§4). All of this is computed from
@@ -1044,6 +1061,9 @@ built: it is privacy-sensitive and is its own decision, not a side effect of a s
 - **Italian titles translated from English** (migration 126, Owner's decision, 2026-11-06) show "(translated)" beside them, because they may not be the
   real title of the text. Someone who has checked one unticks the box in the edit form, and changing the title clears the mark as well. Titles found
   elsewhere in the archive, and Word of Life titles made of the month and the year, carry no mark.
+- **Always in sight (Owner's decision, 2026-11-27):** the card of a document in the Library and My Space, its detail, a document
+  linked to a board post or to a path, and the pages of the Books show the number, small, and the titles in English, Urdu and
+  Italian. A title missing on a record is taken from another version of the same Work.
 - **Not yet done:** the Urdu titles, and what happens when a new text arrives without all three. As of 2026-11-06 only 1 of
   1470 Works has a title in Urdu script. Urdu titles translated by machine are drafts until someone has reviewed them, kept out of `ur_title`.
 

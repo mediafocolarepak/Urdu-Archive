@@ -8,7 +8,8 @@ import {
   titleOverlapScore, ACCESS_LEVELS, readPdfPageCountFromBlob, getDriveAccessToken, uploadPdfToGDrive,
   AUDIO_BUCKET, AUDIO_FORMATS, audioFileProblem, audioDurationOf, HIDDEN_DOC_STATUSES, isMediaLinkOk, videoLinkHtml, mountAudioPlayer,
   helpLinkHtml, textDir, confirmPopup, promptPopup, loadLibrary
-} from './core.js?v=20261125223139';
+} from './core.js?v=20261127113639';
+import { fileSource, documentPane, openDocument, wireSplit } from './desk.js?v=20261127113639';
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // the Supabase Free plan's limit per file
 const FORMATS = [['DOC', 'Text or PDF'], ['AUD', 'Audio'], ['VID', 'Video']];
@@ -58,8 +59,21 @@ async function textFromWord(file) {
 
 // ---------- The section ----------
 
+const openProposal = id => window.__renderTab('proposals', undefined, 'proposal/' + id);
+const toList = () => window.__renderTab('proposals', undefined, '');
+
 export async function renderProposalsView(main) {
   main.innerHTML = '<div class="empty-msg">Loading...</div>';
+  // An address: one proposal, as a form while it is the person's to write, otherwise to read or to review.
+  const asked = /^proposal\/(\d+)$/.exec(State.sub || '');
+  if (asked) {
+    const askedId = parseInt(asked[1], 10);
+    let d = null;
+    try { d = await withStatus(sb.rpc('get_submission_detail', { p_id: askedId })); } catch { /* said by renderDetail */ }
+    if (d && d.mine && ['draft', 'to_correct'].includes(d.status)) await renderForm(main, askedId);
+    else await renderDetail(main, askedId);
+    return;
+  }
   // Coming from a board post, already filled in.
   if (State.proposalPrefill) {
     const prefill = State.proposalPrefill;
@@ -73,7 +87,7 @@ export async function renderProposalsView(main) {
     const id = State.proposalOpen;
     State.proposalOpen = null;
     currentTab = 'mine';
-    await renderForm(main, id);
+    openProposal(id);
     return;
   }
   if (State.proposalsTab) { currentTab = State.proposalsTab; State.proposalsTab = null; }
@@ -133,11 +147,16 @@ async function renderMine(main, body) {
   document.getElementById('prop-new').addEventListener('click', () => renderForm(main, null));
   body.querySelectorAll('[data-id]').forEach(card => {
     const id = parseInt(card.dataset.id, 10);
-    card.querySelector('.prop-edit')?.addEventListener('click', () => renderForm(main, id));
-    card.querySelector('.prop-open')?.addEventListener('click', () => renderDetail(main, id));
+    card.querySelector('.prop-edit')?.addEventListener('click', () => openProposal(id));
+    card.querySelector('.prop-open')?.addEventListener('click', () => openProposal(id));
     card.querySelector('.prop-discard')?.addEventListener('click', async () => {
       if (!await confirmPopup('Discard this proposal?')) return;
-      if (await act(() => withStatus(sb.rpc('discard_submission', { p_id: id }), 'Discarding...'))) renderProposalsView(main);
+      if (await act(() => withStatus(sb.rpc('discard_submission', { p_id: id }), 'Discarding...'))) {
+        // Its copy on this device goes too.
+        const { data: { user } } = await sb.auth.getUser();
+        forgetOnDevice(`proposalDraft_${user?.id || ''}_${id}`);
+        renderProposalsView(main);
+      }
     });
     card.querySelector('.prop-withdraw')?.addEventListener('click', async () => {
       if (await act(() => withStatus(sb.rpc('withdraw_submission', { p_id: id }), 'Taking back...'))) renderProposalsView(main);
@@ -270,6 +289,31 @@ function versionsSummary(existing) {
   return ` Already in the archive: ${esc([...new Set(words)].join(', '))}.`;
 }
 
+// The four steps of a proposal (Owner's decision, 2026-11-27). All four are in the page at once, one shown, so nothing is lost
+// moving between them. Save draft and Next (in the last step Send for review) stay in sight at the bottom.
+const STEPS = [['Is it already here?', 'Look for it first'], ['About the text', 'Title, author, date'], ['The text or the file', 'One for each language'], ['Check and send', 'What is missing']];
+let step = 0;
+const wide = () => window.matchMedia('(min-width: 1000px)').matches;
+
+// While writing, the proposal is kept on this device (not the files chosen): if the page closes, it is offered again.
+// Only Save draft puts it in My proposals.
+let draftKey = '', keepTimer = null;
+const keptCopy = () => ({ id: form.id, work_id: form.work_id, newWork: form.newWork, workLabel: form.workLabel, common: form.common, requestId: form.requestId || null, existing: form.existing || null,
+  versions: form.versions.map(v => ({ ...v, file: null, audioFile: null, fileName: v.file?.name || v.fileName || '', audioName: v.audioFile?.name || v.audioName || '' })) });
+function keepOnDevice() {
+  clearTimeout(keepTimer);
+  keepTimer = setTimeout(() => {
+    if (!document.getElementById('pf-versions')) return;
+    collectForm();
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({ at: new Date().toISOString(), step, form: keptCopy() }));
+      const kept = document.getElementById('pf-kept');
+      if (kept) kept.textContent = 'Kept on this device ✓';
+    } catch { /* a full or closed storage: only Save draft keeps it */ }
+  }, 700);
+}
+function forgetOnDevice(...keys) { clearTimeout(keepTimer); for (const k of keys) { try { localStorage.removeItem(k); } catch { /* nothing kept */ } } }
+
 // prefill: what another screen already knows (a month's package, a board post, a related document). Nothing
 // is saved until the person saves.
 async function renderForm(main, id, prefill) {
@@ -292,41 +336,57 @@ async function renderForm(main, id, prefill) {
     if (d.work_documents.length) form.workLabel = d.work_documents.map(w => w.title).filter(Boolean)[0] || `Work #${d.work_id}`;
     form.existing = d.work_documents.map(w => ({ language: w.language, media_type: 'DOC' }));
   }
+  const { data: { user } } = await sb.auth.getUser();
+  draftKey = `proposalDraft_${user?.id || ''}_${id || (prefill ? 'prefill' : 'new')}`;
+  step = id && form.decisionNote ? 3 : 0;
+  let restored = null;
+  if (!prefill) { try { restored = JSON.parse(localStorage.getItem(draftKey) || 'null'); } catch { restored = null; } }
+  if (restored?.form && await confirmPopup(`You have a draft of this proposal on this device, from ${new Date(restored.at).toLocaleString('en', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}. Continue it?`, { confirmLabel: 'Continue it', cancelLabel: 'Start again' })) {
+    Object.assign(form, restored.form, { decisionNote: form.decisionNote, status: form.status });
+    step = restored.step || 0;
+  } else if (restored) forgetOnDevice(draftKey);
+  const filesAgain = (restored?.form?.versions || []).flatMap(v => [v.fileName, v.audioName]).filter(Boolean);
   scrollTop();
   main.innerHTML = `
-    <div class="panel">
+    <div class="panel pf-panel">
       <div class="btn-row start-back-row"><button class="btn secondary back-btn" id="pf-back">&lsaquo; Back</button></div>
-      <h2 style="margin:0 0 8px;">${id ? 'Edit proposal' : 'New proposal'}</h2>
-      <p class="hint">Proposing earns no credits by itself. If you would like a compensation, agree with the team first: they will create a task for it.</p>
+      <h2 style="margin:0 0 6px;">${id ? 'Edit proposal' : 'New proposal'}</h2>
+      <p class="hint" style="margin-top:0;">Proposing earns no credits by itself. If you would like a compensation, agree with the team first: they will create a task for it.</p>
       ${prefill?.note ? `<p class="hint">${esc(prefill.note)}${(prefill.links || []).map(([label, url]) => ` <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>.`).join('')}</p>` : ''}
-      ${form.decisionNote ? `<p style="white-space:pre-wrap;" dir="auto"><b>Reviewer's note:</b> ${esc(form.decisionNote)}</p>` : ''}
-      <div class="subpanel">
-        ${form.common.related_to_document_id ? `
-        <h3>1. A new version of a document in the archive</h3>
-        <p style="margin-bottom:4px;">Related to <b dir="auto">${esc(form.workLabel)}</b> <span class="hint">#${esc(form.common.related_to_document_id)}</span></p>
-        <p class="hint" style="margin-top:0;">What you add here stays linked to it, and each will show the other among its versions.${versionsSummary(form.existing)}</p>` : `
-        <h3>1. Is it new, or does it already exist?</h3>
-        <p class="hint">Look for it first. If the same text exists in another language or version, link this proposal to it. You decide: nothing is linked by itself.</p>
-        <div class="searchbar"><input id="pf-search" dir="auto" placeholder="Search by title or by a phrase of the text..."></div>
-        <div id="pf-search-results"></div>
-        <div id="pf-work-choice" style="margin-top:8px;"></div>`}
+      ${form.decisionNote ? `<p class="pf-note" dir="auto"><b>Reviewer's note:</b> ${esc(form.decisionNote)}</p>` : ''}
+      ${filesAgain.length && Object.keys(restored?.form || {}).length && form.versions.some(v => v.fileName || v.audioName) ? `<p class="pf-note">The files you had chosen are not kept on the device: please choose them again (${filesAgain.map(esc).join(', ')}).</p>` : ''}
+      <div class="pf-wrap">
+        <nav class="pf-steps" aria-label="Steps">${STEPS.map(([name, note], i) => `<button type="button" class="pf-step" data-step="${i}"><span class="desk-num">${i + 1}</span><span class="pf-step-text"><b>${name}</b><span class="hint">${note}</span></span></button>`).join('')}</nav>
+        <div class="pf-stage">
+          <section class="pf-sec" data-sec="0">
+          ${form.common.related_to_document_id ? `
+            <h3>A new version of a document in the archive</h3>
+            <p style="margin-bottom:4px;">Related to <b dir="auto">${esc(form.workLabel)}</b> <span class="hint">#${esc(form.common.related_to_document_id)}</span></p>
+            <p class="hint" style="margin-top:0;">What you add here stays linked to it, and each will show the other among its versions.${versionsSummary(form.existing)}</p>` : `
+            <h3>Is it already here?</h3>
+            <p class="hint">Look for it first. If the same text is here in another language or version, link your proposal to it. You decide: nothing is linked by itself.</p>
+            <div class="searchbar"><input id="pf-search" dir="auto" placeholder="Search a title or a sentence of the text"></div>
+            <div id="pf-search-results"></div>
+            <div id="pf-work-choice" style="margin-top:8px;"></div>`}
+          </section>
+          <section class="pf-sec" data-sec="1" hidden><h3>About the text</h3><div id="pf-common"></div></section>
+          <section class="pf-sec" data-sec="2" hidden>
+            <h3>The text or the file</h3>
+            <p class="hint">One for each language and format. The text, pasted or loaded from Word, is what makes it searchable: a PDF alone can be found only by its title and tags.</p>
+            <div id="pf-versions"></div>
+            <div class="btn-row"><button type="button" class="btn secondary" id="pf-add-version">+ Another language</button></div>
+          </section>
+          <section class="pf-sec" data-sec="3" hidden><h3>Check and send</h3><div id="pf-check"></div></section>
+        </div>
       </div>
-      <div class="subpanel" style="margin-top:14px;">
-        <h3>2. What the versions share</h3>
-        <div id="pf-common"></div>
+      <div class="pf-bottom">
+        <span class="hint" id="pf-kept" aria-live="polite"></span>
+        <button type="button" class="btn secondary" id="pf-save">Save draft</button>
+        ${isAdmin() ? '<button type="button" class="btn secondary" id="pf-publish" hidden>Publish directly (Admin)</button>' : ''}
+        <button type="button" class="btn" id="pf-next">Next &rsaquo;</button>
+        <button type="button" class="btn" id="pf-submit" hidden>Send for review</button>
       </div>
-      <div class="subpanel" style="margin-top:14px;">
-        <h3>3. Versions</h3>
-        <p class="hint">One for each language and format. Adding the text, pasted or loaded from Word, is what makes it searchable: a PDF alone can be found only by its title and tags.</p>
-        <div id="pf-versions"></div>
-        <div class="btn-row"><button class="btn secondary" id="pf-add-version">+ Another language</button></div>
-      </div>
-      <div class="btn-row" style="margin-top:14px;">
-        <button class="btn" id="pf-submit">Send for review</button>
-        <button class="btn secondary" id="pf-save">Save draft</button>
-        ${isAdmin() ? '<button class="btn secondary" id="pf-publish">Publish directly (Admin)</button>' : ''}
-      </div>
-      <div id="pf-status" class="hint"></div>
+      <div id="pf-status" class="hint" role="status"></div>
     </div>`;
   renderCommon();
   renderVersions();
@@ -334,31 +394,38 @@ async function renderForm(main, id, prefill) {
     renderWorkChoice();
     wireSearch();
   }
-  // Whatever is written is not lost by leaving: the app asks first (State.unsaved, app.js).
+  goStep(step);
+  // Whatever is written is not lost by leaving: the app asks first (State.unsaved, app.js), and the device keeps a copy.
   State.unsaved = '';
-  const changed = () => { State.unsaved = 'This proposal has changes that are not saved. Leave it?'; };
+  const changed = () => { State.unsaved = 'This proposal has changes that are not saved. Leave it?'; keepOnDevice(); };
   const formPanel = main.querySelector('.panel');
   formPanel.addEventListener('input', e => { if (e.target.id !== 'pf-search') changed(); });
   formPanel.addEventListener('change', e => { if (e.target.id !== 'pf-search') changed(); });
+  if (restored?.form && Object.keys(restored.form).length && form === form) State.unsaved = 'This proposal has changes that are not saved. Leave it?';
+  main.querySelectorAll('[data-step]').forEach(b => b.addEventListener('click', () => goStep(+b.dataset.step)));
+  document.getElementById('pf-next').addEventListener('click', () => goStep(step + 1));
   document.getElementById('pf-back').addEventListener('click', async () => {
     if (State.unsaved && !await confirmPopup(State.unsaved, { confirmLabel: 'Leave without saving', cancelLabel: 'Stay here', danger: true })) return;
     State.unsaved = '';
-    renderProposalsView(main);
+    forgetOnDevice(draftKey);
+    toList();
   });
   document.getElementById('pf-add-version').addEventListener('click', () => {
     collectForm();
     form.versions.push(emptyVersion(''));
     renderVersions();
+    keepOnDevice();
   });
+  const saved = () => forgetOnDevice(draftKey, `proposalDraft_${user?.id || ''}_${form.id}`);
   document.getElementById('pf-save').addEventListener('click', async () => {
-    if (await act(() => persist())) renderProposalsView(main);
+    if (await act(() => persist())) { saved(); toList(); }
   });
   document.getElementById('pf-submit').addEventListener('click', async () => {
     const ok = await act(async () => {
       await persist();
       await withStatus(sb.rpc('submit_submission', { p_id: form.id }), 'Sending...');
     });
-    if (ok) { currentTab = 'mine'; renderProposalsView(main); }
+    if (ok) { saved(); currentTab = 'mine'; toList(); alert('Sent for review. Thank you!'); }
   });
   document.getElementById('pf-publish')?.addEventListener('click', async () => {
     if (!await confirmPopup('Publish this directly, without review? It becomes visible at once, and your action is recorded.')) return;
@@ -366,96 +433,225 @@ async function renderForm(main, id, prefill) {
       await persist();
       await withStatus(sb.rpc('approve_submission', { p_id: form.id, p_read_document_ids: null, p_note: null }), 'Publishing...');
     });
-    if (ok) { currentTab = 'mine'; renderProposalsView(main); }
+    if (ok) { saved(); currentTab = 'mine'; toList(); }
   });
   loadTagSuggestions();
 }
 
+function goStep(i) {
+  if (!document.getElementById('pf-versions')) return;
+  collectForm();
+  step = Math.max(0, Math.min(STEPS.length - 1, i));
+  document.querySelectorAll('.pf-sec').forEach(s => { s.hidden = +s.dataset.sec !== step; });
+  const missing = whatIsMissing();
+  document.querySelectorAll('.pf-step').forEach(b => {
+    const n = +b.dataset.step;
+    b.classList.toggle('pf-now', n === step);
+    // A step already passed: done when nothing is missing in it, otherwise marked to come back to.
+    const passed = n < step, lacks = missing.some(m => m.step === n);
+    b.classList.toggle('pf-done', passed && !lacks);
+    b.classList.toggle('pf-lacks', passed && lacks);
+    b.querySelector('.desk-num').innerHTML = passed ? (lacks ? '!' : '&#10003;') : String(n + 1);
+    b.setAttribute('aria-label', `${STEPS[n][0]}${passed ? (lacks ? ', something is missing' : ', done') : ''}`);
+    b.toggleAttribute('aria-current', n === step);
+  });
+  const last = step === STEPS.length - 1;
+  document.getElementById('pf-next').hidden = last;
+  document.getElementById('pf-submit').hidden = !last;
+  document.getElementById('pf-submit').disabled = missing.length > 0;
+  const pub = document.getElementById('pf-publish');
+  if (pub) { pub.hidden = !last; pub.disabled = missing.length > 0; }
+  if (last) renderCheck(missing);
+  document.getElementById('main').scrollTop = 0;
+}
+
+// What submission_problem() would refuse, said before sending, each with the way to it.
+function whatIsMissing() {
+  const c = form.common, out = [];
+  const add = (text, stepNo, find) => out.push({ text, step: stepNo, find });
+  if (!(c.en_title || '').trim()) add('The title in English', 1, '#pf-en_title');
+  if (!c.category) add('The category', 1, '#pf-category');
+  if (!c.author) add('The author', 1, '#pf-author');
+  if (!c.ref_date && !(c.ref_period || '').trim()) add('The date, or its month', 1, '#pf-ref_date');
+  if (!form.versions.length) add('At least one version', 2, '#pf-add-version');
+  form.versions.forEach((v, i) => {
+    const who = labelOf(State.langs, v.language) || `Version ${i + 1}`, at = sel => `[data-version="${i}"] ${sel}`;
+    if (!v.language) add(`${who}: its language`, 2, at('.pv-language'));
+    if (!(v.original_title || '').trim()) add(`${who}: its title`, 2, at('.pv-title'));
+    if (v.media_type === 'AUD') {
+      if (!v.audio_path && !v.audioFile) add(`${who}: the recording`, 2, at('.pv-audio'));
+      if (!(v.reader_name || '').trim()) add(`${who}: who reads it`, 2, at('.pv-reader'));
+    } else if (v.media_type === 'VID') {
+      if (!(v.external_url || '').trim()) add(`${who}: the video link`, 2, at('.pv-link'));
+    } else if (!(v.body || '').trim() && !v.file && !v.draft_path) add(`${who}: its text or a PDF`, 2, at('.pv-body'));
+  });
+  return out;
+}
+
+function renderCheck(missing) {
+  const c = form.common, box = document.getElementById('pf-check');
+  const facts = [labelOf(State.categories, c.category), labelOf(State.authors, c.author), c.ref_period || c.ref_date].filter(Boolean);
+  const state = v => (v.media_type === 'AUD' ? (v.audio_path || v.audioFile ? 'recording' : '') : v.media_type === 'VID' ? (v.external_url ? 'video link' : '')
+    : [(v.body || '').trim() ? 'text' : '', v.file || v.draft_path ? 'PDF' : ''].filter(Boolean).join(' and '));
+  box.innerHTML = `
+    ${missing.length ? `<div class="panel pf-missing"><b>Still missing</b>${missing.map((m, i) => `<div class="pf-miss"><span><span aria-hidden="true">&#10007;</span> ${esc(m.text)}</span><button type="button" class="btn secondary" data-go="${i}">Go there</button></div>`).join('')}</div>`
+      : '<div class="panel work-clear"><span aria-hidden="true">&#10003;</span> Nothing is missing.</div>'}
+    <div class="panel">
+      <div class="desk-title" dir="auto">${esc(c.en_title) || '<span class="hint">(no title yet)</span>'}</div>
+      ${facts.length ? `<div class="desk-facts">${facts.map(f => `<span>${esc(f)}</span>`).join('')}</div>` : ''}
+      ${form.workLabel ? `<p class="hint">Linked to: <span dir="auto">${esc(form.workLabel)}</span></p>` : ''}
+      ${form.versions.map(v => `<div class="pf-ver"><b>${esc(labelOf(State.langs, v.language) || 'A version')}</b> <span dir="auto">${esc(v.original_title)}</span> ${state(v) ? `<span class="st st-green"><span aria-hidden="true">&#10003;</span> ${esc(state(v))}</span>` : ''}</div>`).join('')}
+    </div>
+    <p class="hint">${missing.length ? 'Send for review opens when nothing is missing.' : 'A Revisor or a Coordinator decides; nobody publishes alone.'} You can also keep it as a draft.</p>`;
+  box.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => {
+    const m = missing[+b.dataset.go];
+    goStep(m.step);
+    const el = document.querySelector(m.find);
+    if (m.find.includes('pf-ref_date') || m.find.includes('pf-category') || m.find.includes('pf-author') || m.find.includes('pf-en_title')) document.getElementById('pf-more')?.removeAttribute('open');
+    el?.scrollIntoView({ block: 'center' });
+    el?.focus();
+  }));
+}
+
 function renderCommon() {
   const c = form.common;
+  const more = c.recipient || c.main_topic || c.secondary_tags || c.bible_verse || c.contained_in_document_id;
   document.getElementById('pf-common').innerHTML = `
     <div class="field-grid wide">
-      <div class="field"><label>Title in English *</label><input id="pf-en_title" value="${esc(c.en_title)}"></div>
-      <div class="field"><label>Category *</label><select id="pf-category">${optionsHtml(State.categories, c.category, true)}</select></div>
-      <div class="field"><label>Author *</label><select id="pf-author">${optionsHtml(State.authors, c.author, true)}</select></div>
-      <div class="field"><label>Date *</label><input id="pf-ref_date" type="date" value="${esc(c.ref_date)}"></div>
-      <div class="field"><label>or period (a Word of Life: its own month, such as 2026-12) *</label><input id="pf-ref_period" placeholder="2026-12" value="${esc(c.ref_period)}"></div>
-      <div class="field"><label>Recipient <span class="hint">(optional)</span></label><select id="pf-recipient">${optionsHtml(State.recipients, c.recipient, true)}</select></div>
-      <div class="field"><label>Main topic <span class="hint">(optional)</span></label><select id="pf-main_topic">${optionsHtml(State.mainTopics, c.main_topic, true)}</select></div>
-      <div class="field"><label>Topic tags <span class="hint">(optional, separated by commas)</span></label><input id="pf-secondary_tags" list="pf-tag-list" dir="auto" value="${esc(c.secondary_tags)}"><datalist id="pf-tag-list"></datalist></div>
-      <div class="field"><label>Bible verse <span class="hint">(optional)</span></label><input id="pf-bible_verse" dir="auto" value="${esc(c.bible_verse)}"></div>
-      <div class="field"><label>Contained in a magazine issue <span class="hint">(optional: the issue's number in the archive)</span></label><input id="pf-contained" type="number" min="1" value="${esc(c.contained_in_document_id)}"></div>
-      <div class="field"><label>Page in that issue <span class="hint">(optional)</span></label><input id="pf-contained-page" type="number" min="1" value="${esc(c.contained_page)}"></div>
-    </div>`;
+      <div class="field"><label for="pf-en_title">Title in English</label><input id="pf-en_title" value="${esc(c.en_title)}"></div>
+      <div class="field"><label for="pf-category">Category</label><select id="pf-category">${optionsHtml(State.categories, c.category, true)}</select></div>
+      <div class="field"><label for="pf-author">Author</label><select id="pf-author">${optionsHtml(State.authors, c.author, true)}</select></div>
+      <div class="field"><label for="pf-ref_date">Date</label><input id="pf-ref_date" type="date" value="${esc(c.ref_date)}"></div>
+      <div class="field"><label for="pf-ref_period">or its month <span class="hint">(a Word of Life: such as 2026-12)</span></label><input id="pf-ref_period" placeholder="2026-12" value="${esc(c.ref_period)}"></div>
+    </div>
+    <details class="dep-more" id="pf-more" ${more ? 'open' : ''}><summary>More details <span class="hint">recipient, topic, tags, Bible verse, magazine issue</span></summary>
+    <div class="field-grid wide">
+      <div class="field"><label for="pf-recipient">Recipient</label><select id="pf-recipient">${optionsHtml(State.recipients, c.recipient, true)}</select></div>
+      <div class="field"><label for="pf-main_topic">Main topic</label><select id="pf-main_topic">${optionsHtml(State.mainTopics, c.main_topic, true)}</select></div>
+      <div class="field"><label for="pf-secondary_tags">Topic tags <span class="hint">(separated by commas)</span></label><input id="pf-secondary_tags" list="pf-tag-list" dir="auto" value="${esc(c.secondary_tags)}"><datalist id="pf-tag-list"></datalist></div>
+      <div class="field"><label for="pf-bible_verse">Bible verse</label><input id="pf-bible_verse" dir="auto" value="${esc(c.bible_verse)}"></div>
+      <div class="field"><label for="pf-contained">Contained in a magazine issue <span class="hint">(the issue's number in the archive)</span></label><input id="pf-contained" type="number" min="1" value="${esc(c.contained_in_document_id)}"></div>
+      <div class="field"><label for="pf-contained-page">Page in that issue</label><input id="pf-contained-page" type="number" min="1" value="${esc(c.contained_page)}"></div>
+    </div></details>`;
+}
+
+// The PDF chosen, beside the text on a computer: what is typed can be compared with it. On a phone, behind a button.
+function pdfSourceOf(v) {
+  if (v.file) return { key: 'pdf', label: 'The PDF you chose', load: async () => ({ pdf: v.file }) };
+  if (v.draft_path) return fileSource('pdf', 'The PDF', v.draft_path);
+  return null;
+}
+function showPdf(card, v) {
+  const box = card.querySelector('.pv-pdf'), phone = card.querySelector('.pv-look');
+  const source = pdfSourceOf(v);
+  card.querySelector('.pv-pair').classList.toggle('pv-has-pdf', !!source);
+  phone.hidden = !source;
+  if (!source) { box.innerHTML = ''; return; }
+  if (wide()) documentPane(box, [source]).show('pdf');
+  else box.innerHTML = '';
+  phone.onclick = () => openDocument([source], 'pdf');
 }
 
 function renderVersions() {
   const levels = ACCESS_LEVELS.filter(([code]) => code !== 'reserved' || canManageReserved());
   const box = document.getElementById('pf-versions');
   box.innerHTML = form.versions.map((v, i) => `
-    <div class="panel" data-version="${i}" style="margin-bottom:10px;">
+    <div class="panel pv-card" data-version="${i}">
       <div class="field-grid wide">
-        <div class="field"><label>Language *</label><select class="pv-language">${optionsHtml(State.langs, v.language, true)}</select></div>
-        <div class="field"><label>Title in this language *</label><input class="pv-title" dir="auto" value="${esc(v.original_title)}"></div>
-        <div class="field"><label>Access level</label><select class="pv-level">${optionsHtml(levels, v.access_level, false)}</select></div>
-        <div class="field"><label>Format</label><select class="pv-format">${optionsHtml(FORMATS, v.media_type || 'DOC', false)}</select></div>
+        <div class="field"><label>Language<select class="pv-language">${optionsHtml(State.langs, v.language, true)}</select></label></div>
+        <div class="field"><label>Title in this language<input class="pv-title" dir="auto" value="${esc(v.original_title)}"></label></div>
+        <div class="field"><label>Who can read it<select class="pv-level">${optionsHtml(levels, v.access_level, false)}</select></label></div>
+        <div class="field"><label>Format<select class="pv-format">${optionsHtml(FORMATS, v.media_type || 'DOC', false)}</select></label></div>
       </div>
-      <div class="pv-vid" style="display:${v.media_type === 'VID' ? 'block' : 'none'};">
-        <div class="field"><label>Video link *</label><input class="pv-link" type="url" dir="ltr" placeholder="https://youtu.be/..." value="${esc(v.external_url)}">
+      <div class="pv-vid" ${v.media_type === 'VID' ? '' : 'hidden'}>
+        <div class="field"><label>Video link<input class="pv-link" type="url" dir="ltr" placeholder="https://youtu.be/..." value="${esc(v.external_url)}"></label>
           <div class="hint">YouTube or Google Drive. The video isn't stored here, so keep the original file on Drive too.</div></div>
-        <div class="field"><label>Duration <span class="hint">(optional, such as 4 min)</span></label><input class="pv-duration" value="${esc(v.duration)}"></div>
+        <div class="field"><label>Duration <span class="hint">(if you know it, such as 4 min)</span><input class="pv-duration" value="${esc(v.duration)}"></label></div>
       </div>
-      <div class="pv-aud" style="display:${v.media_type === 'AUD' ? 'block' : 'none'};">
-        <div class="field"><label>Read by *</label><input class="pv-reader" dir="auto" value="${esc(v.reader_name)}"><div class="hint">This name is shown next to the recording.</div></div>
-        <div class="field"><label>Recording * ${v.audio_path ? '<span class="hint">(already attached; choose another to replace it)</span>' : ''}</label><input class="pv-audio" type="file" accept=".mp3,.m4a,.mp4,.aac,.ogg,.opus,.webm,audio/*">
+      <div class="pv-aud" ${v.media_type === 'AUD' ? '' : 'hidden'}>
+        <div class="field"><label>Read by<input class="pv-reader" dir="auto" value="${esc(v.reader_name)}"></label><div class="hint">This name is shown next to the recording.</div></div>
+        <div class="field"><label>Recording ${v.audio_path ? '<span class="hint">(already attached; choose another to replace it)</span>' : ''}<input class="pv-audio" type="file" accept=".mp3,.m4a,.mp4,.aac,.ogg,.opus,.webm,audio/*"></label>
           <div class="hint">MP3 or M4A plays on every phone. Up to 25 MB, which is about 50 minutes of voice.</div></div>
       </div>
-      <div class="pv-doc" style="display:${!v.media_type || v.media_type === 'DOC' ? 'block' : 'none'};">
-      <div class="field"><label>Text</label><textarea class="pv-body" dir="${textDir(v.body, v.language)}" rows="6">${esc(v.body)}</textarea></div>
-      <div class="field"><label>Or load the text from Word <span class="hint">(.docx; the file itself is not kept)</span></label><input class="pv-word" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"><div class="hint pv-word-status"></div></div>
-      <div class="field"><label>PDF file ${v.draft_path ? '<span class="hint">(already attached; choose another to replace it)</span>' : ''}</label><input class="pv-file" type="file" accept=".pdf"></div>
+      <div class="pv-doc" ${!v.media_type || v.media_type === 'DOC' ? '' : 'hidden'}>
+        <div class="pv-pair">
+          <div class="field pv-text"><label>Text<textarea class="pv-body" dir="${textDir(v.body, v.language)}" rows="14">${esc(v.body)}</textarea></label></div>
+          <div class="pv-pdf" aria-label="The PDF"></div>
+        </div>
+        <div class="pv-drop">
+          <span class="desk-drop-drag">Drop a PDF or a Word file here, or</span>
+          <label class="btn secondary">Choose a PDF<input class="pv-file sr-only" type="file" accept=".pdf"></label>
+          <label class="btn secondary">Load the text from Word<input class="pv-word sr-only" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></label>
+          <button type="button" class="btn secondary pv-look" hidden>Look at the PDF</button>
+        </div>
+        <div class="hint pv-file-status">${v.file ? `PDF chosen: ${esc(v.file.name)}` : v.draft_path ? 'A PDF is attached. Choose another to replace it.' : ''}</div>
+        <div class="hint pv-word-status"></div>
       </div>
-      ${form.versions.length > 1 ? '<div class="btn-row"><button class="btn danger pv-remove" style="padding:4px 10px;">Remove this version</button></div>' : ''}
+      ${form.versions.length > 1 ? '<div class="btn-row"><button type="button" class="btn danger pv-remove">Remove this version</button></div>' : ''}
     </div>`).join('');
   box.querySelectorAll('[data-version]').forEach(card => {
-    const i = parseInt(card.dataset.version, 10);
-    card.querySelector('.pv-remove')?.addEventListener('click', () => {
+    const i = parseInt(card.dataset.version, 10), v = form.versions[i];
+    card.querySelector('.pv-remove')?.addEventListener('click', async () => {
+      if (!await confirmPopup('Remove this version from the proposal?', { confirmLabel: 'Remove' })) return;
       collectForm();
       form.versions.splice(i, 1);
       renderVersions();
+      keepOnDevice();
     });
-    card.querySelector('.pv-file').addEventListener('change', e => { form.versions[i].file = e.target.files[0] || null; });
+    const takePdf = file => {
+      if (!file) return;
+      if (!/\.pdf$/i.test(file.name)) { alert('Please choose a PDF file.'); return; }
+      if (file.size > MAX_FILE_BYTES) { alert(`"${file.name}" is larger than 50 MB.`); return; }
+      v.file = file;
+      card.querySelector('.pv-file-status').textContent = `PDF chosen: ${file.name}`;
+      showPdf(card, v);
+      State.unsaved = 'This proposal has changes that are not saved. Leave it?';
+      keepOnDevice();
+    };
+    card.querySelector('.pv-file').addEventListener('change', e => { takePdf(e.target.files[0]); e.target.value = ''; });
     card.querySelector('.pv-format').addEventListener('change', e => {
-      card.querySelector('.pv-doc').style.display = e.target.value === 'DOC' ? 'block' : 'none';
-      card.querySelector('.pv-aud').style.display = e.target.value === 'AUD' ? 'block' : 'none';
-      card.querySelector('.pv-vid').style.display = e.target.value === 'VID' ? 'block' : 'none';
+      card.querySelector('.pv-doc').hidden = e.target.value !== 'DOC';
+      card.querySelector('.pv-aud').hidden = e.target.value !== 'AUD';
+      card.querySelector('.pv-vid').hidden = e.target.value !== 'VID';
     });
     card.querySelector('.pv-audio').addEventListener('change', e => {
       const file = e.target.files[0] || null;
       const problem = file && audioFileProblem(file);
-      if (problem) { alert(problem); e.target.value = ''; form.versions[i].audioFile = null; return; }
-      form.versions[i].audioFile = file;
+      if (problem) { alert(problem); e.target.value = ''; v.audioFile = null; return; }
+      v.audioFile = file;
     });
     // The text box follows the language chosen, or its letters while the language is not chosen.
     const bodyBox = card.querySelector('.pv-body');
     const setBodyDir = () => { bodyBox.dir = textDir(bodyBox.value, card.querySelector('.pv-language').value); };
     bodyBox.addEventListener('input', setBodyDir);
     card.querySelector('.pv-language').addEventListener('change', setBodyDir);
-    card.querySelector('.pv-word').addEventListener('change', async e => {
-      const file = e.target.files[0];
-      e.target.value = '';
+    const takeWord = async file => {
       if (!file) return;
-      const body = card.querySelector('.pv-body');
-      if (body.value.trim() && !await confirmPopup('Replace the text already in this box with the text of the file?')) return;
+      if (bodyBox.value.trim() && !await confirmPopup('Replace the text already in this box with the text of the file?')) return;
       const status = card.querySelector('.pv-word-status');
       status.textContent = 'Reading the file...';
       const ok = await act(async () => {
-        body.value = await textFromWord(file);
+        bodyBox.value = await textFromWord(file);
         setBodyDir();
         status.textContent = `Text loaded from "${file.name}". Please check it: layout and images are not carried over.`;
+        State.unsaved = 'This proposal has changes that are not saved. Leave it?';
+        keepOnDevice();
       });
       if (!ok) status.textContent = '';
+    };
+    card.querySelector('.pv-word').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; takeWord(f); });
+    // A file dropped on the box: a PDF is attached, a Word file gives its text.
+    const drop = card.querySelector('.pv-doc');
+    drop.addEventListener('dragover', e => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); drop.classList.add('desk-over'); } });
+    drop.addEventListener('dragleave', e => { if (!drop.contains(e.relatedTarget)) drop.classList.remove('desk-over'); });
+    drop.addEventListener('drop', e => {
+      e.preventDefault();
+      drop.classList.remove('desk-over');
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      if (/\.docx$/i.test(file.name)) takeWord(file); else takePdf(file);
     });
+    showPdf(card, v);
   });
 }
 
@@ -646,93 +842,150 @@ async function renderQueue(main, body) {
         </div>`).join('') : '<div class="empty-msg">Nothing waiting for review.</div>'}
     </div>`;
   body.querySelectorAll('[data-id]').forEach(card => {
-    card.querySelector('.prop-review').addEventListener('click', () => renderDetail(main, parseInt(card.dataset.id, 10)));
+    card.querySelector('.prop-review').addEventListener('click', () => openProposal(card.dataset.id));
   });
 }
 
 // ---------- One proposal, to read or to review ----------
 
-async function openFile(path) {
-  const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(path, 300);
-  if (error) { alert(error.message); return; }
-  window.open(data.signedUrl, '_blank');
-}
-
+// The review (Owner's decision, 2026-11-27): the proposed document beside the decision, as for the tasks. Approve and publish
+// opens when every version has been looked at: its PDF or its text opened, its recording played, its video opened.
 async function renderDetail(main, id) {
-  const d = await withStatus(sb.rpc('get_submission_detail', { p_id: id }));
+  let d;
+  try { d = await withStatus(sb.rpc('get_submission_detail', { p_id: id })); }
+  catch {
+    main.innerHTML = '<div class="panel"><p>This proposal cannot be opened.</p><div class="btn-row"><button class="btn" id="pd-back">Proposals</button></div></div>';
+    main.querySelector('#pd-back').addEventListener('click', toList);
+    return;
+  }
   const c = d.common || {};
-  const line = (label, value) => value ? `<div><b>${esc(label)}:</b> <span dir="auto">${esc(value)}</span></div>` : '';
   const canDecide = d.can_review && d.status === 'submitted' && (!d.claimed_by_other || isAdmin());
-  scrollTop();
-  main.innerHTML = `
-    <div class="panel">
-      <div class="btn-row start-back-row"><button class="btn secondary back-btn" id="pd-back">&lsaquo; Back</button></div>
-      <h2 style="margin:0 0 8px;" dir="auto">${esc(d.title) || '(no title)'}</h2>
-      <div class="hint">${esc(STATUS_LABELS[d.status] || d.status)}${d.is_reserved ? ' &middot; Reserved' : ''}${d.proposer_email ? ' &middot; proposed by ' + esc(d.proposer_email) : ''}</div>
-      ${d.decision_note ? `<p style="white-space:pre-wrap;" dir="auto"><b>Reviewer's note:</b> ${esc(d.decision_note)}</p>` : ''}
-      <div class="field" style="font-size:13px;line-height:1.7;margin-top:10px;">
-        ${line('Category', labelOf(State.categories, c.category))}
-        ${line('Author', labelOf(State.authors, c.author))}
-        ${line('Date', c.ref_date)}
-        ${line('Period', c.ref_period)}
-        ${line('Recipient', labelOf(State.recipients, c.recipient))}
-        ${line('Main topic', labelOf(State.mainTopics, c.main_topic))}
-        ${line('Topic tags', c.secondary_tags)}
-        ${line('Bible verse', c.bible_verse)}
-      </div>
-      ${d.work_documents.length ? `<div class="field"><label>Other versions of this work, already in the archive</label>${d.work_documents.map(w => `<div class="hint"><span dir="auto">${esc(w.title)}</span> &middot; ${esc(labelOf(State.langs, w.language))} &middot; #${esc(w.document_id)}</div>`).join('')}</div>` : '<div class="hint">Proposed as a new work, not linked to anything in the archive.</div>'}
-      ${d.versions.map(v => `
-        <div class="subpanel" style="margin-top:12px;" data-doc="${esc(v.document_id)}">
-          <h3 style="margin-top:0;">${esc(labelOf(State.langs, v.language))}${v.media_type === 'DOC' ? '' : ` <span class="count-badge" style="padding:1px 6px;">${esc(labelOf(FORMATS, v.media_type))}</span>`}${v.access_level === 'reserved' ? ' <span class="count-badge" style="padding:1px 6px;">Reserved</span>' : ''}</h3>
-          <div dir="auto" style="font-weight:600;">${esc(v.original_title)}</div>
-          ${v.duration ? `<div class="hint">Duration: ${esc(v.duration)}</div>` : ''}
-          ${v.media_type === 'VID' ? `<div class="btn-row">${v.external_url ? videoLinkHtml(v.external_url, 'Watch the video', true) : '<span class="hint">No link yet.</span>'}</div>` : ''}
-          ${v.media_type === 'AUD' ? `<div class="pd-audio">${v.audio_path ? '' : '<span class="hint">No recording yet.</span>'}</div>` : ''}
-          ${v.media_type !== 'DOC' ? '' : v.body ? `<div dir="${textDir(v.body, v.language)}" style="white-space:pre-wrap;max-height:320px;overflow:auto;border:1px solid var(--line);padding:8px;margin:6px 0;">${esc(v.body)}</div>` : '<div class="hint">No text: only searchable by title and tags.</div>'}
-          ${v.draft_path ? '<div class="btn-row"><button class="btn secondary pd-file">Open the PDF</button></div>' : ''}
-          ${canDecide && v.body ? `<label style="display:flex;align-items:center;gap:8px;margin-top:6px;text-transform:none;letter-spacing:normal;font-size:13.5px;"><input type="checkbox" class="pd-read" style="width:auto;flex:none;" value="${esc(v.document_id)}"> I have read this text against its source</label>` : ''}
-        </div>`).join('')}
-      ${canDecide ? `
-        <div class="btn-row" style="margin-top:14px;">
-          ${d.claimed_by_me ? '<button class="btn secondary" id="pd-release">Release it</button>' : '<button class="btn secondary" id="pd-claim">Take it</button>'}
-          <button class="btn" id="pd-approve">Approve and publish</button>
-          <button class="btn secondary" id="pd-back-correct">Send back to correct</button>
-          <button class="btn danger" id="pd-reject">Reject</button>
-        </div>` : ''}
-      ${d.can_review && d.status === 'submitted' && !canDecide ? '<p class="hint">Another reviewer has taken this. It comes back to the queue after 48 hours if they don\'t decide.</p>' : ''}
-      <details class="subpanel" style="margin-top:14px;" ${d.can_review ? '' : 'open'}>
-        <summary style="cursor:pointer;font-weight:600;">History</summary>
-        ${d.events.map(e => `<div class="hint" style="padding:2px 0;">${esc((e.at || '').slice(0, 16).replace('T', ' '))} &middot; ${esc(EVENT_LABELS[e.event] || e.event)}${e.actor ? ' &middot; ' + esc(e.actor) : ''}${e.note ? `: <span dir="auto">${esc(e.note)}</span>` : ''}</div>`).join('')}
-      </details>
-    </div>`;
-  document.getElementById('pd-back').addEventListener('click', () => renderProposalsView(main));
-  main.querySelectorAll('[data-doc]').forEach(card => {
-    const v = d.versions.find(x => String(x.document_id) === card.dataset.doc);
-    card.querySelector('.pd-file')?.addEventListener('click', () => openFile(v.draft_path));
-    if (v.media_type === 'AUD' && v.audio_path) mountAudioPlayer(card.querySelector('.pd-audio'), { path: v.audio_path, reader_name: v.reader_name }, false);
+  const langOf = v => labelOf(State.langs, v.language) || 'A version';
+  // What there is to look at in each version, and whether it has been looked at.
+  const looked = new Set();
+  const sources = [];
+  d.versions.forEach((v, i) => {
+    const mark = src => ({ ...src, load: async () => { const r = await src.load(); looked.add(i); update(); return r; } });
+    if (v.draft_path) sources.push(mark(fileSource(`pdf${i}`, `${langOf(v)}: PDF`, v.draft_path)));
+    if (v.body) sources.push(mark({ key: `text${i}`, label: `${langOf(v)}: text`, load: async () => ({ text: v.body, language: v.language }) }));
+    const nothing = !v.draft_path && !v.body && !(v.media_type === 'AUD' && v.audio_path) && !(v.media_type === 'VID' && v.external_url);
+    if (nothing) looked.add(i);
   });
+  const toLook = () => d.versions.map((v, i) => (looked.has(i) ? '' : langOf(v) + (v.media_type === 'AUD' ? ': the recording' : v.media_type === 'VID' ? ': the video' : ''))).filter(Boolean);
+  const facts = [labelOf(State.categories, c.category), labelOf(State.authors, c.author), c.ref_period || c.ref_date, labelOf(State.recipients, c.recipient), labelOf(State.mainTopics, c.main_topic)].filter(Boolean);
+  const proposer = d.proposer_email && !String(d.proposer_email).includes('@') ? d.proposer_email : '';
+  const CHOICES = [['approve', 'Approve and publish', 'It becomes visible at once, according to who can read it.', 'green'], ['back', 'Send back to correct', 'Write what to correct.', 'amber'], ['reject', 'Reject', 'Write why.', 'red']];
+  scrollTop();
+  const work = `
+    <div class="panel desk-info" style="--st:var(--st-violet)">
+      ${STATUS_LABELS[d.status] ? mineStateHtml({ ...d, days_waiting: d.submitted_at ? Math.floor((Date.now() - new Date(d.submitted_at)) / 86400000) : 0 }) : ''}
+      <div class="desk-title" dir="auto">${esc(d.title) || '(no title)'}</div>
+      ${facts.length ? `<div class="desk-facts">${facts.map(f => `<span>${esc(f)}</span>`).join('')}${d.is_reserved ? '<span>Reserved</span>' : ''}</div>` : ''}
+      ${c.secondary_tags || c.bible_verse ? `<p class="hint" dir="auto">${esc([c.secondary_tags, c.bible_verse].filter(Boolean).join(' · '))}</p>` : ''}
+      ${proposer ? `<p class="hint">Proposed by ${esc(proposer)}</p>` : ''}
+      ${d.decision_note ? `<p class="pf-note" dir="auto"><b>Reviewer's note:</b> ${esc(d.decision_note)}</p>` : ''}
+    </div>
+    ${sources.length ? '<div class="btn-row desk-phone"><button type="button" class="btn secondary desk-open-doc">Look at the document</button></div>' : ''}
+    <div class="panel">
+      <h3 style="margin-top:0;">${canDecide ? '1. Look at each version' : 'The versions'}</h3>
+      ${d.versions.map((v, i) => `
+        <div class="pd-ver" data-i="${i}">
+          <div><b>${esc(langOf(v))}</b>${v.media_type === 'DOC' ? '' : ` <span class="count-badge">${esc(labelOf(FORMATS, v.media_type))}</span>`}${v.access_level === 'reserved' ? ' <span class="count-badge">Reserved</span>' : ''}
+            <span class="pd-looked" hidden>${'<span class="st st-green"><span aria-hidden="true">&#10003;</span> looked at</span>'}</span></div>
+          <div dir="auto">${esc(v.original_title)}</div>
+          ${v.duration ? `<div class="hint">Duration: ${esc(v.duration)}</div>` : ''}
+          <div class="btn-row" style="margin:6px 0 0;">
+            ${v.draft_path ? `<button type="button" class="btn secondary" data-show="pdf${i}">Open the PDF</button>` : ''}
+            ${v.body ? `<button type="button" class="btn secondary" data-show="text${i}">Read the text</button>` : ''}
+            ${v.media_type === 'VID' ? (v.external_url ? videoLinkHtml(v.external_url, 'Watch the video', true) : '<span class="hint">No link yet.</span>') : ''}
+            ${v.media_type === 'DOC' && !v.body && !v.draft_path ? '<span class="hint">No text and no PDF.</span>' : ''}
+          </div>
+          ${v.media_type === 'AUD' ? `<div class="pd-audio">${v.audio_path ? '' : '<span class="hint">No recording yet.</span>'}</div>` : ''}
+          ${v.media_type === 'DOC' && !v.body ? '<div class="hint">No text: it can be found only by its title and tags.</div>' : ''}
+          ${canDecide && v.body ? `<label class="pd-read-row"><input type="checkbox" class="pd-read" value="${esc(v.document_id)}"> I have read this text against its source</label>` : ''}
+        </div>`).join('')}
+    </div>
+    ${d.work_documents.length ? `<div class="panel"><b>Already in the archive, in the same work</b>${d.work_documents.map(w => `<div class="hint"><span dir="auto">${esc(w.title)}</span> &middot; ${esc(labelOf(State.langs, w.language))} &middot; #${esc(w.document_id)}</div>`).join('')}</div>`
+      : '<p class="hint">A new work: nothing else in the archive is linked to it.</p>'}
+    ${canDecide ? `
+      <div class="panel">
+        <div class="btn-row" style="margin-top:0;">${d.claimed_by_me ? '<button type="button" class="btn secondary" id="pd-release">Release it</button><span class="hint">You have taken it for 48 hours.</span>' : '<button type="button" class="btn secondary" id="pd-claim">Take it</button><span class="hint">So that nobody else reviews it at the same time.</span>'}</div>
+        <fieldset class="desk-choices"><legend>2. Your decision</legend>${CHOICES.map(([v, l, text, tone]) => `<label class="desk-choice st-${tone}"><input type="radio" name="pd-choice" value="${v}"><span><b>${l}</b><span class="hint">${text}</span></span></label>`).join('')}</fieldset>
+        <p class="hint" id="pd-tolook"></p>
+        <div class="field"><label for="pd-note">Note for the person who proposed it <span class="hint" id="pd-note-hint"></span></label><textarea id="pd-note" rows="4" dir="auto"></textarea></div>
+        <div class="btn-row"><button type="button" class="btn big-btn" id="pd-send" disabled>Send</button></div>
+      </div>` : ''}
+    ${d.can_review && d.status === 'submitted' && !canDecide ? '<p class="hint">Another reviewer has taken this. It comes back to the queue after 48 hours if they don\'t decide.</p>' : ''}
+    <details class="subpanel" ${d.can_review ? '' : 'open'}>
+      <summary style="cursor:pointer;font-weight:600;">History</summary>
+      ${d.events.map(e => `<div class="hint" style="padding:2px 0;">${esc((e.at || '').slice(0, 16).replace('T', ' '))} &middot; ${esc(EVENT_LABELS[e.event] || e.event)}${e.actor && !String(e.actor).includes('@') ? ' &middot; ' + esc(e.actor) : ''}${e.note ? `: <span dir="auto">${esc(e.note)}</span>` : ''}</div>`).join('')}
+    </details>`;
+  main.innerHTML = `<div class="desk-head"><button type="button" class="btn secondary" id="pd-back">&lsaquo; ${d.can_review && d.status === 'submitted' ? 'To review' : 'Proposals'}</button><span class="desk-head-title">Proposal ${esc(d.id)}</span></div>
+    <div class="desk${sources.length ? '' : ' desk-alone'}">${sources.length ? '<div class="desk-doc" id="desk-doc"></div><div class="desk-split" role="separator" aria-orientation="vertical" aria-label="Make one side wider" tabindex="0"><span aria-hidden="true">&#8942;</span></div>' : ''}<div class="desk-work" id="desk-work">${work}</div></div>`;
+  let pane = null;
+  const box = main.querySelector('#desk-doc');
+  if (box) {
+    const open = () => { if (!pane && wide()) { pane = documentPane(box, sources); pane.show(sources[0].key); } };
+    open();
+    window.addEventListener('resize', function onResize() { if (!box.isConnected) window.removeEventListener('resize', onResize); else open(); });
+    wireSplit(main.querySelector('.desk'));
+  }
+  const show = key => (pane && wide() ? pane.show(key) : openDocument(sources, key));
+  main.querySelectorAll('.desk-open-doc').forEach(b => b.addEventListener('click', () => openDocument(sources, sources[0].key)));
+  main.querySelectorAll('[data-show]').forEach(b => b.addEventListener('click', () => show(b.dataset.show)));
+  main.querySelectorAll('.pd-ver').forEach(card => {
+    const i = +card.dataset.i, v = d.versions[i];
+    if (v.media_type === 'AUD' && v.audio_path) {
+      mountAudioPlayer(card.querySelector('.pd-audio'), { path: v.audio_path, reader_name: v.reader_name }, false);
+      card.addEventListener('play', () => { looked.add(i); update(); }, true);
+    }
+    card.querySelectorAll('a[href]').forEach(a => a.addEventListener('click', () => { looked.add(i); update(); }));
+  });
+  main.querySelector('#pd-back').addEventListener('click', async () => {
+    if (State.unsaved && !await confirmPopup(State.unsaved, { confirmLabel: 'Leave', cancelLabel: 'Stay here', danger: true })) return;
+    State.unsaved = '';
+    if (d.can_review && d.status === 'submitted') currentTab = 'queue';
+    toList();
+  });
+  const note = main.querySelector('#pd-note'), send = main.querySelector('#pd-send');
+  const choice = () => main.querySelector('[name="pd-choice"]:checked')?.value || '';
+  function update() {
+    main.querySelectorAll('.pd-ver').forEach(card => { card.querySelector('.pd-looked').hidden = !looked.has(+card.dataset.i); });
+    if (!send) return;
+    const left = toLook(), c2 = choice(), needNote = c2 === 'back' || c2 === 'reject';
+    const approve = main.querySelector('[name="pd-choice"][value="approve"]');
+    approve.disabled = left.length > 0;
+    approve.closest('.desk-choice').classList.toggle('desk-choice-off', left.length > 0);
+    if (approve.disabled && approve.checked) approve.checked = false;
+    main.querySelector('#pd-tolook').textContent = left.length ? `Approve and publish opens when you have looked at: ${left.join(', ')}.` : '';
+    main.querySelector('#pd-note-hint').textContent = needNote ? '(needed)' : '(if you want)';
+    main.querySelectorAll('.desk-choice').forEach(l => l.classList.toggle('desk-chosen', l.querySelector('input').checked));
+    send.disabled = !choice() || (needNote && !note.value.trim());
+    State.unsaved = choice() || note.value.trim() ? 'Your decision has not been sent yet.' : '';
+  }
+  update();
+  main.querySelectorAll('[name="pd-choice"]').forEach(r => r.addEventListener('change', update));
+  note?.addEventListener('input', update);
   const reload = () => renderDetail(main, id);
-  const closeToQueue = () => { currentTab = 'queue'; renderProposalsView(main); };
+  const closeToQueue = () => { State.unsaved = ''; currentTab = 'queue'; toList(); };
   document.getElementById('pd-claim')?.addEventListener('click', async () => {
     if (await act(() => withStatus(sb.rpc('claim_submission', { p_id: id }), 'Saving...'))) reload();
   });
   document.getElementById('pd-release')?.addEventListener('click', async () => {
     if (await act(() => withStatus(sb.rpc('release_submission', { p_id: id }), 'Saving...'))) reload();
   });
-  document.getElementById('pd-approve')?.addEventListener('click', async () => {
-    if (!await confirmPopup('Approve and publish? Every version becomes visible at once, according to its access level.')) return;
-    const read = [...main.querySelectorAll('.pd-read:checked')].map(cb => parseInt(cb.value, 10));
-    if (await act(() => withStatus(sb.rpc('approve_submission', { p_id: id, p_read_document_ids: read, p_note: null }), 'Publishing...'))) closeToQueue();
-  });
-  document.getElementById('pd-back-correct')?.addEventListener('click', async () => {
-    const note = await promptPopup('What needs correcting? The person who proposed it will read this.');
-    if (note === null) return;
-    if (await act(() => withStatus(sb.rpc('send_back_submission', { p_id: id, p_note: note }), 'Sending back...'))) closeToQueue();
-  });
-  document.getElementById('pd-reject')?.addEventListener('click', async () => {
-    const note = await promptPopup('Why are you rejecting this? The person who proposed it will read this.');
-    if (note === null) return;
-    if (await act(() => withStatus(sb.rpc('reject_submission', { p_id: id, p_note: note }), 'Rejecting...'))) closeToQueue();
+  send?.addEventListener('click', async () => {
+    const c2 = choice(), text = note.value.trim();
+    if (c2 === 'approve') {
+      if (!await confirmPopup('Approve and publish? Every version becomes visible at once, according to who can read it.', { confirmLabel: 'Approve and publish' })) return;
+      const read = [...main.querySelectorAll('.pd-read:checked')].map(cb => parseInt(cb.value, 10));
+      if (await act(() => withStatus(sb.rpc('approve_submission', { p_id: id, p_read_document_ids: read, p_note: text || null }), 'Publishing...'))) closeToQueue();
+    } else if (c2 === 'back') {
+      if (await act(() => withStatus(sb.rpc('send_back_submission', { p_id: id, p_note: text }), 'Sending back...'))) closeToQueue();
+    } else if (c2 === 'reject') {
+      if (!await confirmPopup('Reject this proposal? The person who proposed it will read your note.', { confirmLabel: 'Reject', danger: true })) return;
+      if (await act(() => withStatus(sb.rpc('reject_submission', { p_id: id, p_note: text }), 'Rejecting...'))) closeToQueue();
+    }
   });
 }
 

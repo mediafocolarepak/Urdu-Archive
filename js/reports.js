@@ -1,5 +1,5 @@
-import { authorNames, sb, State, esc, labelOf, optionsHtml, withStatus, withStatusCount, isDeptMember, isAdmin, reportTable } from './core.js?v=20261125223139';
-import { namesByIds } from './deptui.js?v=20261125223139';
+import { authorNames, sb, State, esc, labelOf, optionsHtml, withStatus, withStatusCount, isDeptMember, isAdmin, reportTable } from './core.js?v=20261127113639';
+import { namesByIds } from './deptui.js?v=20261127113639';
 
 const APPLICATION_STATUS_LABEL = {
   pending: 'Pending', recommended: 'Recommended to Admin', approved: 'Approved', rejected: 'Rejected',

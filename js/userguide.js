@@ -11,7 +11,7 @@
 //   qual:<CODE>                     holds that qualification
 //   board_editor                    looks after at least one board
 
-import { authorNames, sb, State, esc, isAdmin, withStatus } from './core.js?v=20261125223139';
+import { authorNames, sb, State, esc, isAdmin, withStatus, showOperatorIntro } from './core.js?v=20261127113639';
 
 const SECTIONS = [
   ['use', { en: 'Use the archive', it: 'Usare l\'archivio', ur: 'آرکائیو کا استعمال' }],
@@ -131,9 +131,11 @@ function renderList(main, rows, quals) {
     <div class="panel help-panel">
       ${['user', 'operator'].includes(State.currentRole) ? '<div class="btn-row start-back-row"><button type="button" class="btn secondary back-btn" id="help-to-start">&lsaquo; Back</button></div>' : ''}
       <div class="help-head"><h2>${esc(ui().help)}</h2>${langSwitchHtml(languages)}</div>
+      ${['operator', 'coordinator', 'admin'].includes(State.currentRole) ? '<div class="btn-row"><button type="button" class="btn secondary" id="help-intro">&#129520; The first steps of an Operator</button></div>' : ''}
       ${groups || `<div class="empty-msg">${esc(ui().empty)}</div>`}
     </div>`;
   wireLangSwitch(main);
+  document.getElementById('help-intro')?.addEventListener('click', () => showOperatorIntro(true));
   document.getElementById('help-to-start')?.addEventListener('click', () => {
     if (history.state && history.state.helpHome) { history.back(); return; }
     window.__renderTab('onboarding');

@@ -2,8 +2,8 @@
 // app, on a computer next to the steps, on a phone on the whole screen. Used by the task desk and by the review (tasks.js).
 // PDFs are drawn with pdf.js, Word files are read with mammoth and InPage files with the converter: nothing leaves the app.
 
-import { sb, esc, BUCKET, withStatus, loadLibrary, loadPdfJs, fetchDriveFile, textDir, errorText } from './core.js?v=20261125223139';
-import { inPageBytesToUnicode } from './inpageconverter.js?v=20261125223139';
+import { sb, esc, BUCKET, withStatus, loadLibrary, loadPdfJs, fetchDriveFile, textDir, errorText } from './core.js?v=20261127113639';
+import { inPageBytesToUnicode } from './inpageconverter.js?v=20261127113639';
 
 const ending = name => ((String(name || '').match(/\.([a-z0-9]+)$/i) || [])[1] || '').toLowerCase();
 

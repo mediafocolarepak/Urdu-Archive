@@ -2,7 +2,7 @@
 // PROJECT_HANDOFF_v15.md). Personal and private: each user only ever sees their own favorites,
 // enforced by RLS on user_favorites, not by anything in this module.
 
-import { quiet, sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup, openFormationPostPopup, canReviewApplications, canWrite, openTranslatePopup, docCardHtml } from './core.js?v=20261125223139';
+import { quiet, sb, State, esc, labelOf, withStatus, isDocPostable, openBoardPostPopup, openFormationPostPopup, canReviewApplications, canWrite, openTranslatePopup, docCardHtml } from './core.js?v=20261127113639';
 
 // Since 2026-11-23 (Owner's request) the saved documents are the same large cards as the Library: a tap opens the
 // document's card. Remove is small, under each one. The tokens of appreciation are in My Profile.

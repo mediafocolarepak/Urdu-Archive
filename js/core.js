@@ -404,11 +404,34 @@ export function docDateLabel(doc) {
   const m = /^(\d{4})-(\d{2})$/.exec(doc.ref_period || '');
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, 1).toLocaleDateString('en', { month: 'long', year: 'numeric' }) : (doc.ref_period || '');
 }
+// The three titles of a document (Owner's request, 2026-11-27: always, in the Library, the paths, the boards and the books):
+// English, Urdu, Italian, each only once, and a missing one taken from another version of the same Work.
+export function titleTrio(d, others = []) {
+  const t = s => (s ?? '').trim(), all = [d, ...others].filter(Boolean);
+  const urOf = x => t(x.ur_title) || (URDU_SCRIPT.test(x.original_title || '') ? t(x.original_title) : '');
+  const ur = all.map(urOf).find(Boolean) || '';
+  let en = all.map(x => t(x.en_title) || t(x.title)).find(Boolean) || '';
+  const itDoc = all.find(x => t(x.it_title));
+  let it = itDoc ? t(itDoc.it_title) : '';
+  if (!en && !ur && !it) en = t(d.original_title);
+  if (it && en && it.toLowerCase() === en.toLowerCase()) it = '';
+  return { en, ur, it, itTranslated: !!(it && itDoc.it_title_translated) };
+}
+// The three titles and, small, the number. cls: the class of the block (doc-trio, or doc-trio doc-trio-sm inside a post).
+export function titleTrioHtml(d, { others = [], num = true, small = false } = {}) {
+  const x = titleTrio(d, others);
+  return `<div class="doc-trio${small ? ' doc-trio-sm' : ''}">
+    ${num ? `<span class="doc-card-num">#${esc(d.document_id)}</span>` : ''}
+    ${x.en ? `<span class="doc-trio-en" dir="auto">${esc(x.en)}</span>` : ''}
+    ${x.ur ? `<span class="doc-trio-ur" dir="rtl" lang="ur">${esc(x.ur)}</span>` : ''}
+    ${x.it ? `<span class="doc-trio-it" dir="auto" lang="it">${esc(x.it)}${x.itTranslated ? ' <span class="doc-title-mark">(translated)</span>' : ''}</span>` : ''}
+    ${!x.en && !x.ur && !x.it ? '<span class="doc-trio-en hint">(no title)</span>' : ''}
+  </div>`;
+}
 // A document as a large card (Owner's request, 2026-11-23): the number, the English title, the Urdu title in Nastaliq,
 // then the author and the date. The whole card is one button. Used by the Library and My Space.
 export function docCardHtml(d, { selected = false, extra = '' } = {}) {
-  const urdu = (d.ur_title || '').trim() || (URDU_SCRIPT.test(d.original_title || '') ? d.original_title.trim() : '');
-  const english = (d.en_title || d.title || '').trim() || (d.it_title || '').trim() || (urdu ? '' : (d.original_title || '').trim());
+  const { en: english, ur: urdu, it: italian, itTranslated } = titleTrio(d);
   const facts = [labelOf(State.authors, d.author), docDateLabel(d)].filter(Boolean).map(esc).join(' &middot; ');
   return `
     <div class="doc-card${selected ? ' selected' : ''}" data-id="${esc(d.document_id)}">
@@ -416,7 +439,8 @@ export function docCardHtml(d, { selected = false, extra = '' } = {}) {
         <span class="doc-card-num">#${esc(d.document_id)}</span>
         ${english ? `<span class="doc-card-en" dir="auto">${esc(english)}</span>` : ''}
         ${urdu ? `<span class="doc-card-ur" dir="rtl" lang="ur">${esc(urdu)}</span>` : ''}
-        ${!english && !urdu ? '<span class="doc-card-en hint">(no title)</span>' : ''}
+        ${italian ? `<span class="doc-card-it" dir="auto" lang="it">${esc(italian)}${itTranslated ? ' <span class="doc-title-mark">(translated)</span>' : ''}</span>` : ''}
+        ${!english && !urdu && !italian ? '<span class="doc-card-en hint">(no title)</span>' : ''}
         ${facts ? `<span class="doc-card-facts">${facts}</span>` : ''}
         <span class="doc-card-chevron" aria-hidden="true">&rsaquo;</span>
       </button>
@@ -1618,6 +1642,40 @@ export function showLoadFailed(box, e, again) {
   if (!box) return;
   box.innerHTML = `<div class="panel load-failed"><p style="margin:0 0 10px;white-space:pre-wrap;">${esc(errorText(e))}</p><button class="btn secondary">Try again</button></div>`;
   box.querySelector('button').addEventListener('click', again);
+}
+
+// The first steps of an Operator (Owner's decision, 2026-11-27): four short screens, once for each account (migration 184; until
+// it is run, once for each device). Help shows them again.
+const INTRO = [
+  ['&#129520;', 'Your room: My work', 'Home stays the same. My work is the place of what you do for the archive.'],
+  ['&#9995;', 'Take a task', 'In Tasks, choose one and say when you can finish it. Up to 3 at a time.'],
+  ['&#128228;', 'Send it', 'The document is beside the steps. When it is ready, Send for review.'],
+  ['&#128172;', 'Ask', 'Help is always at the top. You can also write in Share with us.'],
+];
+export async function showOperatorIntro(again = false) {
+  if (!again) {
+    if (State.currentRole !== 'operator') return;
+    const { data, error } = await sb.rpc('operator_intro', { p_mark: false });
+    const local = (() => { try { return localStorage.getItem('operatorIntroSeen'); } catch { return '1'; } })();
+    if (error ? local : data) return;
+  }
+  const { panel, close } = popupShell('operator-intro', { width: 440, label: 'Welcome to the team' });
+  let i = 0;
+  const done = () => {
+    close();
+    try { localStorage.setItem('operatorIntroSeen', '1'); } catch { /* the account keeps it */ }
+    if (!again) sb.rpc('operator_intro', { p_mark: true }).then(() => {}, () => {});
+  };
+  const draw = () => {
+    const [sign, title, text] = INTRO[i];
+    panel.innerHTML = `<div class="intro-step"><div class="intro-sign" aria-hidden="true">${sign}</div><div class="hint">${i + 1} of ${INTRO.length}</div>
+      <h2>${title}</h2><p>${text}</p></div>
+      <div class="btn-row intro-btns">${i < INTRO.length - 1 ? '<button type="button" class="btn secondary" data-skip>Skip</button><button type="button" class="btn" data-next>Next &rsaquo;</button>' : '<button type="button" class="btn" data-next>Start</button>'}</div>`;
+    panel.querySelector('[data-skip]')?.addEventListener('click', done);
+    panel.querySelector('[data-next]').addEventListener('click', () => { if (i < INTRO.length - 1) { i++; draw(); panel.querySelector('[data-next]').focus(); } else done(); });
+    panel.querySelector('[data-next]').focus();
+  };
+  draw();
 }
 
 // Text size and colours for this device (Owner's request, 2026-11-23), chosen in My Profile and kept in this browser
