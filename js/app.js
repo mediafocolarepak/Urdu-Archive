@@ -1,31 +1,32 @@
-import { State, isAdmin, canReviewApplications, isAnyDeptLead, boot, wireAuthButtons, confirmPopup, showLoadFailed, showOperatorIntro } from './core.js?v=20261127163927';
-import { renderDashboardView } from './dashboard.js?v=20261127163927';
-import { renderReportsView } from './reports.js?v=20261127163927';
-import { renderFindWorkView, canFindWork } from './findwork.js?v=20261127163927';
-import { renderHayatView } from './hayatindex.js?v=20261127163927';
-import { renderMatchReviewView } from './matchreview.js?v=20261127163927';
-import { renderBulkImportView } from './bulkimport.js?v=20261127163927';
-import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20261127163927';
-import { renderAdminMessagesView, initChatNotifications } from './chat.js?v=20261127163927';
-import { renderWorkView, loadWork } from './work.js?v=20261127163927';
-import { renderWorkConsolidationView } from './workconsolidation.js?v=20261127163927';
-import { renderHayatEditorView } from './hayateditor.js?v=20261127163927';
-import { renderInPageConverterView } from './inpageconverter.js?v=20261127163927';
-import { renderUserGuideView } from './userguide.js?v=20261127163927';
-import { renderJoinTeamView } from './collaboration.js?v=20261127163927';
-import { renderTasksView, initTaskNotifications } from './tasks.js?v=20261127163927';
-import { renderMyProfileView } from './profile.js?v=20261127163927';
-import { renderMySpaceView } from './myspace.js?v=20261127163927';
-import { renderBoardsView } from './boards.js?v=20261127163927';
-import { renderFormationView } from './formation.js?v=20261127163927';
-import { renderBooksView } from './books.js?v=20261127163927';
-import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261127163927';
-import { renderOnboardingView } from './onboarding.js?v=20261127163927';
-import { renderLanding } from './landing.js?v=20261127163927';
-import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20261127163927';
-import { renderProposalsView, initProposalNotifications } from './proposals.js?v=20261127163927';
-import { renderReadingsView, initReadingNotifications } from './readings.js?v=20261127163927';
-import { registerServiceWorker, initInstallBanner } from './pwa-register.js?v=20261127163927';
+import { State, isAdmin, isLeader, canReviewApplications, isAnyDeptLead, openTranslatePopup, boot, wireAuthButtons, confirmPopup, showLoadFailed, showOperatorIntro } from './core.js?v=20261127205542';
+import { renderDashboardView } from './dashboard.js?v=20261127205542';
+import { renderReportsView } from './reports.js?v=20261127205542';
+import { renderFindWorkView, canFindWork } from './findwork.js?v=20261127205542';
+import { renderHayatView } from './hayatindex.js?v=20261127205542';
+import { renderMatchReviewView } from './matchreview.js?v=20261127205542';
+import { renderBulkImportView } from './bulkimport.js?v=20261127205542';
+import { renderUsersView, renderOptionsView, renderAnnouncementsView } from './admin.js?v=20261127205542';
+import { renderAdminMessagesView, initChatNotifications } from './chat.js?v=20261127205542';
+import { renderWorkView, loadWork } from './work.js?v=20261127205542';
+import { renderWorkConsolidationView } from './workconsolidation.js?v=20261127205542';
+import { renderHayatEditorView } from './hayateditor.js?v=20261127205542';
+import { renderInPageConverterView } from './inpageconverter.js?v=20261127205542';
+import { renderUserGuideView } from './userguide.js?v=20261127205542';
+import { renderJoinTeamView } from './collaboration.js?v=20261127205542';
+import { renderTasksView, initTaskNotifications } from './tasks.js?v=20261127205542';
+import { renderMyProfileView } from './profile.js?v=20261127205542';
+import { renderMySpaceView } from './myspace.js?v=20261127205542';
+import { renderBoardsView } from './boards.js?v=20261127205542';
+import { renderFormationView } from './formation.js?v=20261127205542';
+import { renderBooksView } from './books.js?v=20261127205542';
+import { renderMyDepartmentView, renderDepartmentsOverviewView, initDeptMessageNotifications } from './mydepartment.js?v=20261127205542';
+import { renderOnboardingView } from './onboarding.js?v=20261127205542';
+import { renderLanding } from './landing.js?v=20261127205542';
+import { renderShareComposeView, renderShareInboxView, initShareNotifications } from './sharewithus.js?v=20261127205542';
+import { renderProposalsView, initProposalNotifications } from './proposals.js?v=20261127205542';
+import { renderReadingsView, initReadingNotifications } from './readings.js?v=20261127205542';
+import { renderOverviewView, renderArchiveToolsView, loadWaiting } from './overview.js?v=20261127205542';
+import { registerServiceWorker, initInstallBanner } from './pwa-register.js?v=20261127205542';
 
 // Libri and Processi are retired as separate tabs: "Collection" is now a Dashboard filter,
 // and process steps live in the Process History section of the document detail panel.
@@ -35,11 +36,12 @@ function getTabs() {
 
   // Users and Operators have the same bar (Owner's concept, 2026-11-25): an Operator is first of all a User, and has one
   // place more, My work. Everything else opens from Home or from My work; Help is always at the top.
-  if (isUser || isOperator) {
+  // Admins and Coordinators too, since 2026-11-27 (Owner's decision): Home first, and the tools in My work (workMenu below).
+  if (isUser || isOperator || isLeader()) {
     return [
       { id: 'onboarding', label: 'Home' },
       { id: 'dashboard', label: 'Library' },
-      ...(isOperator ? [{ id: 'work', label: 'My work' }] : []),
+      ...(isUser ? [] : [{ id: 'work', label: 'My work' }]),
       { id: 'sharewithus', label: 'Share with us' },
       { id: 'profile', label: 'My Profile' },
     ];
@@ -112,6 +114,29 @@ function getTabs() {
   return tabs;
 }
 
+// My work of Admins and Coordinators: the tools in groups, in the bar on the left on a computer and in the Overview on a phone
+// (overview.js). Every section of the old row of tabs is here, or in Home. [group, [[id, label, 'action'?]]]
+function workMenu() {
+  if (!isLeader()) return [];
+  const admin = isAdmin();
+  return [
+    ['', [['work', 'Overview']]],
+    ['To decide', [['tasks', 'Tasks'], ['proposals', 'Proposals'], ['readings', 'Recordings'], ['chat', 'Messages'], ...(admin || isAnyDeptLead() ? [['sharewithus', 'Shared with us']] : [])]],
+    ['Archive', [['dashboard', 'Library'], ['translate', 'Translate a text', 'action'], ['findwork', 'Find work'], ['reports', 'Print Reports'], ['archivetools', 'Archive tools']]],
+    ['Team', [...(State.myDepartments.length || admin ? [['mydepartment', admin ? 'Departments' : 'My Department']] : []), ['boards', 'Boards'], ['formation', 'Formation Paths'], ...(admin ? [['users', 'Users'], ['announcements', 'Announcements']] : [])]],
+    ...(admin ? [['Settings', [['options', 'Options']]]] : []),
+  ];
+}
+// A tool of My work, from the bar or from the Overview.
+function workTool(id) {
+  const item = workMenu().flatMap(([, items]) => items).find(([x]) => x === id);
+  if (item && item[2] === 'action') { if (id === 'translate') openTranslatePopup(); return; }
+  renderTab(id, 'work');
+}
+window.__workTool = workTool;
+// Where a section opened from inside another lights the bar (the archive tools, the old Project overview).
+const WORK_VOICE = { hayat: 'archivetools', matchreview: 'archivetools', workconsolidation: 'archivetools', hayateditor: 'archivetools', bulkimport: 'archivetools', inpageconverter: 'archivetools', deptoverview: 'work' };
+
 function initTopbar() {
   const bar = document.getElementById('tabs');
   const tabs = getTabs();
@@ -122,17 +147,17 @@ function initTopbar() {
 
 // The two places. Sections only of the work; sections that serve both, dressed differently in each (core.js quiet()); the
 // others belong to Home. A section opened from inside another keeps the place the person is in.
-const WORK_ONLY = new Set(['work', 'tasks', 'proposals', 'mydepartment', 'findwork', 'inpageconverter', 'hayat', 'hayateditor', 'matchreview', 'workconsolidation', 'bulkimport', 'deptoverview']);
+const WORK_ONLY = new Set(['work', 'tasks', 'proposals', 'mydepartment', 'findwork', 'inpageconverter', 'hayat', 'hayateditor', 'matchreview', 'workconsolidation', 'bulkimport', 'deptoverview', 'archivetools', 'chat', 'reports', 'users', 'options', 'announcements']);
 const BOTH = new Set(['dashboard', 'boards', 'formation', 'readings', 'sharewithus', 'help']);
 function placeFor(id, asked) {
-  if (State.currentRole !== 'operator') return 'home';
+  if (!['operator', 'coordinator', 'admin'].includes(State.currentRole)) return 'home';
   if (WORK_ONLY.has(id)) return 'work';
   if (BOTH.has(id)) return asked || State.place;
   return 'home';
 }
 // Which voice of the bar a section belongs to.
 function voiceOf(id) {
-  if (State.place === 'work') return 'work';
+  if (State.place === 'work') return isLeader() ? WORK_VOICE[id] || id : 'work';
   if (['dashboard', 'sharewithus', 'profile', 'jointeam', ...BAR_MORE.map(([x]) => x)].includes(id)) return id;
   if (id === 'chat') return 'sharewithus';
   return id === 'help' ? '' : 'onboarding';
@@ -154,10 +179,17 @@ const NAV_ICONS = {
   proposals: 'M12 4v16M4 12h16',
   readings: 'M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zM6 11a6 6 0 0 0 12 0M12 17v4',
   inpageconverter: 'M4 7h13l-3-3M20 17H7l3 3',
-  chat: 'M12 4l9 16H3zM12 10v4M12 17h.01',
+  chat: 'M3 6h18v12H3zM3 7l9 6 9-6',
   jointeam: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20a6 6 0 0 1 12 0M19 8v6M16 11h6',
   profile: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0',
   help: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 1-1 1.7M12 17h.01',
+  findwork: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-5-5',
+  reports: 'M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z',
+  archivetools: 'M3 4h18v4H3zM5 8v12h14V8M10 12h4',
+  users: 'M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 16a6 6 0 0 1 12 0M15 6h7M15 11h7M15 16h5',
+  announcements: 'M3 10v4h4l6 4V6l-6 4zM17 9a4 4 0 0 1 0 6',
+  options: 'M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4',
+  translate: 'M4 5h9M8 3v2M11 5c-1 4-4 7-7 8M6 9c1 2 3 4 5 5M12 20l4-9 4 9M13.5 17h5',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
 };
 const navIcon = id => `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="${id === 'more' ? 3 : 2}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${NAV_ICONS[id] || NAV_ICONS.more}"/></svg>`;
@@ -177,15 +209,22 @@ function barItems(tabs) {
 // keep the row of sections at the top.
 function initBottomNav(tabs) {
   const nav = document.getElementById('bottom-nav');
-  const on = ['user', 'operator'].includes(State.currentRole);
+  const on = ['user', 'operator', 'coordinator', 'admin'].includes(State.currentRole);
   document.body.classList.toggle('has-bottom-nav', on);
   document.body.classList.toggle('reader-topbar', on);
   document.body.classList.toggle('is-operator', State.currentRole === 'operator');
+  document.body.classList.toggle('is-leader', isLeader());
   document.getElementById('help-top').hidden = !on;
   if (!on) { nav.innerHTML = ''; return; }
   nav.innerHTML = barItems(tabs).map(t => `<button class="bn-btn${t.more ? ' bn-more' : ''}" data-tab="${t.id}">${navIcon(t.id)}<span class="bn-label">${t.label}</span>${t.id === 'work' ? '<span class="bn-count" id="work-count" hidden></span>' : ''}</button>`).join('')
+    // In My work, on a computer, the bar of an Admin or a Coordinator shows the tools instead (style.css .bn-wm).
+    + (isLeader() ? '<button class="bn-btn bn-wm bn-wm-back" data-tab="onboarding" type="button"><span aria-hidden="true">&lsaquo;</span><span class="bn-label">Home</span></button>'
+      + workMenu().map(([group, items]) => (group ? `<span class="bn-group bn-wm">${group}</span>` : '')
+        + items.map(([id, label]) => `<button class="bn-btn bn-wm" data-tab="${id}" data-tool="${id}" type="button">${navIcon(id)}<span class="bn-label">${label}</span>${id === 'work' ? '<span class="bn-count" id="wm-count" hidden></span>' : ''}</button>`).join('')).join('') : '')
     + '<button class="bn-narrow" id="bn-narrow" type="button"></button>';
-  nav.querySelectorAll('.bn-btn').forEach(b => b.addEventListener('click', () => renderTab(b.dataset.tab, b.dataset.tab === 'work' ? 'work' : 'home')));
+  nav.querySelectorAll('.bn-btn:not(.bn-wm)').forEach(b => b.addEventListener('click', () => renderTab(b.dataset.tab, b.dataset.tab === 'work' ? 'work' : 'home')));
+  nav.querySelector('.bn-wm-back')?.addEventListener('click', () => renderTab('onboarding', 'home'));
+  nav.querySelectorAll('.bn-wm[data-tool]').forEach(b => b.addEventListener('click', () => workTool(b.dataset.tool)));
   // On a computer the bar can be only its signs; the choice stays on this device.
   const narrow = document.getElementById('bn-narrow');
   const show = () => {
@@ -207,15 +246,16 @@ function initBottomNav(tabs) {
 let workCountAt = 0;
 function showWorkCount(count) {
   State.workCount = count;
-  const el = document.getElementById('work-count');
-  if (el) { el.hidden = !count; el.textContent = count > 99 ? '99+' : count; el.setAttribute('aria-label', `${count} waiting`); }
+  for (const el of [document.getElementById('work-count'), document.getElementById('wm-count')]) {
+    if (el) { el.hidden = !count; el.textContent = count > 99 ? '99+' : count; el.setAttribute('aria-label', `${count} waiting`); }
+  }
   const tile = document.getElementById('home-work-note');
   if (tile) tile.textContent = count ? `${count} thing${count === 1 ? ' is' : 's are'} waiting` : 'Nothing is waiting';
 }
 async function refreshWorkCount(now) {
-  if (State.currentRole !== 'operator' || (!now && Date.now() - workCountAt < 60000)) return;
+  if (!['operator', 'coordinator', 'admin'].includes(State.currentRole) || (!now && Date.now() - workCountAt < 60000)) return;
   workCountAt = Date.now();
-  try { showWorkCount((await loadWork()).todo.length); } catch (e) { console.warn('My work:', e); }
+  try { showWorkCount(isLeader() ? (await loadWaiting()).total : (await loadWork()).todo.length); } catch (e) { console.warn('My work:', e); }
 }
 
 // How tall the page's scrolling area is, for what must stay in sight inside it (style.css, --main-h).
@@ -236,6 +276,8 @@ window.addEventListener('popstate', e => {
 function canOpen(id) {
   if (getTabs().some(t => t.id === id)) return true;
   if (State.currentRole === 'user') return ['books', 'myspace', 'boards', 'formation', 'readings', 'jointeam', 'help', 'chat'].includes(id) && !(id === 'jointeam' && State.paused);
+  if (isLeader()) return workMenu().some(([, items]) => items.some(([x, , kind]) => x === id && kind !== 'action'))
+    || ['books', 'myspace', 'boards', 'formation', 'readings', 'help', 'deptoverview', 'hayat', 'matchreview', 'workconsolidation', 'hayateditor', 'inpageconverter'].includes(id) || (id === 'bulkimport' && isAdmin());
   if (State.currentRole === 'operator') return ['books', 'myspace', 'boards', 'formation', 'readings', 'tasks', 'proposals', 'inpageconverter', 'help', 'chat'].includes(id) || (id === 'mydepartment' && State.myDepartments.length > 0) || (id === 'findwork' && canFindWork());
   return false;
 }
@@ -261,9 +303,12 @@ function renderTab(id, place, sub = '') {
   document.body.classList.toggle('at-desk', id === 'tasks' && !!State.sub);
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
   const voice = voiceOf(id);
-  document.querySelectorAll('.bn-btn').forEach(b => { b.classList.toggle('active', b.dataset.tab === voice); b.toggleAttribute('aria-current', b.dataset.tab === voice); });
-  // On a phone the sections of Home have no voice of their own in the bar: Home stays lit.
-  document.querySelector('.bn-btn[data-tab="onboarding"]')?.classList.toggle('phone-on', BAR_MORE.some(([x]) => x === voice) || voice === 'jointeam');
+  const inMenu = isLeader() && State.place === 'work';
+  document.querySelectorAll('.bn-btn').forEach(b => { const on = b.dataset.tab === voice && b.classList.contains('bn-wm') === inMenu && !b.classList.contains('bn-wm-back'); b.classList.toggle('active', on); b.toggleAttribute('aria-current', on); });
+  // On a phone the sections of Home have no voice of their own in the bar: Home stays lit. In My work of an Admin or a
+  // Coordinator, My work does.
+  document.querySelector('.bn-btn[data-tab="onboarding"]:not(.bn-wm)')?.classList.toggle('phone-on', !inMenu && (BAR_MORE.some(([x]) => x === voice) || voice === 'jointeam'));
+  document.querySelector('.bn-btn[data-tab="work"]:not(.bn-wm)')?.classList.toggle('phone-on', inMenu);
   // The band that says "you are in the room of the work", and leads back to it.
   const bar = document.getElementById('place-bar');
   bar.hidden = State.place !== 'work';
@@ -309,6 +354,8 @@ function drawSection(id, main) {
   else if (id === 'inpageconverter') return renderInPageConverterView(main);
   else if (id === 'announcements') return renderAnnouncementsView(main);
   else if (id === 'chat') return renderAdminMessagesView(main);
+  else if (id === 'work' && isLeader()) return renderOverviewView(main, workMenu()).then(w => { if (w) { workCountAt = Date.now(); showWorkCount(w.total); } });
+  else if (id === 'archivetools') return renderArchiveToolsView(main);
   else if (id === 'work') return renderWorkView(main).then(w => { if (w) { workCountAt = Date.now(); showWorkCount(w.todo.length); } });
   else if (id === 'mydepartment') return renderMyDepartmentView(main);
   else if (id === 'deptoverview') return renderDepartmentsOverviewView(main);
@@ -318,7 +365,7 @@ function drawSection(id, main) {
   else if (id === 'help') return renderUserGuideView(main);
   else if (id === 'onboarding') return renderOnboardingView(main);
   // The leads' inbox is work: an Operator who leads a department finds it in My work, and shares from Home like everyone.
-  else if (id === 'sharewithus') return (isAdmin() || (isAnyDeptLead() && (State.currentRole !== 'operator' || State.place === 'work'))) ? renderShareInboxView(main) : renderShareComposeView(main);
+  else if (id === 'sharewithus') return (isAdmin() || isAnyDeptLead()) && State.place === 'work' ? renderShareInboxView(main) : renderShareComposeView(main);
 }
 
 // The tools made for a computer say so on a phone, kindly; they stay usable (Owner's decision, 2026-11-27).
@@ -336,12 +383,12 @@ window.__renderLanding = renderLanding;
 
 wireAuthButtons();
 boot(() => {
-  // Users and Operators land on Home (Operators since 2026-11-25); everyone else on the Dashboard. An address with a section
+  // Everyone lands on Home (Operators since 2026-11-25, Admins and Coordinators since 2026-11-27). An address with a section
   // (#tasks) opens it, if this person has it.
   initTopbar();
   const hash = location.hash.slice(1), subOf = Object.keys(SUBS).find(k => SUBS[k].test(hash));
   const asked = subOf || (hash.match(/^([a-z]+)$/) || [])[1];
-  const first = ['user', 'operator'].includes(State.currentRole) ? 'onboarding' : 'dashboard';
+  const first = 'onboarding';
   const start = asked && canOpen(asked) ? asked : first;
   const startSub = start === subOf ? hash : '';
   history.replaceState({ tab: start, place: placeFor(start, 'home'), sub: startSub }, '', '#' + (startSub || start));
@@ -351,9 +398,9 @@ boot(() => {
   initChatNotifications(() => renderTab('chat'));
   initTaskNotifications(() => renderTab('tasks', 'work'));
   initDeptMessageNotifications(code => renderTab('mydepartment', undefined, `department/${code}/team`));
-  initShareNotifications(() => renderTab('sharewithus', isAnyDeptLead() ? 'work' : 'home'));
+  initShareNotifications(() => renderTab('sharewithus', isAnyDeptLead() || isAdmin() ? 'work' : 'home'));
   initProposalNotifications(() => renderTab('proposals'));
-  initReadingNotifications(() => renderTab('readings'));
+  initReadingNotifications(() => renderTab('readings', isLeader() ? 'work' : undefined));
 });
 registerServiceWorker();
 initInstallBanner();

@@ -524,6 +524,7 @@ td.sibling-title.doc-title-ur { font-size: 1.05em; line-height: 2; }
 .bn-btn { position: relative; background: none; border: 0; color: var(--ink-soft); font: inherit; cursor: pointer; }
 .bn-count { background: var(--c-work); color: var(--sec-ink); border-radius: 12px; font-size: 13px; font-weight: 700; line-height: 20px; min-width: 20px; padding: 0 6px; text-align: center; }
 .bn-narrow { display: none; }
+.bn-wm { display: none !important; }
 @media (max-width: 900px) {
   .has-bottom-nav #bottom-nav { display: flex; flex-shrink: 0; background: var(--panel); border-top: 1px solid var(--line); box-shadow: 0 -1px 3px rgba(0,0,0,0.08); padding-bottom: env(safe-area-inset-bottom, 0px); }
   .bn-btn { flex: 1; min-width: 0; min-height: 64px; border-top: 3px solid transparent; font-size: 13px; line-height: 1.15; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 6px 2px; }
@@ -544,9 +545,17 @@ td.sibling-title.doc-title-ur { font-size: 1.05em; line-height: 2; }
   .bn-btn .bn-count { margin-left: auto; }
   .bn-btn.active .bn-count { background: var(--panel); color: var(--c-work); }
   /* My work is another room: a line before it and one after. */
-  .bn-btn[data-tab="work"] { margin: 11px 0; }
-  .bn-btn[data-tab="work"]::before, .bn-btn[data-tab="work"]::after { content: ""; position: absolute; left: 6px; right: 6px; border-top: 1px solid var(--line); }
-  .bn-btn[data-tab="work"]::before { top: -8px; } .bn-btn[data-tab="work"]::after { bottom: -8px; }
+  .bn-btn[data-tab="work"]:not(.bn-wm) { margin: 11px 0; }
+  .bn-btn[data-tab="work"]:not(.bn-wm)::before, .bn-btn[data-tab="work"]:not(.bn-wm)::after { content: ""; position: absolute; left: 6px; right: 6px; border-top: 1px solid var(--line); }
+  .bn-btn[data-tab="work"]:not(.bn-wm)::before { top: -8px; } .bn-btn[data-tab="work"]:not(.bn-wm)::after { bottom: -8px; }
+  /* My work of Admins and Coordinators (app.js workMenu): the bar shows the tools, in groups, and "‹ Home" to go back. */
+  .is-leader.place-work #bottom-nav > .bn-btn:not(.bn-wm) { display: none; }
+  .is-leader.place-work #bottom-nav .bn-btn.bn-wm { display: flex !important; }
+  .is-leader.place-work #bottom-nav .bn-group { display: block !important; margin: 12px 14px 2px; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-soft); }
+  .bn-wm { --sec: var(--c-work); }
+  .bn-btn.bn-wm { min-height: 42px; font-size: 16px; }
+  .bn-btn.bn-wm-back { color: var(--c-start); border: 1px solid var(--line); margin-bottom: 8px; min-height: 40px; }
+  .nav-narrow #bottom-nav .bn-group { display: none !important; }
   .bn-narrow { display: block; margin-top: auto; min-height: 40px; background: none; border: 0; border-radius: 8px; color: var(--ink-soft); font: inherit; font-size: 15px; text-align: left; padding: 6px 14px; cursor: pointer; }
   .bn-narrow:hover { background: var(--accent-soft); }
   .nav-narrow #bottom-nav { width: 70px !important; padding: 14px 8px; }
@@ -977,7 +986,30 @@ input[type="checkbox"]:not(.switch), input[type="radio"] { width: 20px; height: 
 .home-work { grid-column: 1 / -1; background: transparent; border: 1px dashed var(--line); border-left: 5px solid var(--c-work); box-shadow: none; min-height: 60px; margin-top: 6px; }
 .home-work .start-icon { width: 38px; height: 38px; flex-basis: 38px; background: var(--c-work); color: var(--sec-ink); }
 /* In Home nothing of the work covers the reading: the notices wait in My work. */
-.is-operator.place-home .work-toast, .is-operator.at-work .work-toast { display: none; }
+.is-operator.place-home .work-toast, .is-operator.at-work .work-toast, .is-leader.place-home .work-toast, .is-leader.at-work .work-toast { display: none; }
+/* The Overview of Admins and Coordinators (overview.js) */
+#main[data-section="archivetools"] { --sec: var(--c-work); --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M3%204h18v4H3zM5%208v12h14V8M10%2012h4%22%2F%3E%3C%2Fsvg%3E"); }
+#main[data-section="work"] { --sec-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%208h16v11H4zM9%208V5h6v3M4%2013h16%22%2F%3E%3C%2Fsvg%3E"); }
+.ov-head h2 { margin: 0; }
+.ov-head .hint { margin: 4px 0 0; font-size: 16px; }
+.ov-section { max-width: 1100px; margin: 0 auto 18px; }
+.ov-h { font-size: 19px; margin: 6px 0 10px; color: var(--c-work); }
+.ov-wait-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.ov-wait { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; background: var(--panel); border: 1px solid var(--line); border-left: 5px solid var(--sec); border-radius: 12px; padding: 12px 14px; font: inherit; color: var(--ink); cursor: pointer; box-shadow: var(--shadow); }
+.ov-wait:hover { background: var(--accent-soft); }
+.ov-num { font-size: 30px; font-weight: 700; line-height: 1; color: var(--sec); }
+.ov-what { font-weight: 600; font-size: 17px; }
+.ov-age { font-size: 14px; color: var(--ink-soft); }
+.ov-late .ov-age { color: var(--st-red); font-weight: 600; }
+.ov-clear { margin: 10px 0 0; }
+.ov-tools { display: none; }
+.ov-group { margin: 14px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); }
+.ov-tool-list { display: grid; gap: 6px; }
+.ov-tool { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 52px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; font: inherit; font-size: 17px; font-weight: 600; color: var(--ink); text-align: left; cursor: pointer; }
+.ov-tool:hover { background: var(--accent-soft); }
+.ov-tool .hint { display: block; font-weight: 400; font-size: 14px; }
+.ov-tool-big { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); max-width: 1100px; margin: 0 auto; }
+@media (max-width: 900px) { .ov-tools { display: block; } .ov-wait-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } .ov-num { font-size: 26px; } .ov-what { font-size: 16px; } }
 /* My work */
 .work-page { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
 .work-standing:empty { display: none; }

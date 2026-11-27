@@ -8,12 +8,12 @@ import { authorNames,
   sb, State, esc, today, withStatus, isAdmin, isDeptLead, labelOf,
   nameMapForIds, DEPARTMENT_MEDIA_BUCKET, ONBOARDING_MEDIA_BUCKET, fetchActiveTranslationPrompt, canManageReserved, canReviewApplications, canReviewTeamApplications,
   helpLinkHtml, confirmPopup, promptPopup, popupShell, showLoadFailed, errorText
-} from './core.js?v=20261127163927';
-import { renderRules, loadRuleItems } from './policy.js?v=20261127163927';
-import { renderPeopleTool, renderDecisionsTool, loadPeopleItems } from './people.js?v=20261127163927';
-import { renderCredits, renderRuns, renderUnusual, renderTokens, renderThanks, renderCertificates, loadRewardItems } from './reward.js?v=20261127163927';
-import { renderApplicationsView, loadApplicationItems } from './collaboration.js?v=20261127163927';
-import { deptLabel, plural, st, itemHtml, wireItems, tableHtml, namesByIds, nameOnly, personSearch, agoText, dayText } from './deptui.js?v=20261127163927';
+} from './core.js?v=20261127205542';
+import { renderRules, loadRuleItems } from './policy.js?v=20261127205542';
+import { renderPeopleTool, renderDecisionsTool, loadPeopleItems } from './people.js?v=20261127205542';
+import { renderCredits, renderRuns, renderUnusual, renderTokens, renderThanks, renderCertificates, loadRewardItems } from './reward.js?v=20261127205542';
+import { renderApplicationsView, loadApplicationItems } from './collaboration.js?v=20261127205542';
+import { deptLabel, plural, st, itemHtml, wireItems, tableHtml, namesByIds, nameOnly, personSearch, agoText, dayText } from './deptui.js?v=20261127205542';
 
 // Each department's page opens its own guide from the "?" beside the title.
 const DEPT_GUIDES = { HR: 'dept-hr', COORD: 'dept-coordination', FORM: 'dept-formation', RF: 'dept-reward', COMM: 'dept-communication', ARCHIVE: 'dept-archive' };
@@ -83,6 +83,11 @@ async function loadWaiting(code) {
   // The rules come last: they are the same for everyone, what is about a person comes first.
   const items = done.flatMap((r, i) => (i && r.status === 'fulfilled' ? r.value : [])).concat(done[0].status === 'fulfilled' ? done[0].value : []);
   return { can: items.filter(x => x.can), others: items.filter(x => !x.can), failed: done.some(r => r.status === 'rejected') };
+}
+
+// For the Overview of Admins and Coordinators (overview.js): how many things each department asks this person to decide.
+export async function departmentsWaiting() {
+  return Promise.all(myDepartmentCodes().map(code => loadWaiting(code).then(w => ({ code, label: deptLabel(code), can: w.can.length }), () => ({ code, label: deptLabel(code), can: 0 }))));
 }
 
 let focusTab = false; // after a tab is chosen with the keyboard, it stays in focus

@@ -1,5 +1,5 @@
-import { quiet, sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml, docCardHtml } from './core.js?v=20261127163927';
-import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261127163927';
+import { quiet, sb, State, esc, labelOf, optionsHtml, isAdmin, canWrite, ACCESS_LEVELS, canManageReserved, withStatus, DASH_ROW_LIMIT, DASH_SORTABLE, likeSafe, HIDDEN_DOC_STATUSES, docTitlesHtml, docCardHtml } from './core.js?v=20261127205542';
+import { renderDocDetail, createNewDocument } from './docdetail.js?v=20261127205542';
 
 // The "From the boards" section (84_boards_moderation.sql) was removed on the Owner's request, 2026-11-18: the
 // Library shows only the archive; board posts are in the Boards tab.
@@ -29,7 +29,8 @@ export async function renderDashboardView(main) {
   // Plain Users see this tab as "Library" (owner's request 2026-09-21) - Operator and everyone
   // else keeps "Dashboard", same layout either way (see isUser above).
   // Operators too since 2026-11-25: the Library of Home to read, the Library of My work to work on.
-  const heading = isUser ? 'Library' : 'Dashboard';
+  // Everyone since 2026-11-27 (Owner's decision): it is the Library, also for Admins and Coordinators.
+  const heading = 'Library';
 
   // Plain Users (and Operators, see above) land on the archive filtered to Urdu by default
   // (the vast majority of what they consult); applied once per session so a manual change to
