@@ -1296,6 +1296,8 @@ table.dep-table tbody tr { cursor: default; }
   body { background: #fff !important; }
   #place-bar, #tabs, #bottom-nav, nav, .help-top, .toast-notification, .pf-bottom, .desk-bottom, .desk-split, .desk-doc, .desk-phone, button, .btn, .start-back-row, .computer-note, .tab-bar, #tab-bar { display: none !important; }
   .panel, .work-item, .task-card, .doc-card, .dep-card, .rule { box-shadow: none !important; break-inside: avoid; }
+  #app { display: block !important; height: auto !important; overflow: visible !important; }
+  #main { overflow: visible !important; }
   .desk { display: block !important; height: auto !important; }
   .desk-work { overflow: visible !important; }
   details > *:not(summary) { display: block !important; }
@@ -1338,7 +1340,7 @@ table.dep-table tbody tr { cursor: default; }
 }
 @media print {
   .fw-page { display: block; }
-  .fw-sheet { box-shadow: none !important; border: 0; padding: 0; }
+  .fw-sheet { box-shadow: none !important; border: 0; padding: 0; break-inside: auto !important; }
   .fw-print-head { display: flex; justify-content: space-between; gap: 20px; border-bottom: 2px solid #222; padding-bottom: 6px; margin-bottom: 10px; font-size: 12px; }
   .fw-print-head h2 { margin: 0; font-size: 18px; }
   .fw-print-who { text-align: right; color: #555; }

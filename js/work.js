@@ -2,7 +2,7 @@
 // spiritual home, the same for everyone and silent; here are the things to do, what waits for others, the tools, the credits
 // and the notices of the team. The sections that serve both places appear in both, each with its own dress (core.js quiet()).
 
-import { sb, State, esc, today, isDeptLead, isAnyDeptLead, standingHtml, showGoodPracticesModal, openTranslatePopup } from './core.js?v=20261127123527';
+import { sb, State, esc, today, isDeptLead, isAnyDeptLead, standingHtml, showGoodPracticesModal, openTranslatePopup } from './core.js?v=20261127161123';
 
 const quietly = promise => Promise.resolve(promise).then(r => (r && !r.error ? r.data : null), () => null);
 
