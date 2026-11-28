@@ -5,7 +5,7 @@
 // reviewed. Deliberately does not import from collaboration.js (project convention: modules
 // only import from core.js), so the skill-chip rendering is duplicated here in small form.
 
-import { confirmPopup, passwordProblem, sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml, dateOfBirthFieldsHtml, readDateOfBirth, displayLogin, PHONE_LOGIN_DOMAIN, TEXT_SIZES, COLOUR_CHOICES, displayPrefs, saveDisplayPrefs } from './core.js?v=20261127224837';
+import { confirmPopup, passwordProblem, sb, State, esc, withStatus, labelOf, optionsHtml, logEntriesHtml, dateOfBirthFieldsHtml, readDateOfBirth, displayLogin, PHONE_LOGIN_DOMAIN, TEXT_SIZES, COLOUR_CHOICES, displayPrefs, saveDisplayPrefs } from './core.js?v=20261128134020';
 
 const ACADEMIC_LEVELS = [
   ['HIGH_SCHOOL', 'High school'],
@@ -152,13 +152,20 @@ async function renderSecondStep(box) {
   }
   box.innerHTML = `<p>After the password, DUA also asks for a code that only your phone shows. You need an authenticator app, for example Google Authenticator or Microsoft Authenticator.</p>
     <div class="btn-row"><button class="btn" id="second-on">Turn on</button></div><div id="second-setup"></div>`;
-  document.getElementById('second-on').addEventListener('click', async () => {
-    // A set-up begun and not finished leaves a half factor: it goes before a new one.
-    for (const f of (data.all || []).filter(x => x.status !== 'verified')) await sb.auth.mfa.unenroll({ factorId: f.id });
-    const { data: f, error: e } = await sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'DUA ' + new Date().toISOString().slice(0, 16), issuer: 'DUA' });
-    if (e) { alert('That did not work: ' + e.message); return; }
+  const onBtn = document.getElementById('second-on');
+  onBtn.addEventListener('click', async () => {
+    // A set-up begun and not finished leaves a half factor: it goes before a new one. The list is read again now,
+    // because a "Turn on" pressed before, without reloading the page, has already made one.
+    onBtn.disabled = true;
+    const { data: now } = await sb.auth.mfa.listFactors();
+    for (const f of ((now || data).all || []).filter(x => x.status !== 'verified')) await sb.auth.mfa.unenroll({ factorId: f.id });
+    const { data: f, error: e } = await sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'DUA ' + new Date().toISOString().slice(0, 19), issuer: 'DUA' });
+    if (e) { onBtn.disabled = false; alert('That did not work: ' + e.message); return; }
+    onBtn.textContent = 'Start again';
+    onBtn.disabled = false;
     document.getElementById('second-setup').innerHTML = `
       <ol><li>In the authenticator app, add an account and frame this square.</li><li>Write below the 6 digits it shows.</li></ol>
+      <p class="hint">Only this square works. If the authenticator app already has an older DUA account, delete it.</p>
       <img alt="Square to frame with the authenticator app" width="200" height="200" style="background:#fff;padding:8px;border-radius:8px;">
       <p class="hint">On this same phone? Add the account by hand with this key: <code style="overflow-wrap:anywhere;">${esc(f.totp.secret)}</code></p>
       <div class="field" style="max-width:220px;"><label for="second-first">Code</label><input id="second-first" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7"></div>
@@ -167,8 +174,16 @@ async function renderSecondStep(box) {
     document.querySelector('#second-setup img').src = f.totp.qr_code;
     document.getElementById('second-confirm').addEventListener('click', async () => {
       const code = document.getElementById('second-first').value.replace(/\D/g, '');
+      const errBox = document.getElementById('second-first-error');
+      if (code.length !== 6) { errBox.textContent = 'Please write the 6 digits.'; return; }
       const { error: e2 } = await sb.auth.mfa.challengeAndVerify({ factorId: f.id, code });
-      if (e2) { document.getElementById('second-first-error').textContent = 'This code is not right, or it has expired. Try the one shown now.'; return; }
+      // The reason from Supabase stays visible, so that a problem other than a wrong code can be told.
+      if (e2) {
+        errBox.textContent = /invalid|expired/i.test(e2.message || '')
+          ? 'This code is not right, or it has expired. Try the one shown now. If it happens again, check that the phone sets its time by itself.'
+          : 'That did not work: ' + (e2.message || 'unknown reason') + '.';
+        return;
+      }
       alert('The second step is on. From the next sign-in, DUA asks for the code after the password.');
       renderSecondStep(box);
     });
